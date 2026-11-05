@@ -7,6 +7,7 @@ import {
 
 import { editor, publishedOrEditor } from '../access'
 import { DISCIPLINE_LABELS, DISCIPLINES } from '../disciplines'
+import { cleanSlug, recordPreviousSlugs, slugify } from '../slugs'
 
 export const NO_DISCIPLINE_MESSAGE = 'En az bir disiplin seçin.'
 
@@ -36,6 +37,8 @@ const requireDiscipline: CollectionBeforeValidateHook = ({
 export const Works: CollectionConfig = {
   slug: 'works',
   labels: { singular: 'İş', plural: 'İşler' },
+  // Drag to reorder in the admin list; the public list follows this order.
+  orderable: true,
   access: {
     create: editor,
     update: editor,
@@ -57,8 +60,39 @@ export const Works: CollectionConfig = {
       options: DISCIPLINES.map((value) => ({ value, label: DISCIPLINE_LABELS[value] })),
     },
     { name: 'year', label: 'Yıl', type: 'number', required: true },
-    slugField({ useAsSlug: 'title' }),
-    // Required on publish only: Payload skips field validation on draft saves.
+    slugField({ useAsSlug: 'title', slugify }),
+    {
+      name: 'previousSlugs',
+      label: 'Eski adresler',
+      type: 'text',
+      hasMany: true,
+      admin: {
+        readOnly: true,
+        position: 'sidebar',
+        description: 'Bu işin eski adresleri. Yeni adrese yönlendirilir. Otomatik doldurulur.',
+      },
+    },
+    {
+      name: 'featured',
+      label: 'Ana sayfada öne çıkar',
+      type: 'checkbox',
+      defaultValue: false,
+      index: true,
+    },
+    {
+      name: 'featuredOrder',
+      label: 'Ana sayfa sırası',
+      type: 'number',
+      min: 0,
+      admin: { condition: (data) => Boolean(data?.featured) },
+    },
+    {
+      name: 'featuredWarning',
+      type: 'ui',
+      admin: {
+        components: { Field: '@taha/cms-config/admin/featured-warning#FeaturedWarning' },
+      },
+    },
     {
       name: 'cover',
       label: 'Kapak görseli',
@@ -67,6 +101,6 @@ export const Works: CollectionConfig = {
       required: true,
     },
   ],
-  hooks: { beforeValidate: [requireDiscipline] },
+  hooks: { beforeValidate: [cleanSlug, requireDiscipline], beforeChange: [recordPreviousSlugs] },
   versions: { drafts: true, maxPerDoc: 20 },
 }

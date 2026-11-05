@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./disciplines": "./src/disciplines.ts",
-    "./testing": "./src/testing.ts"
+    "./testing": "./src/testing.ts",
+    "./admin/featured-warning": "./src/admin/FeaturedWarning.tsx"
   },
   "scripts": {
     "build": "tsc --noEmit",
@@ -14,6 +15,7 @@
   },
   "devDependencies": {
     "@types/node": "24.19.1",
+    "@types/react": "19.3.0",
     "typescript": "5.9.3"
   },
   "dependencies": {
@@ -23,6 +25,7 @@
     "@payloadcms/plugin-cloud-storage": "3.90.2",
     "@payloadcms/translations": "3.90.2",
     "payload": "3.90.2",
+    "react": "19.3.0",
     "sharp": "0.35.5"
   }
 }

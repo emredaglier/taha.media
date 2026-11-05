@@ -216,6 +216,7 @@ export interface Image {
  */
 export interface Work {
   id: number;
+  _order?: string | null;
   title: string;
   disciplines: ('kurgu' | 'motion' | 'grafik')[];
   year: number;
@@ -224,6 +225,12 @@ export interface Work {
    */
   generateSlug?: boolean | null;
   slug: string;
+  /**
+   * Bu işin eski adresleri. Yeni adrese yönlendirilir. Otomatik doldurulur.
+   */
+  previousSlugs?: string[] | null;
+  featured?: boolean | null;
+  featuredOrder?: number | null;
   cover: number | Image;
   updatedAt: string;
   createdAt: string;
@@ -408,11 +415,15 @@ export interface ImagesSelect<T extends boolean = true> {
  * via the `definition` "works_select".
  */
 export interface WorksSelect<T extends boolean = true> {
+  _order?: T;
   title?: T;
   disciplines?: T;
   year?: T;
   generateSlug?: T;
   slug?: T;
+  previousSlugs?: T;
+  featured?: T;
+  featuredOrder?: T;
   cover?: T;
   updatedAt?: T;
   createdAt?: T;

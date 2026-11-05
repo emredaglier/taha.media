@@ -188,437 +188,6 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "images": {
-      "name": "images",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "_objectkey": {
-          "name": "_objectkey",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
-        },
-        "url": {
-          "name": "url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "thumbnail_u_r_l": {
-          "name": "thumbnail_u_r_l",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "filename": {
-          "name": "filename",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "mime_type": {
-          "name": "mime_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "filesize": {
-          "name": "filesize",
-          "type": "numeric",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "width": {
-          "name": "width",
-          "type": "numeric",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "height": {
-          "name": "height",
-          "type": "numeric",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "focal_x": {
-          "name": "focal_x",
-          "type": "numeric",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "focal_y": {
-          "name": "focal_y",
-          "type": "numeric",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "sizes_thumbnail_url": {
-          "name": "sizes_thumbnail_url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "sizes_thumbnail_width": {
-          "name": "sizes_thumbnail_width",
-          "type": "numeric",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "sizes_thumbnail_height": {
-          "name": "sizes_thumbnail_height",
-          "type": "numeric",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "sizes_thumbnail_mime_type": {
-          "name": "sizes_thumbnail_mime_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "sizes_thumbnail_filesize": {
-          "name": "sizes_thumbnail_filesize",
-          "type": "numeric",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "sizes_thumbnail_filename": {
-          "name": "sizes_thumbnail_filename",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "sizes_small_url": {
-          "name": "sizes_small_url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "sizes_small_width": {
-          "name": "sizes_small_width",
-          "type": "numeric",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "sizes_small_height": {
-          "name": "sizes_small_height",
-          "type": "numeric",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "sizes_small_mime_type": {
-          "name": "sizes_small_mime_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "sizes_small_filesize": {
-          "name": "sizes_small_filesize",
-          "type": "numeric",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "sizes_small_filename": {
-          "name": "sizes_small_filename",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "sizes_medium_url": {
-          "name": "sizes_medium_url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "sizes_medium_width": {
-          "name": "sizes_medium_width",
-          "type": "numeric",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "sizes_medium_height": {
-          "name": "sizes_medium_height",
-          "type": "numeric",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "sizes_medium_mime_type": {
-          "name": "sizes_medium_mime_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "sizes_medium_filesize": {
-          "name": "sizes_medium_filesize",
-          "type": "numeric",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "sizes_medium_filename": {
-          "name": "sizes_medium_filename",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "sizes_large_url": {
-          "name": "sizes_large_url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "sizes_large_width": {
-          "name": "sizes_large_width",
-          "type": "numeric",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "sizes_large_height": {
-          "name": "sizes_large_height",
-          "type": "numeric",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "sizes_large_mime_type": {
-          "name": "sizes_large_mime_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "sizes_large_filesize": {
-          "name": "sizes_large_filesize",
-          "type": "numeric",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "sizes_large_filename": {
-          "name": "sizes_large_filename",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "sizes_xlarge_url": {
-          "name": "sizes_xlarge_url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "sizes_xlarge_width": {
-          "name": "sizes_xlarge_width",
-          "type": "numeric",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "sizes_xlarge_height": {
-          "name": "sizes_xlarge_height",
-          "type": "numeric",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "sizes_xlarge_mime_type": {
-          "name": "sizes_xlarge_mime_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "sizes_xlarge_filesize": {
-          "name": "sizes_xlarge_filesize",
-          "type": "numeric",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "sizes_xlarge_filename": {
-          "name": "sizes_xlarge_filename",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "images_updated_at_idx": {
-          "name": "images_updated_at_idx",
-          "columns": [
-            "updated_at"
-          ],
-          "isUnique": false
-        },
-        "images_created_at_idx": {
-          "name": "images_created_at_idx",
-          "columns": [
-            "created_at"
-          ],
-          "isUnique": false
-        },
-        "images_filename_idx": {
-          "name": "images_filename_idx",
-          "columns": [
-            "filename"
-          ],
-          "isUnique": true
-        },
-        "images_sizes_thumbnail_sizes_thumbnail_filename_idx": {
-          "name": "images_sizes_thumbnail_sizes_thumbnail_filename_idx",
-          "columns": [
-            "sizes_thumbnail_filename"
-          ],
-          "isUnique": false
-        },
-        "images_sizes_small_sizes_small_filename_idx": {
-          "name": "images_sizes_small_sizes_small_filename_idx",
-          "columns": [
-            "sizes_small_filename"
-          ],
-          "isUnique": false
-        },
-        "images_sizes_medium_sizes_medium_filename_idx": {
-          "name": "images_sizes_medium_sizes_medium_filename_idx",
-          "columns": [
-            "sizes_medium_filename"
-          ],
-          "isUnique": false
-        },
-        "images_sizes_large_sizes_large_filename_idx": {
-          "name": "images_sizes_large_sizes_large_filename_idx",
-          "columns": [
-            "sizes_large_filename"
-          ],
-          "isUnique": false
-        },
-        "images_sizes_xlarge_sizes_xlarge_filename_idx": {
-          "name": "images_sizes_xlarge_sizes_xlarge_filename_idx",
-          "columns": [
-            "sizes_xlarge_filename"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "images_locales": {
-      "name": "images_locales",
-      "columns": {
-        "alt": {
-          "name": "alt",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "id": {
-          "name": "id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "_locale": {
-          "name": "_locale",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "_parent_id": {
-          "name": "_parent_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "images_locales_locale_parent_id_unique": {
-          "name": "images_locales_locale_parent_id_unique",
-          "columns": [
-            "_locale",
-            "_parent_id"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {
-        "images_locales_parent_id_fk": {
-          "name": "images_locales_parent_id_fk",
-          "tableFrom": "images_locales",
-          "tableTo": "images",
-          "columnsFrom": [
-            "_parent_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
     "works_disciplines": {
       "name": "works_disciplines",
       "columns": {
@@ -696,6 +265,13 @@
           "notNull": true,
           "autoincrement": false
         },
+        "_order": {
+          "name": "_order",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "year": {
           "name": "year",
           "type": "numeric",
@@ -718,9 +294,17 @@
           "notNull": false,
           "autoincrement": false
         },
-        "cover_id": {
-          "name": "cover_id",
+        "featured": {
+          "name": "featured",
           "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": false
+        },
+        "featured_order": {
+          "name": "featured_order",
+          "type": "numeric",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
@@ -751,6 +335,13 @@
         }
       },
       "indexes": {
+        "works__order_idx": {
+          "name": "works__order_idx",
+          "columns": [
+            "_order"
+          ],
+          "isUnique": false
+        },
         "works_slug_idx": {
           "name": "works_slug_idx",
           "columns": [
@@ -758,10 +349,10 @@
           ],
           "isUnique": true
         },
-        "works_cover_idx": {
-          "name": "works_cover_idx",
+        "works_featured_idx": {
+          "name": "works_featured_idx",
           "columns": [
-            "cover_id"
+            "featured"
           ],
           "isUnique": false
         },
@@ -787,21 +378,7 @@
           "isUnique": false
         }
       },
-      "foreignKeys": {
-        "works_cover_id_images_id_fk": {
-          "name": "works_cover_id_images_id_fk",
-          "tableFrom": "works",
-          "tableTo": "images",
-          "columnsFrom": [
-            "cover_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
@@ -951,6 +528,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "version__order": {
+          "name": "version__order",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "version_year": {
           "name": "version_year",
           "type": "numeric",
@@ -973,9 +557,17 @@
           "notNull": false,
           "autoincrement": false
         },
-        "version_cover_id": {
-          "name": "version_cover_id",
+        "version_featured": {
+          "name": "version_featured",
           "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": false
+        },
+        "version_featured_order": {
+          "name": "version_featured_order",
+          "type": "numeric",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
@@ -1048,6 +640,13 @@
           ],
           "isUnique": false
         },
+        "_works_v_version_version__order_idx": {
+          "name": "_works_v_version_version__order_idx",
+          "columns": [
+            "version__order"
+          ],
+          "isUnique": false
+        },
         "_works_v_version_version_slug_idx": {
           "name": "_works_v_version_version_slug_idx",
           "columns": [
@@ -1055,10 +654,10 @@
           ],
           "isUnique": false
         },
-        "_works_v_version_version_cover_idx": {
-          "name": "_works_v_version_version_cover_idx",
+        "_works_v_version_version_featured_idx": {
+          "name": "_works_v_version_version_featured_idx",
           "columns": [
-            "version_cover_id"
+            "version_featured"
           ],
           "isUnique": false
         },
@@ -1126,19 +725,6 @@
           "tableTo": "works",
           "columnsFrom": [
             "parent_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "_works_v_version_cover_id_images_id_fk": {
-          "name": "_works_v_version_cover_id_images_id_fk",
-          "tableFrom": "_works_v",
-          "tableTo": "images",
-          "columnsFrom": [
-            "version_cover_id"
           ],
           "columnsTo": [
             "id"
@@ -1351,13 +937,6 @@
           "notNull": false,
           "autoincrement": false
         },
-        "images_id": {
-          "name": "images_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "works_id": {
           "name": "works_id",
           "type": "integer",
@@ -1395,13 +974,6 @@
           ],
           "isUnique": false
         },
-        "payload_locked_documents_rels_images_id_idx": {
-          "name": "payload_locked_documents_rels_images_id_idx",
-          "columns": [
-            "images_id"
-          ],
-          "isUnique": false
-        },
         "payload_locked_documents_rels_works_id_idx": {
           "name": "payload_locked_documents_rels_works_id_idx",
           "columns": [
@@ -1430,19 +1002,6 @@
           "tableTo": "users",
           "columnsFrom": [
             "users_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "payload_locked_documents_rels_images_fk": {
-          "name": "payload_locked_documents_rels_images_fk",
-          "tableFrom": "payload_locked_documents_rels",
-          "tableTo": "images",
-          "columnsFrom": [
-            "images_id"
           ],
           "columnsTo": [
             "id"
@@ -1710,6 +1269,6 @@
   "internal": {
     "indexes": {}
   },
-  "id": "ebdddfe9-f7aa-4ef0-9e6d-17d9cfefa5c4",
+  "id": "5253c2a6-d6d3-4172-9fec-eeae97a7dd55",
   "prevId": "00000000-0000-0000-0000-000000000000"
 }
