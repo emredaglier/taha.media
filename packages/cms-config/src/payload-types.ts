@@ -158,6 +158,10 @@ export interface Work {
    */
   generateSlug?: boolean | null;
   slug: string;
+  /**
+   * Bu işin eski adresleri. Yeni adrese yönlendirilir. Otomatik doldurulur.
+   */
+  previousSlugs?: string[] | null;
   featured?: boolean | null;
   featuredOrder?: number | null;
   updatedAt: string;
@@ -272,6 +276,7 @@ export interface WorksSelect<T extends boolean = true> {
   year?: T;
   generateSlug?: T;
   slug?: T;
+  previousSlugs?: T;
   featured?: T;
   featuredOrder?: T;
   updatedAt?: T;
