@@ -17,6 +17,9 @@ next-env.d.ts
 *.db-shm
 *.db-wal
 
+# Smoke traces, screenshots and report
+smoke/.output/
+
 # Local CMS database
 apps/cms/data/
 

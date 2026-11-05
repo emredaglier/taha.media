@@ -32,12 +32,14 @@ the public instance. Every preview response carries `X-Robots-Tag: noindex, nofo
 
 ## Layout
 
-| Path                  | Role                                                               |
-| --------------------- | ------------------------------------------------------------------ |
-| `apps/web`            | Public Next.js site; `src/data/` is the backend-owned read module  |
-| `apps/cms`            | Thin Payload admin host (`pnpm --filter @taha/cms dev`, port 3001) |
-| `packages/cms-config` | Content schema, access, validation, migrations, test harness       |
-| `infra/`              | Compose, deploy and server scripts (later tickets)                 |
+| Path                  | Role                                                                              |
+| --------------------- | --------------------------------------------------------------------------------- |
+| `apps/web`            | Public Next.js site; `src/data/` is the backend-owned read module                 |
+| `apps/cms`            | Thin Payload admin host (`pnpm --filter @taha/cms dev`, port 3001)                |
+| `packages/cms-config` | Content schema, access, validation, migrations, test harness                      |
+| `infra/`              | Compose, Caddy, Litestream, server scripts ([`infra/README.md`](infra/README.md)) |
+| `smoke/`              | Release-gate smoke spec and runner (`pnpm smoke`)                                 |
+| `Dockerfile`          | `web`, `cms` and `migrate` images (`--target`)                                    |
 
 ## CI
 

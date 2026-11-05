@@ -4,5 +4,7 @@
     "types": ["node"],
     "allowImportingTsExtensions": true
   },
-  "include": ["infra", "vitest.config.ts"]
+  "include": ["infra", "smoke", "vitest.config.ts"],
+  // Files of the migrate image: they import ./src/*, which only exists after `pnpm deploy`.
+  "exclude": ["infra/migrate"]
 }

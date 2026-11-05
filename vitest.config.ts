@@ -9,6 +9,7 @@ export default defineConfig({
     include: [
       'scripts/**/*.test.ts',
       'infra/**/*.test.ts',
+      'smoke/**/*.test.ts',
       '{apps,packages}/*/src/**/*.test.{ts,tsx}',
     ],
     // `next/cache` only works inside a running Next server; tests get an in-memory stand-in.

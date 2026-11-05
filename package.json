@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit && pnpm -r --parallel typecheck",
     "test": "vitest run",
     "test:watch": "vitest",
+    "smoke": "node smoke/run.ts",
     "build": "pnpm -r build",
     "dev": "pnpm --filter @taha/web dev",
     "seed": "pnpm --filter @taha/cms seed",
@@ -17,12 +18,14 @@
     "user:reset-password": "pnpm --filter @taha/cms user:reset-password"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@types/node": "24.19.1",
     "eslint": "9.39.5",
     "eslint-config-next": "16.3.8",
     "prettier": "3.9.9",
     "typescript": "5.9.3",
-    "vitest": "5.0.3"
+    "vitest": "5.0.3",
+    "yaml": "2.9.1"
   },
   "engines": {
     "node": ">=24.15.0 <25"

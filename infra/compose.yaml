@@ -1,0 +1,186 @@
+# Production stack (ADR-0001, ADR-0003, ADR-0009). Run from this directory on the server, or with
+# `docker compose -f infra/compose.yaml -f infra/compose.local.yaml up` on a laptop.
+#
+# Rules (see infra/README.md, "Compose"):
+# - Only caddy publishes non-loopback ports. Published container ports bypass ufw.
+# - cms and web-preview bind 127.0.0.1 only; `tailscale serve` (infra/tailscale-serve.sh) puts them
+#   on the tailnet with HTTPS. Nothing else reaches them (ADR-0001).
+# - Images are pulled, never built on the server (ADR-0009). RELEASE picks the tag.
+# - web and web-preview open the SQLite file read-only at connection level (the `web` role runs
+#   PRAGMA query_only on every connection, packages/cms-config/src/db.ts). The volume itself is
+#   mounted writable on purpose: a WAL reader must be able to use the -shm file, and a read-only
+#   mount would let it read pages that a checkpoint is about to reuse.
+#
+# Variables: RELEASE (image tag), IMAGE_PREFIX, DATA_DIR, ENV_DIR, CERTS_DIR.
+
+name: taha
+
+x-app: &app
+  restart: unless-stopped
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+  logging:
+    driver: json-file
+    options: { max-size: 10m, max-file: '3' }
+
+services:
+  # One-off: applies the committed migrations, then exits 0 (additive migrations, ADR-0003, so the
+  # previous release keeps working after a rollback). `pnpm seed:production` runs in this image too
+  # (infra/README.md). Every service below waits for it to complete.
+  migrate:
+    image: ${IMAGE_PREFIX:-taha}/migrate:${RELEASE:-local}
+    restart: 'no'
+    environment:
+      DATABASE_PATH: /data/taha.db
+      # For the seed, which saves through the revalidate hooks like cms does. A failed post is
+      # logged and never fails the seed. Migrations don't save through hooks. Keep equal to cms.
+      REVALIDATE_URL: http://web:3000/internal/revalidate
+    env_file: ${ENV_DIR:-/opt/taha/env}/cms.env
+    volumes:
+      - data:/data
+    mem_limit: 384m
+
+  caddy:
+    image: caddy:2.11.7-alpine
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_healthy
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      # The whole directory, not single files: deploy replaces the files when the release changes
+      # (a single-file mount would keep the old inode) and then reloads Caddy.
+      - ./caddy:/etc/caddy:ro
+      - ${CERTS_DIR:-/opt/taha/certs}:/certs:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:2019/config/']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    mem_limit: 96m
+    logging:
+      driver: json-file
+      options: { max-size: 10m, max-file: '3' }
+
+  # Public site. Reads published content only (no PREVIEW).
+  web:
+    <<: *app
+    image: ${IMAGE_PREFIX:-taha}/web:${RELEASE:-local}
+    env_file: ${ENV_DIR:-/opt/taha/env}/web.env
+    environment:
+      DATABASE_PATH: /data/taha.db
+      NODE_OPTIONS: --max-old-space-size=256
+    volumes:
+      - data:/data
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/internal/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    mem_limit: 384m
+
+  # Same image as web with drafts enabled. Tailnet only, via 127.0.0.1:3002.
+  web-preview:
+    <<: *app
+    image: ${IMAGE_PREFIX:-taha}/web:${RELEASE:-local}
+    env_file: ${ENV_DIR:-/opt/taha/env}/web.env
+    environment:
+      PREVIEW: '1'
+      DATABASE_PATH: /data/taha.db
+      NODE_OPTIONS: --max-old-space-size=256
+    ports:
+      - '127.0.0.1:3002:3000'
+    volumes:
+      - data:/data
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/internal/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    mem_limit: 384m
+
+  # Payload admin and API, the only writer. Tailnet only, via 127.0.0.1:3001. After a save it
+  # calls web's revalidation endpoint over this network.
+  cms:
+    <<: *app
+    image: ${IMAGE_PREFIX:-taha}/cms:${RELEASE:-local}
+    env_file: ${ENV_DIR:-/opt/taha/env}/cms.env
+    environment:
+      DATABASE_PATH: /data/taha.db
+      REVALIDATE_URL: http://web:3000/internal/revalidate
+      NODE_OPTIONS: --max-old-space-size=384
+    ports:
+      - '127.0.0.1:3001:3001'
+    volumes:
+      - data:/data
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3001/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    mem_limit: 512m
+
+  # Continuous SQLite backup to the private R2 bucket (ADR-0003). Shares the data volume, runs as
+  # the app uid, never writes app data. Config: litestream/litestream.yml; settings in
+  # $ENV_DIR/litestream.env. Runbook: infra/README.md, "Backups: Litestream".
+  litestream:
+    <<: *app
+    image: litestream/litestream:0.5.17
+    user: '10001:10001'
+    command: ['replicate', '-config', '/etc/litestream/litestream.yml']
+    env_file: ${ENV_DIR:-/opt/taha/env}/litestream.env
+    read_only: true
+    tmpfs:
+      - /var/run/litestream:uid=10001,gid=10001,mode=0700
+    volumes:
+      - data:/data
+      # A directory mount, like caddy's (deploy recreates the service when the config changed).
+      - ./litestream:/etc/litestream:ro
+    healthcheck:
+      # Status is `ok` only while the database is initialised and replicating.
+      test:
+        ['CMD-SHELL', "litestream status -config /etc/litestream/litestream.yml | grep -q '  ok  '"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    mem_limit: 128m
+
+volumes:
+  # On the server this is a bind mount of DATA_DIR. It must be owned by uid 10001 (the app user
+  # in the images): `sudo chown 10001:10001 /opt/taha/data`.
+  data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_DIR:-/opt/taha/data}
+  caddy_data:
+  caddy_config:

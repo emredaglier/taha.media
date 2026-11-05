@@ -1,0 +1,17 @@
+**/node_modules
+**/.next
+**/.env
+**/.env.*
+!**/.env.example
+**/*.db
+**/*.db-shm
+**/*.db-wal
+apps/cms/data
+**/coverage
+**/*.tsbuildinfo
+**/.output
+.git
+.claude
+.scratch
+docs
+smoke
