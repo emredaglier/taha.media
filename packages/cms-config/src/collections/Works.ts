@@ -58,6 +58,14 @@ export const Works: CollectionConfig = {
     },
     { name: 'year', label: 'Yıl', type: 'number', required: true },
     slugField({ useAsSlug: 'title' }),
+    // Required on publish only: Payload skips field validation on draft saves.
+    {
+      name: 'cover',
+      label: 'Kapak görseli',
+      type: 'upload',
+      relationTo: 'images',
+      required: true,
+    },
   ],
   hooks: { beforeValidate: [requireDiscipline] },
   versions: { drafts: true, maxPerDoc: 20 },

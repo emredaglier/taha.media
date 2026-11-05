@@ -4,9 +4,11 @@ import type { Discipline } from './disciplines'
 import { createTestSite, type TestSite } from './testing'
 
 let site: TestSite
+let coverId: number
 
 beforeAll(async () => {
   site = await createTestSite()
+  coverId = (await site.uploadImage(await site.createEditor())).id
 }, 30_000)
 
 afterAll(async () => {
@@ -32,9 +34,10 @@ describe('an Editor', () => {
     })
     expect(token).toBeTruthy()
 
+    const cover = await site.uploadImage(editor)
     const draft = await site.cms.create({
       collection: 'works',
-      data: work,
+      data: { ...work, cover: cover.id },
       draft: true,
       user: editor,
       overrideAccess: false,
@@ -57,7 +60,7 @@ describe('a Work with no Discipline', () => {
   const refusal = {
     data: { errors: [{ path: 'disciplines', message: 'En az bir disiplin seçin.' }] },
   }
-  const noDiscipline = { ...work, slug: 'disiplinsiz', disciplines: [] }
+  const noDiscipline = { ...work, slug: 'disiplinsiz', disciplines: [], cover: coverId }
 
   it('is refused when published', async () => {
     const editor = await site.createEditor()
@@ -88,7 +91,7 @@ describe('a Work with no Discipline', () => {
     const editor = await site.createEditor()
     const saved = await site.cms.create({
       collection: 'works',
-      data: { ...work, slug: 'sonradan-bosaltilan' },
+      data: { ...work, slug: 'sonradan-bosaltilan', cover: coverId },
       draft: true,
       user: editor,
       overrideAccess: false,
@@ -117,7 +120,7 @@ describe('Editors', () => {
     })
     const created = await site.cms.create({
       collection: 'works',
-      data: { ...work, slug: 'ortak' },
+      data: { ...work, slug: 'ortak', cover: coverId },
       draft: true,
       user: first,
       overrideAccess: false,
@@ -155,7 +158,7 @@ describe('Editors', () => {
     await expect(
       site.cms.create({
         collection: 'works',
-        data: { ...work, slug: 'anonim' },
+        data: { ...work, slug: 'anonim', cover: coverId },
         overrideAccess: false,
       }),
     ).rejects.toThrow()

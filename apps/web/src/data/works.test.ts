@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { getWorkBySlug, getWorks } from './works'
 
 let site: TestSite
+let coverUrls: { original: string }
 
 beforeAll(async () => {
   site = await createTestSite()
@@ -12,11 +13,13 @@ beforeAll(async () => {
   Object.assign(process.env, site.webEnv)
 
   const editor = await site.createEditor()
+  const cover = await site.uploadImage(editor, { alt: 'Kapak', width: 3000, height: 2000 })
+  coverUrls = { original: cover.url ?? '' }
   type Fields = { title: string; slug: string; disciplines?: Discipline[] }
   const save = (data: Fields, status: 'draft' | 'published') =>
     site.cms.create({
       collection: 'works',
-      data: { disciplines: ['kurgu'], year: 2025, ...data, _status: status },
+      data: { disciplines: ['kurgu'], year: 2025, cover: cover.id, ...data, _status: status },
       draft: status === 'draft',
       user: editor,
       overrideAccess: false,
@@ -64,5 +67,25 @@ describe('a Work by slug', () => {
   it('is null for a draft and for an unknown slug', async () => {
     expect(await getWorkBySlug('taslak')).toBeNull()
     expect(await getWorkBySlug('yok-boyle-bir-is')).toBeNull()
+  })
+})
+
+describe('a Work cover', () => {
+  it('carries size, focal point, alt and a srcset of generated sizes only', async () => {
+    const work = await getWorkBySlug('yayinda')
+    expect(work?.cover).toMatchObject({
+      alt: 'Kapak',
+      width: 3000,
+      height: 2000,
+      focalPoint: { x: 50, y: 50 },
+    })
+    const entries = work!.cover.srcset.split(', ')
+    expect(entries.length).toBeGreaterThanOrEqual(3)
+    expect(work!.cover.srcset).not.toContain(coverUrls.original)
+    expect(work!.cover.src).not.toBe(coverUrls.original)
+  })
+
+  it('is on every Work in the list', async () => {
+    for (const work of await getWorks()) expect(work.cover.alt).toBe('Kapak')
   })
 })

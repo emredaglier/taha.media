@@ -1,4 +1,10 @@
-import type { Discipline, WorkDoc } from '@taha/cms-config'
+import {
+  toImage,
+  type Discipline,
+  type ImageDoc,
+  type ImageRead,
+  type WorkDoc,
+} from '@taha/cms-config'
 
 import { getWebPayload } from '../lib/payload'
 
@@ -9,6 +15,8 @@ export type Work = {
   slug: string
   disciplines: Discipline[]
   year: number
+  /** Required to publish, so every published Work has one. */
+  cover: ImageRead
 }
 
 /**
@@ -20,10 +28,18 @@ const PUBLISHED_WORKS = {
   collection: 'works',
   draft: false,
   overrideAccess: false,
-  depth: 0,
+  // Depth 1 populates the cover Image.
+  depth: 1,
 } as const
 
+function toCover(cover: WorkDoc['cover']): ImageRead {
+  // A published Work always has a populated cover (required on publish, populated by depth 1).
+  if (typeof cover !== 'object' || cover === null) throw new Error('A published Work has no cover.')
+  return toImage(cover as ImageDoc)
+}
+
 const toWork = (doc: WorkDoc): Work => ({
+  cover: toCover(doc.cover),
   id: doc.id,
   title: doc.title,
   slug: doc.slug,

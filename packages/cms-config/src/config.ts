@@ -5,10 +5,18 @@ import { fileURLToPath } from 'node:url'
 import { en } from '@payloadcms/translations/languages/en'
 import { tr } from '@payloadcms/translations/languages/tr'
 import { buildConfig, type PayloadEmailAdapter, type SanitizedConfig } from 'payload'
+import sharp from 'sharp'
 
+import { Images } from './collections/Images'
 import { Users } from './collections/Users'
 import { Works } from './collections/Works'
 import { buildDatabase, DEFAULT_BUSY_TIMEOUT_MS } from './db'
+import {
+  imagesStorage,
+  localImagesDir,
+  storageOptionsFromEnv,
+  type StorageOptions,
+} from './storage'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 
@@ -36,6 +44,11 @@ export type SiteConfigOptions = {
   origins?: string[]
   /** Base directory Payload resolves admin component paths against (the cms app's `src`). */
   adminBaseDir?: string
+  /**
+   * Media storage. Without `mediaOrigin` (and `s3`), images stay on local disk next to the
+   * database file (development). Production sets both, see `storageOptionsFromEnv`.
+   */
+  storage?: StorageOptions
 }
 
 /** Nothing sends mail (ADR-0013). Declared so Payload doesn't warn at boot; it only logs. */
@@ -63,7 +76,8 @@ export function buildSiteConfig(options: SiteConfigOptions): Promise<SanitizedCo
       meta: { titleSuffix: '- taha.media' },
       ...(options.adminBaseDir ? { importMap: { baseDir: options.adminBaseDir } } : {}),
     },
-    collections: [Users, Works],
+    collections: [Users, Images, Works],
+    sharp,
     // The admin speaks Turkish; English stays selectable for the developer.
     i18n: { fallbackLanguage: 'tr', supportedLanguages: { tr, en } },
     localization: {
@@ -78,6 +92,7 @@ export function buildSiteConfig(options: SiteConfigOptions): Promise<SanitizedCo
       migrationDir: MIGRATION_DIR,
       busyTimeoutMs: options.busyTimeoutMs ?? DEFAULT_BUSY_TIMEOUT_MS,
     }),
+    plugins: [imagesStorage(options.storage ?? {}, localImagesDir(options.databasePath))],
     cors: options.origins ?? [],
     csrf: options.origins ?? [],
     email: emailAdapter,
@@ -121,5 +136,6 @@ export function siteConfigOptionsFromEnv(
     secret,
     ...(pushFlag === undefined ? {} : { push: pushFlag === 'true' }),
     origins,
+    storage: storageOptionsFromEnv(env),
   }
 }

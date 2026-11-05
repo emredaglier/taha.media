@@ -25,6 +25,7 @@ describe('siteConfigOptionsFromEnv', () => {
       secret: 's',
       push: false,
       origins: ['https://a.ts.net', 'https://b.ts.net'],
+      storage: {},
     })
   })
 })

@@ -5,14 +5,22 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { getWebPayload } from './payload'
 
 let site: TestSite
+let coverId: number
 
 beforeAll(async () => {
   site = await createTestSite()
   Object.assign(process.env, site.webEnv)
   const editor = await site.createEditor()
+  coverId = (await site.uploadImage(editor)).id
   await site.cms.create({
     collection: 'works',
-    data: { title: 'cms yazdı', slug: 'cms-yazdi', disciplines: ['kurgu'], year: 2025 },
+    data: {
+      title: 'cms yazdı',
+      slug: 'cms-yazdi',
+      disciplines: ['kurgu'],
+      year: 2025,
+      cover: coverId,
+    },
     user: editor,
   })
 }, 30_000)
@@ -43,7 +51,13 @@ describe("web's database connection (ADR-0001, ADR-0003)", () => {
     await expect(
       web.create({
         collection: 'works',
-        data: { title: 'web yazdı', slug: 'web-yazdi', disciplines: ['kurgu'], year: 2025 },
+        data: {
+          title: 'web yazdı',
+          slug: 'web-yazdi',
+          disciplines: ['kurgu'],
+          year: 2025,
+          cover: coverId,
+        },
         overrideAccess: true,
       }),
     ).rejects.toThrow()
