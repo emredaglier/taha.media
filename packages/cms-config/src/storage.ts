@@ -7,7 +7,7 @@ import { cloudStoragePlugin } from '@payloadcms/plugin-cloud-storage'
 import type { GeneratedAdapter } from '@payloadcms/plugin-cloud-storage/types'
 import type { Plugin } from 'payload'
 
-import { tagForTrash } from './media-trash'
+import { moveToTrash } from './media-trash'
 
 /** Object keys are unique per upload, so every object is immutable (ADR-0005). */
 export const IMMUTABLE_CACHE_CONTROL = 'public, max-age=31536000, immutable'
@@ -91,8 +91,9 @@ export function localVideosDir(databasePath: string): string {
  *   out of it.
  * - Without it (development): files go to the collection's local directory and Payload serves
  *   them from `/api/<collection>/file/<name>`.
- * - Deleting a record never destroys an object: R2 objects are tagged for the 30-day cleanup
- *   (`media-trash.ts`, ADR-0006), and local files stay (development).
+ * - Deleting a record never destroys an object: R2 objects move to `trash/<key>` and a
+ *   30-day lifecycle rule on that prefix expires them (`media-trash.ts`, ADR-0006); local files
+ *   stay (development).
  */
 export function imagesStorage(
   options: StorageOptions,
@@ -134,10 +135,13 @@ export function imagesStorage(
               }),
             )
           },
-          // Deleted media is tagged, not destroyed; the cleanup removes it after 30 days (ADR-0006).
-          handleDelete: async ({ storageFilePath }) => {
+          // Deleted media moves to `trash/<key>`; the lifecycle rule on that prefix expires it after
+          // 30 days (ADR-0006). A failed move is logged and leaves the file where it was.
+          handleDelete: async ({ storageFilePath, req }) => {
             if (!s3) throw new Error('Object storage is not configured (set the S3_* variables).')
-            await tagForTrash(getClient(s3), s3.bucket, storageFilePath)
+            await moveToTrash(getClient(s3), s3.bucket, storageFilePath, (err) =>
+              req.payload.logger.error({ err, msg: `Could not move ${storageFilePath} to trash.` }),
+            )
           },
           staticHandler: () => new Response('Not found', { status: 404 }),
         }

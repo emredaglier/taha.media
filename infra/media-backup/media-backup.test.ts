@@ -31,7 +31,11 @@ for a in "$@"; do
   esac
 done
 dir() { case "$1" in SRC:*) echo "$FAKE_ROOT/src/\${1#SRC:}" ;; DST:*) echo "$FAKE_ROOT/dst/\${1#DST:}" ;; esac; }
-excluded() { case "$1" in _next/*) return 0 ;; esac; return 1; }
+# Honours the --exclude 'prefix/**' patterns the script passes (and nothing it does not pass).
+excludes=()
+prev=""
+for a in "$@"; do [ "$prev" = --exclude ] && excludes+=("\${a%/\\*\\*}/"); prev="$a"; done
+excluded() { for p in "\${excludes[@]:-}"; do [ -n "$p" ] && case "$1" in "$p"*) return 0 ;; esac; done; return 1; }
 case "$cmd" in
   lsf)
     remote="\${@: -1}"
@@ -120,9 +124,10 @@ describe('media-backup.sh', () => {
     expect(files('src', 'media')).toEqual(['kept.webp'])
   })
 
-  test('uses only lsf, copy and check, with no delete-like flag, and skips static assets', () => {
+  test('uses only lsf, copy and check, with no delete-like flag, and skips static assets and trash/', () => {
     put('src', 'media', 'a.webp', 'A')
     put('src', 'media', '_next/static/x.js', 'JS')
+    put('src', 'media', 'trash/deleted.webp', 'D')
     const r = run()
     expect(r.status, r.stderr).toBe(0)
     const calls = readFileSync(join(root, 'calls.log'), 'utf8').trim().split('\n')

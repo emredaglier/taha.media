@@ -14,13 +14,7 @@ import { buildSiteConfig } from './config'
 import type { Image, User, Video } from './payload-types'
 
 /** One request the S3 stub received. */
-export type S3Request = {
-  method: string
-  key: string
-  /** Raw query string, for example `tagging` or `list-type=2&prefix=x`. */
-  query: string
-  headers: http.IncomingHttpHeaders
-}
+export type S3Request = { method: string; key: string; headers: http.IncomingHttpHeaders }
 
 /**
  * An in-process stand-in for R2 (no real credentials, no Docker). It records every request and
@@ -32,69 +26,36 @@ export type S3Stub = {
   requests: S3Request[]
   /** Keys currently stored. */
   objects: Set<string>
-  /** Object tags by key (PutObjectTagging), as the stub received them. */
-  tags: Map<string, Record<string, string>>
-  /** Requests that stored a new object (copies and tag updates excluded), in order. */
+  /** Requests that stored a new object (copies excluded), in order. */
   puts: () => S3Request[]
+  /** While true, copy requests (`x-amz-copy-source`) are answered with a 500. */
+  failCopies: boolean
   close: () => Promise<void>
 }
-
-const xmlEscape = (v: string) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;')
 
 export async function startS3Stub(bucket = 'bucket'): Promise<S3Stub> {
   const requests: S3Request[] = []
   const objects = new Set<string>()
-  const tags = new Map<string, Record<string, string>>()
+  const stub: { failCopies: boolean } = { failCopies: false }
   const server = http.createServer((req, res) => {
-    const chunks: Buffer[] = []
-    req.on('data', (c: Buffer) => chunks.push(c))
+    req.on('data', () => undefined)
     req.on('end', () => {
-      const [rawPath = '', query = ''] = (req.url ?? '').split('?')
-      const path = decodeURIComponent(rawPath)
-      const key = path.replace(new RegExp(`^/${bucket}/?`), '')
-      const method = req.method ?? ''
-      requests.push({ method, key, query, headers: req.headers })
-      const params = new URLSearchParams(query)
-      if (params.has('tagging')) {
-        if (method === 'PUT') {
-          const body = Buffer.concat(chunks).toString('utf8')
-          const set: Record<string, string> = {}
-          for (const m of body.matchAll(/<Key>([^<]*)<\/Key>\s*<Value>([^<]*)<\/Value>/g)) {
-            set[m[1] ?? ''] = m[2] ?? ''
-          }
-          tags.set(key, set)
-          res.writeHead(200).end()
-        } else {
-          const list = Object.entries(tags.get(key) ?? {})
-            .map(([k, v]) => `<Tag><Key>${xmlEscape(k)}</Key><Value>${xmlEscape(v)}</Value></Tag>`)
-            .join('')
-          res.writeHead(200, { 'Content-Type': 'application/xml' })
-          res.end(`<Tagging><TagSet>${list}</TagSet></Tagging>`)
-        }
+      const path = decodeURIComponent((req.url ?? '').split('?')[0] ?? '')
+      const key = path.replace(new RegExp(`^/${bucket}/`), '')
+      requests.push({ method: req.method ?? '', key, headers: req.headers })
+      if (stub.failCopies && typeof req.headers['x-amz-copy-source'] === 'string') {
+        res.writeHead(500, { 'Content-Type': 'application/xml' })
+        res.end('<Error><Code>InternalError</Code><Message>stub</Message></Error>')
         return
       }
-      if (method === 'GET' && params.get('list-type') === '2') {
-        const prefix = params.get('prefix') ?? ''
-        const contents = [...objects]
-          .filter((k) => k.startsWith(prefix))
-          .sort()
-          .map(
-            (k) =>
-              `<Contents><Key>${xmlEscape(k)}</Key><LastModified>2026-01-01T00:00:00.000Z</LastModified><Size>1</Size></Contents>`,
-          )
-          .join('')
+      if (req.method === 'PUT') objects.add(key)
+      if (req.method === 'DELETE') objects.delete(key)
+      if (typeof req.headers['x-amz-copy-source'] === 'string') {
         res.writeHead(200, { 'Content-Type': 'application/xml' })
-        res.end(
-          `<?xml version="1.0"?><ListBucketResult><Name>${bucket}</Name><IsTruncated>false</IsTruncated>${contents}</ListBucketResult>`,
-        )
+        res.end('<CopyObjectResult><ETag>"stub"</ETag></CopyObjectResult>')
         return
       }
-      if (method === 'PUT') objects.add(key)
-      if (method === 'DELETE') {
-        objects.delete(key)
-        tags.delete(key)
-      }
-      res.writeHead(method === 'DELETE' ? 204 : 200, { ETag: '"stub"' })
+      res.writeHead(req.method === 'DELETE' ? 204 : 200, { ETag: '"stub"' })
       res.end()
     })
   })
@@ -105,14 +66,16 @@ export async function startS3Stub(bucket = 'bucket'): Promise<S3Stub> {
     bucket,
     requests,
     objects,
-    tags,
     puts: () =>
       requests.filter(
-        (r) =>
-          r.method === 'PUT' &&
-          !r.query.includes('tagging') &&
-          typeof r.headers['x-amz-copy-source'] !== 'string',
+        (r) => r.method === 'PUT' && typeof r.headers['x-amz-copy-source'] !== 'string',
       ),
+    get failCopies() {
+      return stub.failCopies
+    },
+    set failCopies(v: boolean) {
+      stub.failCopies = v
+    },
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
   }
 }

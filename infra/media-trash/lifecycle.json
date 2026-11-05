@@ -1,10 +1,10 @@
 {
-  "Rules": [
+  "rules": [
     {
-      "ID": "expire-deleted-media-after-30-days",
-      "Status": "Enabled",
-      "Filter": { "Tag": { "Key": "deleted-at" } },
-      "Expiration": { "Days": 30 }
+      "id": "expire-trash-after-30-days",
+      "enabled": true,
+      "conditions": { "prefix": "trash/" },
+      "deleteObjectsTransition": { "condition": { "type": "Age", "maxAge": 2592000 } }
     }
   ]
 }

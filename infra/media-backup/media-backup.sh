@@ -19,8 +19,10 @@ set -euo pipefail
 : "${DST_BUCKET:?set DST_BUCKET (backup bucket)}"
 work="${WORK_DIR:-$(mktemp -d)}"
 
-# One list for the listing and the copy, so they cannot drift. Static assets are not media.
-skip=(--exclude '_next/**')
+# One list for the listing and the copy, so they cannot drift. Static assets (_next/) are not
+# media, and trash/ holds soft-deleted files (ADR-0006): the backup keeps what was live. Keep
+# 'trash/' in sync with TRASH_PREFIX in packages/cms-config/src/media-trash.ts.
+skip=(--exclude '_next/**' --exclude 'trash/**')
 
 # What is in the media bucket now. The check below asks for exactly these names, so an upload
 # during the run cannot fail it (rclone check with --min-age would hide fresh copies).
