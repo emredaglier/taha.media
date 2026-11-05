@@ -12,6 +12,9 @@ import { Images } from './collections/Images'
 import { Users } from './collections/Users'
 import { Videos } from './collections/Videos'
 import { Works } from './collections/Works'
+import { About } from './globals/About'
+import { Privacy } from './globals/Privacy'
+import { Site } from './globals/Site'
 import { buildDatabase, DEFAULT_BUSY_TIMEOUT_MS } from './db'
 import {
   imagesStorage,
@@ -80,6 +83,7 @@ export function buildSiteConfig(options: SiteConfigOptions): Promise<SanitizedCo
       ...(options.adminBaseDir ? { importMap: { baseDir: options.adminBaseDir } } : {}),
     },
     collections: [Users, Images, Videos, Works],
+    globals: [Site, About, Privacy],
     sharp,
     // Default editor; fields that take rich text set their own restricted one (rich-text.ts).
     editor: lexicalEditor(),
