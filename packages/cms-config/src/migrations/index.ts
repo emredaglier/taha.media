@@ -4,7 +4,8 @@ import * as migration_20261105_210701_work_slugs from './20261105_210701_work_sl
 import * as migration_20261105_210924_images from './20261105_210924_images';
 import * as migration_20261105_211456_work_details from './20261105_211456_work_details';
 import * as migration_20261105_211929_videos from './20261105_211929_videos';
-import * as migration_20261105_212328_main_media from './20261105_212328_main_media';
+import * as migration_20261105_212508_single_entry_pages from './20261105_212508_single_entry_pages';
+import * as migration_20261105_212844_main_media from './20261105_212844_main_media';
 
 export const migrations = [
   {
@@ -38,8 +39,13 @@ export const migrations = [
     name: '20261105_211929_videos',
   },
   {
-    up: migration_20261105_212328_main_media.up,
-    down: migration_20261105_212328_main_media.down,
-    name: '20261105_212328_main_media'
+    up: migration_20261105_212508_single_entry_pages.up,
+    down: migration_20261105_212508_single_entry_pages.down,
+    name: '20261105_212508_single_entry_pages',
+  },
+  {
+    up: migration_20261105_212844_main_media.up,
+    down: migration_20261105_212844_main_media.down,
+    name: '20261105_212844_main_media'
   },
 ];

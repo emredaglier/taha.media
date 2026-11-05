@@ -91,8 +91,16 @@ export interface Config {
     defaultIDType: number;
   };
   fallbackLocale: ('false' | 'none' | 'null') | false | null | 'tr' | 'tr'[];
-  globals: {};
-  globalsSelect: {};
+  globals: {
+    site: Site;
+    about: About;
+    privacy: Privacy;
+  };
+  globalsSelect: {
+    site: SiteSelect<false> | SiteSelect<true>;
+    about: AboutSelect<false> | AboutSelect<true>;
+    privacy: PrivacySelect<false> | PrivacySelect<true>;
+  };
   locale: 'tr';
   widgets: {
     collections: CollectionsWidget;
@@ -615,6 +623,207 @@ export interface PayloadMigrationsSelect<T extends boolean = true> {
   batch?: T;
   updatedAt?: T;
   createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "site".
+ */
+export interface Site {
+  id: number;
+  showreel?: (number | null) | Video;
+  showreelPhone?: (number | null) | Video;
+  showreelPoster?: (number | null) | Image;
+  showreelLink?: {
+    url?: string | null;
+    provider?: ('vimeo' | 'youtube') | null;
+    videoId?: string | null;
+  };
+  intro?: string | null;
+  email?: string | null;
+  socials?:
+    | {
+        platform: string;
+        url: string;
+        id?: string | null;
+      }[]
+    | null;
+  /**
+   * İsteğe bağlı. Boş bırakılan alanlar otomatik doldurulur.
+   */
+  seo?: {
+    title?: string | null;
+    description?: string | null;
+    image?: (number | null) | Image;
+  };
+  _status?: ('draft' | 'published') | null;
+  updatedAt?: string | null;
+  createdAt?: string | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "about".
+ */
+export interface About {
+  id: number;
+  portrait?: (number | null) | Image;
+  bio?: {
+    root: {
+      type: string;
+      children: {
+        type: any;
+        version: number;
+        [k: string]: unknown;
+      }[];
+      direction: ('ltr' | 'rtl') | null;
+      format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+      indent: number;
+      version: number;
+    };
+    [k: string]: unknown;
+  } | null;
+  disciplineLines?: {
+    kurgu?: string | null;
+    motion?: string | null;
+    grafik?: string | null;
+  };
+  clients?:
+    | {
+        name: string;
+        logo?: (number | null) | Image;
+        id?: string | null;
+      }[]
+    | null;
+  /**
+   * İsteğe bağlı. Boş bırakılan alanlar otomatik doldurulur.
+   */
+  seo?: {
+    title?: string | null;
+    description?: string | null;
+    image?: (number | null) | Image;
+  };
+  _status?: ('draft' | 'published') | null;
+  updatedAt?: string | null;
+  createdAt?: string | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "privacy".
+ */
+export interface Privacy {
+  id: number;
+  body?: {
+    root: {
+      type: string;
+      children: {
+        type: any;
+        version: number;
+        [k: string]: unknown;
+      }[];
+      direction: ('ltr' | 'rtl') | null;
+      format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+      indent: number;
+      version: number;
+    };
+    [k: string]: unknown;
+  } | null;
+  /**
+   * İsteğe bağlı. Boş bırakılan alanlar otomatik doldurulur.
+   */
+  seo?: {
+    title?: string | null;
+    description?: string | null;
+    image?: (number | null) | Image;
+  };
+  _status?: ('draft' | 'published') | null;
+  updatedAt?: string | null;
+  createdAt?: string | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "site_select".
+ */
+export interface SiteSelect<T extends boolean = true> {
+  showreel?: T;
+  showreelPhone?: T;
+  showreelPoster?: T;
+  showreelLink?:
+    | T
+    | {
+        url?: T;
+        provider?: T;
+        videoId?: T;
+      };
+  intro?: T;
+  email?: T;
+  socials?:
+    | T
+    | {
+        platform?: T;
+        url?: T;
+        id?: T;
+      };
+  seo?:
+    | T
+    | {
+        title?: T;
+        description?: T;
+        image?: T;
+      };
+  _status?: T;
+  updatedAt?: T;
+  createdAt?: T;
+  globalType?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "about_select".
+ */
+export interface AboutSelect<T extends boolean = true> {
+  portrait?: T;
+  bio?: T;
+  disciplineLines?:
+    | T
+    | {
+        kurgu?: T;
+        motion?: T;
+        grafik?: T;
+      };
+  clients?:
+    | T
+    | {
+        name?: T;
+        logo?: T;
+        id?: T;
+      };
+  seo?:
+    | T
+    | {
+        title?: T;
+        description?: T;
+        image?: T;
+      };
+  _status?: T;
+  updatedAt?: T;
+  createdAt?: T;
+  globalType?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "privacy_select".
+ */
+export interface PrivacySelect<T extends boolean = true> {
+  body?: T;
+  seo?:
+    | T
+    | {
+        title?: T;
+        description?: T;
+        image?: T;
+      };
+  _status?: T;
+  updatedAt?: T;
+  createdAt?: T;
+  globalType?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
