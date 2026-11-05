@@ -184,7 +184,7 @@ The workflow has not run on GitHub yet. The ARM runner's availability on the pla
 
 ## Revalidation
 
-`cms` tells `web` which cache tags a publish touched by POSTing to `web`'s `/internal/revalidate` (ADR-0001, ADR-0012). Requirements:
+`cms` tells `web` which cache tags a publish touched by POSTing to `web`'s `/internal/revalidate` (ADR-0001, ADR-0012). Editing or deleting an Image or Video also notifies: it touches every published Work and page that shows it (an Image also through the Videos it is the poster of), the Works list, and Home when one of those Works is featured. More than 20 tags go out in several requests. Requirements:
 
 - **Internal only.** `cms` (and `migrate`, when it seeds) use `REVALIDATE_URL=http://web:3000/internal/revalidate` on the internal Docker network. Caddy must answer `/internal/*` with 404 on every public host, so the route is never reachable from the internet. The smoke spec checks this.
 - **Shared secret.** `REVALIDATE_SECRET` holds the same value on `cms`, `migrate` and `web`. The route rejects a missing or wrong secret with 401, and it rejects every request while `web` has no secret set.

@@ -204,3 +204,67 @@ describe('a Work’s preview loop', () => {
     }
   })
 })
+
+describe('changing a Video’s use', () => {
+  const changeUse = (id: number, use: 'previewLoop' | 'showreel') =>
+    site.cms.update({
+      collection: 'videos',
+      id,
+      data: { use },
+      user: editor,
+      overrideAccess: false,
+    })
+
+  const createWork = async (title: string, previewLoop: number, draft: boolean) =>
+    site.cms.create({
+      collection: 'works',
+      data: {
+        title,
+        slug: `kullanim-${previewLoop}`,
+        disciplines: ['motion'],
+        year: 2026,
+        cover: (await site.uploadImage(editor)).id,
+        mainMedia: { kind: 'video', video: (await site.uploadVideo(editor, { use: 'main' })).id },
+        previewLoop,
+        _status: draft ? 'draft' : 'published',
+      },
+      draft,
+      user: editor,
+      overrideAccess: false,
+    })
+
+  // loop-ok.mp4 fits every use's caps, so only the references can stand in the way.
+  it('is refused while a Work uses it, naming the Work', async () => {
+    const loop = await site.uploadVideo(editor, { use: 'previewLoop' })
+    await createWork('Yayındaki İş', loop.id, false)
+    expect(await refusal(changeUse(loop.id, 'showreel'))).toBe(
+      'Bu video kullanıldığı için kullanımı değiştirilemez: “Yayındaki İş” işi. Önce videoyu oradan kaldırın.',
+    )
+  })
+
+  it('is refused while only a draft uses it', async () => {
+    const loop = await site.uploadVideo(editor, { use: 'previewLoop' })
+    await createWork('Taslak İş', loop.id, true)
+    expect(await refusal(changeUse(loop.id, 'showreel'))).toBe(
+      'Bu video kullanıldığı için kullanımı değiştirilemez: “Taslak İş” işi. Önce videoyu oradan kaldırın.',
+    )
+  })
+
+  it('is refused while the Site uses it', async () => {
+    const showreel = await site.uploadVideo(editor, { use: 'showreel' })
+    await site.cms.updateGlobal({
+      slug: 'site',
+      data: { showreel: showreel.id, _status: 'published' },
+      user: editor,
+      overrideAccess: false,
+    })
+    expect(await refusal(changeUse(showreel.id, 'previewLoop'))).toBe(
+      'Bu video kullanıldığı için kullanımı değiştirilemez: Site sayfası. Önce videoyu oradan kaldırın.',
+    )
+  })
+
+  it('is allowed when nothing uses it', async () => {
+    const loop = await site.uploadVideo(editor, { use: 'previewLoop' })
+    expect((await changeUse(loop.id, 'showreel')).use).toBe('showreel')
+  })
+})

@@ -8,6 +8,7 @@ import {
 } from 'payload'
 
 import { editor } from '../access'
+import { anyReferences } from '../media-references'
 import { readMp4, type Mp4Info } from '../mp4'
 import {
   NOT_MP4_MESSAGE,
@@ -77,6 +78,36 @@ const readAndCheck: CollectionBeforeValidateHook = async ({
   return data
 }
 
+export const lockedUseMessage = (places: string[]): string =>
+  `Bu video kullanıldığı için kullanımı değiştirilemez: ${places.join(', ')}. Önce videoyu oradan kaldırın.`
+
+/**
+ * Each field that references a Video accepts one use (`videoField`), so a Video's use must not
+ * change while a Work or page references it, in a draft or published: the field would then hold a
+ * wrongly-used Video without anyone seeing a refusal.
+ */
+const keepUseWhileReferenced: CollectionBeforeValidateHook = async ({
+  collection,
+  data,
+  operation,
+  originalDoc,
+  req,
+}) => {
+  if (operation !== 'update' || !data?.use || !originalDoc || data.use === originalDoc.use) {
+    return data
+  }
+  const places = await anyReferences(req, [{ target: 'videos', ids: [originalDoc.id] }])
+  if (places.length === 0) return data
+  throw new ValidationError(
+    {
+      collection: collection.slug,
+      errors: [{ path: 'use', label: 'Kullanım', message: lockedUseMessage(places) }],
+      req,
+    },
+    req.t,
+  )
+}
+
 /**
  * A Video (GLOSSARY): an MP4 (H.264) the Editor exported, with its use, a required poster Image
  * and the facts read from its header (ADR-0008).
@@ -101,7 +132,7 @@ export const Videos: CollectionConfig = {
         return args
       },
     ],
-    beforeValidate: [readAndCheck],
+    beforeValidate: [keepUseWhileReferenced, readAndCheck],
   },
   fields: [
     {

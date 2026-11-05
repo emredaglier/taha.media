@@ -24,8 +24,10 @@ import { Site } from './globals/Site'
 import type { PageSlug } from './tags'
 import { parsePreviewUrl, withPagePreview, withWorkPreview } from './preview'
 import { buildDatabase, DEFAULT_BUSY_TIMEOUT_MS } from './db'
+import type { MediaCollection } from './media-references'
 import {
   httpRevalidationTransport,
+  mediaRevalidationHooks,
   pageRevalidationHooks,
   workRevalidationHooks,
   type RevalidationTransport,
@@ -119,7 +121,12 @@ export function buildSiteConfig(options: SiteConfigOptions): Promise<SanitizedCo
       meta: { titleSuffix: '- taha.media' },
       ...(options.adminBaseDir ? { importMap: { baseDir: options.adminBaseDir } } : {}),
     },
-    collections: [Users, Images, Videos, works],
+    collections: [
+      Users,
+      revalidate ? withMediaRevalidation(Images, revalidate) : Images,
+      revalidate ? withMediaRevalidation(Videos, revalidate) : Videos,
+      works,
+    ],
     globals,
     sharp,
     // Default editor; fields that take rich text set their own restricted one (rich-text.ts).
@@ -169,6 +176,23 @@ function withWorkRevalidation(
       // Last, so it sees the data every other hook has settled.
       beforeChange: [...(own.beforeChange ?? []), hooks.beforeChange],
       afterChange: [...(own.afterChange ?? []), hooks.afterChange],
+      afterDelete: [...(own.afterDelete ?? []), hooks.afterDelete],
+    },
+  }
+}
+
+function withMediaRevalidation(
+  collection: CollectionConfig,
+  transport: RevalidationTransport,
+): CollectionConfig {
+  const hooks = mediaRevalidationHooks(collection.slug as MediaCollection, transport)
+  const own = collection.hooks ?? {}
+  return {
+    ...collection,
+    hooks: {
+      ...own,
+      afterChange: [...(own.afterChange ?? []), hooks.afterChange],
+      beforeDelete: [...(own.beforeDelete ?? []), hooks.beforeDelete],
       afterDelete: [...(own.afterDelete ?? []), hooks.afterDelete],
     },
   }

@@ -2,13 +2,16 @@ import type {
   CollectionAfterChangeHook,
   CollectionAfterDeleteHook,
   CollectionBeforeChangeHook,
+  CollectionBeforeDeleteHook,
   GlobalAfterChangeHook,
   GlobalBeforeChangeHook,
   PayloadRequest,
 } from 'payload'
 
+import { publishedReferences, type MediaCollection, type MediaRefs } from './media-references'
 import {
   HOME_TAG,
+  MAX_TAGS_PER_REQUEST,
   REVALIDATE_SECRET_HEADER,
   WORKS_TAG,
   pageTag,
@@ -51,22 +54,31 @@ export function httpRevalidationTransport(options: HttpRevalidationOptions): Rev
 
 /**
  * Sends the tags and never throws: a failed notification is logged and the Editor's save goes on.
- * The page then stays stale until the next publish (or a manual POST to the route).
+ * The page then stays stale until the next publish (or a manual POST to the route). `web` takes at
+ * most `MAX_TAGS_PER_REQUEST` tags per request (an Image on many Works touches more), so they go
+ * in batches of that size.
  */
 async function notify(
   transport: RevalidationTransport,
   tags: string[],
   req: PayloadRequest,
 ): Promise<void> {
-  try {
-    await transport(tags)
-  } catch (error) {
-    req.payload.logger.error({
-      msg: `Revalidation failed for tags ${tags.join(', ')}: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    })
+  for (let start = 0; start < tags.length; start += MAX_TAGS_PER_REQUEST) {
+    const batch = tags.slice(start, start + MAX_TAGS_PER_REQUEST)
+    try {
+      await transport(batch)
+    } catch (error) {
+      logFailure(req, batch, error)
+    }
   }
+}
+
+function logFailure(req: PayloadRequest, tags: string[], error: unknown): void {
+  req.payload.logger.error({
+    msg: `Revalidation failed for tags ${tags.join(', ')}: ${
+      error instanceof Error ? error.message : String(error)
+    }`,
+  })
 }
 
 /** What the public site currently shows of a document: the main (published) row. */
@@ -174,6 +186,85 @@ export function pageRevalidationHooks(
       const changed =
         doc._status === 'published' || (was !== null && (await readMain(req)) === null)
       if (changed) await notify(transport, [pageTag(slug)], req)
+      return doc
+    },
+  }
+}
+
+/**
+ * The tags of everything visitors see that shows the media: each published Work using it, the
+ * Works list and Home when one of them is featured, and each published page using it. An Image is
+ * also shown through the Videos it is the poster of. References held only in drafts don't count.
+ */
+async function mediaTags(
+  req: PayloadRequest,
+  collection: MediaCollection,
+  id: number | string,
+): Promise<string[]> {
+  const refs: MediaRefs = [{ target: collection, ids: [id] }]
+  if (collection === 'images') {
+    const { docs } = await req.payload.find({
+      collection: 'videos',
+      where: { poster: { equals: id } },
+      select: {},
+      depth: 0,
+      pagination: false,
+      overrideAccess: true,
+      req,
+    })
+    refs.push({ target: 'videos', ids: docs.map((video) => video.id) })
+  }
+  const { works, pages } = await publishedReferences(req, refs)
+  return [
+    ...works.map((work) => workTag(work.id)),
+    ...(works.length > 0 ? [WORKS_TAG] : []),
+    ...(works.some((work) => work.featured) ? [HOME_TAG] : []),
+    ...pages.map(pageTag),
+  ]
+}
+
+/** Tags worked out before a media delete, while the references still exist. */
+const beforeMediaDelete = new WeakMap<PayloadRequest, Map<string, string[]>>()
+
+/**
+ * Hooks that tell `web` an Image or Video changed (alt text, focal point, a replaced file or
+ * poster) or was deleted, so the published pages showing it are rebuilt. A new upload is shown
+ * nowhere yet and sends nothing. Like the other notifications, a failure (here also while finding
+ * the references) is logged and never blocks the Editor's save.
+ */
+export function mediaRevalidationHooks(
+  collection: MediaCollection,
+  transport: RevalidationTransport,
+): {
+  afterChange: CollectionAfterChangeHook
+  beforeDelete: CollectionBeforeDeleteHook
+  afterDelete: CollectionAfterDeleteHook
+} {
+  const tagsOrNone = async (req: PayloadRequest, id: number | string): Promise<string[]> => {
+    try {
+      return await mediaTags(req, collection, id)
+    } catch (error) {
+      logFailure(req, [`${collection}:${id}`], error)
+      return []
+    }
+  }
+  return {
+    afterChange: async ({ doc, operation, req }) => {
+      if (operation !== 'update') return doc
+      const tags = await tagsOrNone(req, doc.id)
+      if (tags.length > 0) await notify(transport, tags, req)
+      return doc
+    },
+    beforeDelete: async ({ id, req }) => {
+      const pending = beforeMediaDelete.get(req) ?? new Map<string, string[]>()
+      pending.set(String(id), await tagsOrNone(req, id))
+      beforeMediaDelete.set(req, pending)
+    },
+    afterDelete: async ({ doc, id, req }) => {
+      const pending = beforeMediaDelete.get(req)
+      const tags = pending?.get(String(id)) ?? []
+      pending?.delete(String(id))
+      if (tags.length > 0) await notify(transport, tags, req)
       return doc
     },
   }
