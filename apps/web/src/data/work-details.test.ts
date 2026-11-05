@@ -50,7 +50,14 @@ beforeAll(async () => {
   const save = (data: Partial<WorkDoc> & { title: string; slug: string }) =>
     site.cms.create({
       collection: 'works',
-      data: { disciplines: ['kurgu'], year: 2025, cover: cover.id, ...data, _status: 'published' },
+      data: {
+        disciplines: ['kurgu'],
+        year: 2025,
+        cover: cover.id,
+        mainMedia: { kind: 'image', image: cover.id },
+        ...data,
+        _status: 'published',
+      },
       draft: false,
       user: editor,
       overrideAccess: false,

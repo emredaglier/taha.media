@@ -270,6 +270,24 @@ export interface Work {
   featured?: boolean | null;
   featuredOrder?: number | null;
   cover: number | Image;
+  mainMedia?: {
+    kind?: ('video' | 'external' | 'image') | null;
+    video?: (number | null) | Video;
+    /**
+     * Vimeo veya YouTube adresini yapıştırın.
+     */
+    externalUrl?: string | null;
+    /**
+     * Adresten otomatik okunur.
+     */
+    externalProvider?: ('vimeo' | 'youtube') | null;
+    /**
+     * Adresten otomatik okunur.
+     */
+    externalId?: string | null;
+    externalPoster?: (number | null) | Image;
+    image?: (number | null) | Image;
+  };
   previewLoop?: (number | null) | Video;
   client?: string | null;
   role?: string | null;
@@ -527,6 +545,17 @@ export interface WorksSelect<T extends boolean = true> {
   featured?: T;
   featuredOrder?: T;
   cover?: T;
+  mainMedia?:
+    | T
+    | {
+        kind?: T;
+        video?: T;
+        externalUrl?: T;
+        externalProvider?: T;
+        externalId?: T;
+        externalPoster?: T;
+        image?: T;
+      };
   previewLoop?: T;
   client?: T;
   role?: T;

@@ -19,7 +19,14 @@ beforeAll(async () => {
   const save = (data: Fields, status: 'draft' | 'published') =>
     site.cms.create({
       collection: 'works',
-      data: { disciplines: ['kurgu'], year: 2025, cover: cover.id, ...data, _status: status },
+      data: {
+        disciplines: ['kurgu'],
+        year: 2025,
+        cover: cover.id,
+        mainMedia: { kind: 'image', image: cover.id },
+        ...data,
+        _status: status,
+      },
       draft: status === 'draft',
       user: editor,
       overrideAccess: false,

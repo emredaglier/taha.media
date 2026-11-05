@@ -35,6 +35,7 @@ const save = (data: Fields, status: 'draft' | 'published' = 'published') =>
       disciplines: ['kurgu'],
       year: 2025,
       cover: coverId,
+      mainMedia: { kind: 'image', image: coverId },
       slug: data.title.toLowerCase().replaceAll(' ', '-'),
       ...data,
       _status: status,

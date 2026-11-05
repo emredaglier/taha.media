@@ -3,7 +3,9 @@ import {
   resolveSeo,
   richTextToPlainText,
   toImage,
+  toMainMedia,
   toVideo,
+  type MainMedia,
   type Discipline,
   type ImageDoc,
   type ImageRead,
@@ -24,6 +26,8 @@ export type Work = {
   year: number
   /** Required to publish, so every published Work has one. */
   cover: ImageRead
+  /** Exactly one, by kind; required to publish, so every published Work has one. */
+  mainMedia: MainMedia
   /** The optional silent loop cards play; null when the Work has none. */
   previewLoop: VideoRead | null
   featured: boolean
@@ -78,6 +82,7 @@ const toWork = (doc: WorkDoc): Work => {
   const cover = toCover(doc.cover)
   return {
     cover,
+    mainMedia: toMainMedia(doc.mainMedia),
     previewLoop: toPreviewLoop(doc.previewLoop),
     id: doc.id,
     title: doc.title,

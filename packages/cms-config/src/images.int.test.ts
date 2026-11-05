@@ -101,7 +101,7 @@ describe('a Work cover', () => {
   it('is required to publish, but a draft can be saved without one', async () => {
     const draft = await site.cms.create({
       collection: 'works',
-      data: work,
+      data: { ...work, mainMedia: { kind: 'image', image: (await site.uploadImage(editor)).id } },
       draft: true,
       ...asEditor(),
     })
