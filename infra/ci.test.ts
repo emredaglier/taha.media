@@ -1,15 +1,15 @@
 // infra/ci.sh against a fake `docker` (no daemon, no registry), plus repo guards on the workflow
 // (CODING_STANDARDS, "Repo guards"): they enforce ADR-0010's pipeline shape, not behaviour.
 import { spawnSync } from 'node:child_process'
-import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
+import { read, sandbox } from './test-helpers.ts'
+
 const script = path.resolve(import.meta.dirname, 'ci.sh')
 const file = path.resolve(import.meta.dirname, '../.github/workflows/ci.yml')
-const workflow = fs.readFileSync(file, 'utf8')
+const workflow = read('.github/workflows/ci.yml')
 /** The workflow without comment lines, so a rule can't be satisfied by a comment. */
 const text = workflow
   .split('\n')
@@ -40,10 +40,10 @@ const deploy = {
 // A fake `docker`: logs every call and answers `push` the way the real one ends its output.
 const DIGEST = { web: 'a'.repeat(64), cms: 'b'.repeat(64), migrate: 'c'.repeat(64) }
 function fakeDocker() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ci-docker-'))
-  const log = path.join(dir, 'calls')
-  fs.writeFileSync(
-    path.join(dir, 'docker'),
+  const sb = sandbox('ci-docker-')
+  const log = sb.path('calls')
+  sb.fake(
+    'docker',
     `#!/usr/bin/env bash
 echo "$*" >>"${log}"
 if [ "$1" = push ]; then
@@ -54,19 +54,13 @@ if [ "$1" = push ]; then
   echo "\${2##*:}: digest: sha256:$d size: 1234"
 fi
 `,
-    { mode: 0o755 },
   )
   // pnpm stands in for the smoke gate: records the variables it was started with.
-  fs.writeFileSync(
-    path.join(dir, 'pnpm'),
+  sb.fake(
+    'pnpm',
     `#!/usr/bin/env bash\necho "pnpm $* SMOKE_WEB_IMAGE=$SMOKE_WEB_IMAGE SMOKE_ASSET_PREFIX=$SMOKE_ASSET_PREFIX SMOKE_DEPLOYMENT_ID=$SMOKE_DEPLOYMENT_ID" >>"${log}"\nexit "\${FAKE_SMOKE_EXIT:-0}"\n`,
-    { mode: 0o755 },
   )
-  return {
-    env: { PATH: `${dir}:${process.env.PATH ?? ''}` },
-    calls: () => (fs.existsSync(log) ? fs.readFileSync(log, 'utf8').trim().split('\n') : []),
-    done: () => fs.rmSync(dir, { recursive: true, force: true }),
-  }
+  return { env: { PATH: sb.PATH }, calls: () => sb.calls(), done: sb.remove }
 }
 
 const P = 'ghcr.io/o/taha'
@@ -111,7 +105,8 @@ describe('infra/ci.sh', () => {
 
   it('publish pushes the <sha> tags only and hands each pushed digest to the later jobs', () => {
     const docker = fakeDocker()
-    const out = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ci-out-')), 'output')
+    const outDir = sandbox('ci-out-')
+    const out = outDir.path('output')
     try {
       const r = ci(['publish', SHA], { ...registry, ...docker.env, GITHUB_OUTPUT: out })
       expect(r.status, r.out).toBe(0)
@@ -120,12 +115,12 @@ describe('infra/ci.sh', () => {
         `push ${P}/cms:${SHA}`,
         `push ${P}/migrate:${SHA}`,
       ])
-      expect(fs.readFileSync(out, 'utf8')).toBe(
+      expect(outDir.read('output')).toBe(
         `web=${ref('web')}\ncms=${ref('cms')}\nmigrate=${ref('migrate')}\n`,
       )
     } finally {
       docker.done()
-      fs.rmSync(path.dirname(out), { recursive: true, force: true })
+      outDir.remove()
     }
   })
 
@@ -196,12 +191,13 @@ describe('infra/ci.sh', () => {
     })
 
     it('writes the result for GitHub Actions', () => {
-      const out = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ci-gate-')), 'output')
+      const outDir = sandbox('ci-gate-')
+      const out = outDir.path('output')
       try {
         ci(['gate', 'upload'], { GITHUB_OUTPUT: out })
-        expect(fs.readFileSync(out, 'utf8')).toBe('ready=false\n')
+        expect(outDir.read('output')).toBe('ready=false\n')
       } finally {
-        fs.rmSync(path.dirname(out), { recursive: true, force: true })
+        outDir.remove()
       }
     })
   })

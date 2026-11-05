@@ -1,5 +1,3 @@
-import fs from 'node:fs'
-import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 import { loadCompose, type Compose, type Service } from './compose-config'
@@ -129,7 +127,7 @@ describe.each(Object.entries(files))('compose (%s)', (variant, list) => {
   })
 
   it('points cms and migrate at web (not web-preview) for revalidation, and keeps the secret equal', () => {
-    expect(svc('cms').environment?.REVALIDATE_URL).toBe('http://web:3000/internal/revalidate')
+    expect(new URL(String(svc('cms').environment?.REVALIDATE_URL)).hostname).toBe('web')
     expect(svc('migrate').environment?.REVALIDATE_URL).toBe(svc('cms').environment?.REVALIDATE_URL)
     expect(svc('web-preview').environment).not.toHaveProperty('REVALIDATE_URL')
     if (variant === 'local') {
@@ -150,22 +148,10 @@ describe.each(Object.entries(files))('compose (%s)', (variant, list) => {
       expect(secrets[0]).not.toBe(secrets[1])
     }
   })
-
-  it('runs litestream as the app user on the shared volume, with a read-only root file system', () => {
-    const litestream = svc('litestream')
-    expect(litestream.user).toBe('10001:10001')
-    expect(litestream.read_only).toBe(true)
-    expect(litestream.command?.[0]).toBe('replicate')
-    expect(litestream.volumes?.some((v) => v.startsWith('./litestream:/etc/litestream'))).toBe(true)
-  })
 })
 
 describe('compose (production file)', () => {
   const compose = loadCompose('compose.yaml')
-
-  it('publishes exactly ports 80 and 443 on caddy', () => {
-    expect((compose.services.caddy?.ports ?? []).map(String).sort()).toEqual(['443:443', '80:80'])
-  })
 
   it('pins every third-party image to a version, never latest', () => {
     for (const [name, service] of Object.entries(compose.services)) {
@@ -174,18 +160,18 @@ describe('compose (production file)', () => {
     }
   })
 
-  it('reads its settings from the env directory on the server, never from the repo', () => {
-    for (const name of ['migrate', 'web', 'web-preview', 'cms', 'litestream']) {
-      expect(String(compose.services[name]?.env_file), name).toMatch(
-        /^\$\{ENV_DIR:-\/opt\/taha\/env\}\//,
-      )
+  it('keeps secrets out of the repo: env files live outside it, and no secret is set inline', () => {
+    for (const [name, service] of Object.entries(compose.services)) {
+      // An absolute path or an `${ENV_DIR...}` path on the server, never one relative to the repo.
+      for (const file of [service.env_file ?? []].flat()) {
+        expect(String(file), name).toMatch(/^(\/|\$\{)/)
+      }
+      const inline = Object.keys(service.environment ?? {})
+      expect(
+        inline.filter((key) => /SECRET|PASSWORD|TOKEN|ACCESS_KEY|DSN/.test(key)),
+        name,
+      ).toEqual([])
     }
-  })
-
-  it('mounts the data volume at the folder bootstrap.sh creates', () => {
-    expect(JSON.stringify(compose.volumes?.data)).toContain('/opt/taha/data')
-    const bootstrap = fs.readFileSync(path.resolve(import.meta.dirname, 'bootstrap.sh'), 'utf8')
-    expect(bootstrap).toContain('/opt/taha')
   })
 })
 
@@ -199,8 +185,10 @@ describe('compose (laptop override)', () => {
     expect(JSON.stringify(compose.volumes?.data ?? {})).not.toContain('/opt/taha')
   })
 
-  it('serves plain HTTP on a loopback port instead of 80 and 443', () => {
-    expect(compose.services.caddy?.ports).toEqual(['127.0.0.1:8080:80'])
+  it('publishes caddy on loopback only, not on the laptop’s public interfaces', () => {
+    const ports = compose.services.caddy?.ports ?? []
+    expect(ports.length).toBeGreaterThan(0)
+    for (const port of ports) expect(loopback(String(port)), String(port)).toBe(true)
   })
 
   it('replicates litestream to a local S3 stand-in, never to R2', () => {

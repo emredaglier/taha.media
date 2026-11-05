@@ -1,13 +1,12 @@
-import fs from 'node:fs'
-import path from 'node:path'
 import { describe, expect, it } from 'vitest'
+
+import { read } from './test-helpers.ts'
 
 // Seam 3: the Caddyfiles, read as text (no Caddy binary needed). The rules that matter are small
 // enough to evaluate here: which paths the public site refuses, and where it proxies to.
-const read = (file: string) =>
-  fs.readFileSync(path.resolve(import.meta.dirname, 'caddy', file), 'utf8')
-const site = read('site.caddy')
-const caddyfiles = { production: read('Caddyfile'), local: read('Caddyfile.local') }
+const caddy = (file: string) => read(`infra/caddy/${file}`)
+const site = caddy('site.caddy')
+const caddyfiles = { production: caddy('Caddyfile'), local: caddy('Caddyfile.local') }
 
 /** The patterns of `@name path <patterns...>`. */
 function pathMatcher(name: string): string[] {

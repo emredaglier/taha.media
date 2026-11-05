@@ -2,12 +2,12 @@
 // and alert webhook). No Docker, no R2, no network beyond 127.0.0.1.
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import { startSiteStub } from './site-stub.ts'
+import { sandbox, type Sandbox } from './test-helpers.ts'
 
 const script = path.resolve(import.meta.dirname, 'deploy.sh')
 
@@ -49,13 +49,15 @@ esac
 `
 
 let site: Awaited<ReturnType<typeof startSiteStub>>
+let sb: Sandbox
+/** The sandbox directory: FAKE_DIR for the fake, and STATE_DIR, ENV_DIR and infra/ under it. */
 let dir: string
 
 const run = (args: string[], env: Record<string, string> = {}, from = script) =>
   new Promise<{ code: number | null; out: string }>((resolve) => {
     const child = spawn('bash', [from, ...args], {
       env: {
-        PATH: `${dir}/bin:${process.env.PATH ?? ''}`,
+        PATH: sb.PATH,
         FAKE_DIR: dir,
         FAKE_STUB: site.base,
         STATE_DIR: `${dir}/state`,
@@ -76,9 +78,9 @@ const run = (args: string[], env: Record<string, string> = {}, from = script) =>
     child.on('close', (code) => resolve({ code, out }))
   })
 
-const calls = () => fs.readFileSync(`${dir}/calls`, 'utf8').trim().split('\n')
-const live = () => fs.readFileSync(`${dir}/live`, 'utf8').trim()
-const history = () => fs.readFileSync(`${dir}/state/releases`, 'utf8').trim().split('\n')
+const calls = () => sb.calls()
+const live = () => sb.read('live').trim()
+const history = () => sb.calls('state/releases')
 const ups = () => calls().filter((c) => / compose up /.test(c))
 const migrations = (tag: string) =>
   calls().filter((c) => c.startsWith(`RELEASE=${tag} compose run --rm --no-deps -T migrate`))
@@ -90,16 +92,18 @@ afterAll(async () => {
   await site.close()
 })
 beforeEach(() => {
-  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'deploy-test-'))
-  fs.mkdirSync(`${dir}/bin`)
+  sb = sandbox('deploy-test-')
+  dir = sb.dir
   fs.mkdirSync(`${dir}/env`)
-  fs.writeFileSync(`${dir}/bin/docker`, fakeDocker, { mode: 0o755 })
-  fs.writeFileSync(`${dir}/calls`, '')
+  sb.fake('docker', fakeDocker)
   fs.writeFileSync(`${dir}/live`, '')
   site.reset()
   site.live.tag = 'none'
   site.live.broken.clear()
   site.hooks.length = 0
+})
+afterEach(() => {
+  sb.remove()
 })
 
 describe('infra/deploy.sh', () => {
@@ -253,7 +257,7 @@ describe('infra/deploy.sh', () => {
     expect((await run(['deploy', '../x'])).code).not.toBe(0)
     expect((await run(['deploy'])).code).not.toBe(0)
     expect((await run(['nope'])).code).not.toBe(0)
-    expect(calls()).toEqual([''])
+    expect(calls()).toEqual([])
   })
 
   it('without a webhook URL the alert is only logged, loudly', async () => {

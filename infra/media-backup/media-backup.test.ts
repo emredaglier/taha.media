@@ -1,17 +1,9 @@
 import { spawnSync } from 'node:child_process'
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs'
-import { tmpdir } from 'node:os'
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
+
+import { read, sandbox, type Sandbox } from '../test-helpers.ts'
 
 // Seam 3 (spec #1): infra/media-backup/media-backup.sh against a fake rclone. The fake keeps each
 // remote's buckets as folders and implements only what the script may use (lsf, copy, check). Any
@@ -58,6 +50,7 @@ case "$cmd" in
 esac
 `
 
+let sb: Sandbox
 let root: string
 
 function put(side: 'src' | 'dst', bucket: string, key: string, body: string) {
@@ -79,7 +72,7 @@ function run() {
   return spawnSync('bash', [script], {
     encoding: 'utf8',
     env: {
-      PATH: `${join(root, 'bin')}:${process.env.PATH}`,
+      PATH: sb.PATH,
       HOME: root,
       FAKE_ROOT: root,
       SRC_BUCKET: 'media',
@@ -93,14 +86,13 @@ function run() {
 }
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'media-backup-'))
-  mkdirSync(join(root, 'bin'))
+  sb = sandbox('media-backup-')
+  root = sb.dir
   mkdirSync(join(root, 'work'))
-  writeFileSync(join(root, 'bin', 'rclone'), fakeRclone)
-  chmodSync(join(root, 'bin', 'rclone'), 0o755)
+  sb.fake('rclone', fakeRclone)
 })
 
-afterEach(() => rmSync(root, { recursive: true, force: true }))
+afterEach(() => sb.remove())
 
 describe('media-backup.sh', () => {
   test('copies only new objects and leaves existing backup objects untouched', () => {
@@ -111,8 +103,8 @@ describe('media-backup.sh', () => {
     const r = run()
     expect(r.status, r.stderr).toBe(0)
     expect(files('dst', 'backup')).toEqual(['a.webp', 'b.webp'])
-    expect(readFileSync(join(root, 'dst/backup/a.webp'), 'utf8')).toBe('OLD1')
-    expect(readFileSync(join(root, 'dst/backup/b.webp'), 'utf8')).toBe('BBBB')
+    expect(sb.read('dst/backup/a.webp')).toBe('OLD1')
+    expect(sb.read('dst/backup/b.webp')).toBe('BBBB')
   })
 
   test('never deletes: an object gone from the media bucket stays in the backup', () => {
@@ -130,7 +122,7 @@ describe('media-backup.sh', () => {
     put('src', 'media', 'trash/deleted.webp', 'D')
     const r = run()
     expect(r.status, r.stderr).toBe(0)
-    const calls = readFileSync(join(root, 'calls.log'), 'utf8').trim().split('\n')
+    const calls = sb.calls('calls.log')
     expect(calls.map((c) => c.split(' ')[0]).sort()).toEqual(['check', 'copy', 'lsf'])
     for (const c of calls) expect(c).not.toMatch(/delete|purge|remove|\bsync\b|\bmove/i)
     expect(files('dst', 'backup')).toEqual(['a.webp'])
@@ -139,10 +131,7 @@ describe('media-backup.sh', () => {
   test('fails when an object cannot be verified in the backup', () => {
     put('src', 'media', 'a.webp', 'A')
     // A fake copy that silently drops files: the check must catch it.
-    writeFileSync(
-      join(root, 'bin', 'rclone'),
-      fakeRclone.replace('copy)', 'copy) exit 0 ;;\n  copy_unused)'),
-    )
+    sb.fake('rclone', fakeRclone.replace('copy)', 'copy) exit 0 ;;\n  copy_unused)'))
     const r = run()
     expect(r.status).not.toBe(0)
   })
@@ -150,7 +139,9 @@ describe('media-backup.sh', () => {
   test('sets no RCLONE_* variable of its own (rclone would read it as a flag)', () => {
     put('src', 'media', 'a.webp', 'A')
     run()
-    expect(readFileSync(join(root, 'stray-rclone-env.log'), 'utf8')).toBe('')
-    expect(readFileSync(script, 'utf8')).not.toMatch(/^\s*(export\s+)?RCLONE_(?!CONFIG_)[A-Z_]+=/m)
+    expect(sb.read('stray-rclone-env.log')).toBe('')
+    expect(read('infra/media-backup/media-backup.sh')).not.toMatch(
+      /^\s*(export\s+)?RCLONE_(?!CONFIG_)[A-Z_]+=/m,
+    )
   })
 })

@@ -1,16 +1,16 @@
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
 
 import { loadCompose } from './compose-config'
+import { read, sandbox, type Sandbox } from './test-helpers.ts'
 
 // Seam 3: Litestream's config, and the restore and snapshot scripts run against a fake `docker`
 // (no Docker, no R2). The real replicate-and-restore round trip is infra/litestream/drill.sh.
 const dir = (file: string) => path.resolve(import.meta.dirname, 'litestream', file)
-const config = parse(fs.readFileSync(dir('litestream.yml'), 'utf8')) as {
+const config = parse(read('infra/litestream/litestream.yml')) as {
   socket?: { enabled?: boolean; path?: string }
   snapshot?: { interval?: string; retention?: string }
   dbs: {
@@ -57,24 +57,21 @@ describe('litestream.yml', () => {
     const compose = loadCompose('compose.yaml')
     const tmpfs = (compose.services.litestream?.tmpfs as string[] | undefined) ?? []
     expect(tmpfs.some((t) => t.startsWith(path.dirname(config.socket?.path ?? '')))).toBe(true)
-    expect(fs.readFileSync(dir('snapshot.sh'), 'utf8')).toContain(config.socket?.path ?? 'missing')
+    expect(read('infra/litestream/snapshot.sh')).toContain(config.socket?.path ?? 'missing')
   })
 })
 
 describe('restore.sh and snapshot.sh', () => {
+  let sb: Sandbox
   let work: string
-  let bin: string
-  let log: string
 
   beforeEach(() => {
-    work = fs.mkdtempSync(path.join(os.tmpdir(), 'litestream-test-'))
-    bin = path.join(work, 'bin')
-    log = path.join(work, 'docker.log')
-    fs.mkdirSync(bin)
+    sb = sandbox('litestream-test-')
+    work = sb.dir
     // The fake docker records its arguments and, for `restore`, writes the database the real
     // container would have restored into the mounted folder.
-    fs.writeFileSync(
-      path.join(bin, 'docker'),
+    sb.fake(
+      'docker',
       `#!/bin/bash
 printf '%s\\n' "$*" >>"$FAKE_LOG"
 mount=""
@@ -87,19 +84,17 @@ if [[ " $* " == *" restore "* && -n "$mount" && -z "$FAKE_RESTORE_FAILS" ]]; the
   printf 'SQLite format 3' >"$mount/taha.db"
 fi
 `,
-      { mode: 0o755 },
     )
-    for (const tool of ['chown'])
-      fs.writeFileSync(path.join(bin, tool), '#!/bin/bash\nexit 0\n', { mode: 0o755 })
+    sb.fake('chown', '#!/bin/bash\nexit 0\n')
   })
-  afterEach(() => fs.rmSync(work, { recursive: true, force: true }))
+  afterEach(() => sb.remove())
 
   const run = (script: string, args: string[], env: Record<string, string> = {}) =>
     spawnSync('bash', [dir(script), ...args], {
       encoding: 'utf8',
-      env: { PATH: `${bin}:${process.env.PATH}`, FAKE_LOG: log, ...env },
+      env: { PATH: sb.PATH, FAKE_LOG: sb.path('docker.log'), ...env },
     })
-  const calls = () => (fs.existsSync(log) ? fs.readFileSync(log, 'utf8').trim().split('\n') : [])
+  const calls = () => sb.calls('docker.log')
 
   it('restores into an empty folder through the litestream service, as root, with the same config', () => {
     const target = path.join(work, 'restored')

@@ -1,12 +1,11 @@
 // infra/assets.sh against the S3 stub and a fake `docker` on PATH (no Docker, no R2).
 import { spawn } from 'node:child_process'
-import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { startS3Stub } from './s3-stub.ts'
+import { sandbox, type Sandbox } from './test-helpers.ts'
 
 const script = path.resolve(import.meta.dirname, 'assets.sh')
 
@@ -26,25 +25,23 @@ exit 0
 `
 
 let stub: Awaited<ReturnType<typeof startS3Stub>>
-let dir: string
+let sb: Sandbox
 beforeEach(async () => {
   stub = await startS3Stub()
-  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'assets-test-'))
-  fs.mkdirSync(`${dir}/bin`)
-  fs.writeFileSync(`${dir}/bin/docker`, fakeDocker, { mode: 0o755 })
-  fs.writeFileSync(`${dir}/calls`, '')
+  sb = sandbox('assets-test-')
+  sb.fake('docker', fakeDocker)
 })
 afterEach(async () => {
   await stub.close()
-  fs.rmSync(dir, { recursive: true, force: true })
+  sb.remove()
 })
 
 const run = (args: string[], env: Record<string, string> = {}) =>
   new Promise<{ code: number | null; out: string }>((resolve) => {
     const child = spawn('bash', [script, ...args], {
       env: {
-        PATH: `${dir}/bin:${process.env.PATH ?? ''}`,
-        FAKE_DIR: dir,
+        PATH: sb.PATH,
+        FAKE_DIR: sb.dir,
         S3_ENDPOINT: stub.endpoint,
         S3_BUCKET: 'bucket',
         S3_ACCESS_KEY_ID: 'k',
@@ -58,7 +55,7 @@ const run = (args: string[], env: Record<string, string> = {}) =>
     child.stderr.on('data', (d: Buffer) => (out += d))
     child.on('close', (code) => resolve({ code, out }))
   })
-const calls = () => fs.readFileSync(`${dir}/calls`, 'utf8').trim().split('\n').filter(Boolean)
+const calls = () => sb.calls()
 
 describe('infra/assets.sh', () => {
   it('prints the build args that tie the image to its release: CDN prefix and deployment id', async () => {

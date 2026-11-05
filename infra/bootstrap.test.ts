@@ -1,8 +1,9 @@
 import { spawnSync } from 'node:child_process'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { beforeEach, describe, expect, test } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test } from 'vitest'
+
+import { sandbox, type Sandbox } from './test-helpers.ts'
 
 // Seam: infra/bootstrap.sh run against a fake system. Every file lands under
 // BOOTSTRAP_ROOT and every system command is a recording stub on PATH, so the
@@ -57,15 +58,15 @@ esac`,
   dpkg: 'echo arm64',
 }
 
+let sb: Sandbox
 let root: string
 let state: string
-let bin: string
 
 function run(args: string[], env: Record<string, string> = {}) {
   return spawnSync('bash', [script, ...args], {
     encoding: 'utf8',
     env: {
-      PATH: `${bin}:${process.env.PATH}`,
+      PATH: sb.PATH,
       HOME: root,
       BOOTSTRAP_ROOT: root,
       FAKE_STATE: state,
@@ -82,21 +83,20 @@ function runOk() {
 }
 
 const baseArgs = () => ['--admin-user', 'taha', '--ssh-key', PUBLIC_KEY, '--hostname', 'taha-media']
-const read = (path: string) => readFileSync(join(root, path), 'utf8')
-const ufwRules = () => readFileSync(join(state, 'ufw.rules'), 'utf8')
+const read = (path: string) => sb.read(join('root', path))
+const ufwRules = () => sb.read('state/ufw.rules')
 
 beforeEach(() => {
-  const base = mkdtempSync(join(tmpdir(), 'bootstrap-'))
-  root = join(base, 'root')
-  state = join(base, 'state')
-  bin = join(base, 'bin')
-  for (const dir of [root, state, bin, join(root, 'etc')]) mkdirSync(dir, { recursive: true })
+  sb = sandbox('bootstrap-')
+  root = sb.path('root')
+  state = sb.path('state')
+  for (const dir of [root, state, join(root, 'etc')]) mkdirSync(dir, { recursive: true })
   for (const [name, body] of Object.entries(stubs)) {
-    const file = join(bin, name.replace('_', '-'))
-    writeFileSync(file, `#!/bin/sh\n${body}\n`)
-    chmodSync(file, 0o755)
+    sb.fake(name.replace('_', '-'), `#!/bin/sh\n${body}\n`)
   }
 })
+
+afterEach(() => sb.remove())
 
 describe('bootstrap.sh on a fake system', () => {
   test('exits with a usage error and changes nothing when inputs are missing', () => {
@@ -109,7 +109,7 @@ describe('bootstrap.sh on a fake system', () => {
   test('opens only 80/443 publicly and SSH on tailscale0 only; public 22 is closed', () => {
     const result = run(baseArgs())
     expect(result.status, result.stderr).toBe(0)
-    expect(readFileSync(join(state, 'ufw.defaults'), 'utf8')).toContain('default deny incoming')
+    expect(sb.read('state/ufw.defaults')).toContain('default deny incoming')
     expect(ufwRules().trim().split('\n').sort()).toEqual([
       '22/tcp on tailscale0 ALLOW Anywhere',
       '443/tcp ALLOW Anywhere',
@@ -119,7 +119,7 @@ describe('bootstrap.sh on a fake system', () => {
   })
 
   test('keeps public SSH open and fails when Tailscale never comes up (lockout guard)', () => {
-    writeFileSync(join(bin, 'tailscale'), '#!/bin/sh\nexit 1\n')
+    sb.fake('tailscale', '#!/bin/sh\nexit 1\n')
     const result = run(baseArgs())
     expect(result.status).not.toBe(0)
     expect(ufwRules()).toContain('22/tcp ALLOW Anywhere')

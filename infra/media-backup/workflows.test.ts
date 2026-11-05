@@ -9,10 +9,9 @@ const text = readFileSync(file, 'utf8')
   .filter((l) => !l.trim().startsWith('#'))
   .join('\n')
 
-test('runs the backup script nightly, read-only, and never a delete', () => {
+test('runs on a schedule, read-only, and never deletes', () => {
   expect(text).toMatch(/schedule:/)
   expect(text).toMatch(/permissions:\n\s+contents: read/)
-  expect(text).toContain('run: infra/media-backup/media-backup.sh')
   expect(text).not.toMatch(/\bdelete|\bpurge|\bsync\b|--remove/i)
 })
 

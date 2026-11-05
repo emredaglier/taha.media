@@ -1,13 +1,10 @@
-import fs from 'node:fs'
-import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 import { loadCompose } from './compose-config'
+import { read } from './test-helpers.ts'
 
 // Repo guards (CODING_STANDARDS: "Repo guards scan source on purpose"): the Dockerfile is only
 // built by the release gate, so these pin the rules that a build alone would not notice.
-const root = path.resolve(import.meta.dirname, '..')
-const read = (file: string) => fs.readFileSync(path.join(root, file), 'utf8')
 const dockerfile = read('Dockerfile')
 
 /** The instructions of one build stage (`FROM ... AS name` up to the next FROM). */
