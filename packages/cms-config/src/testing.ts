@@ -12,6 +12,7 @@ import sharp from 'sharp'
 
 import { buildSiteConfig } from './config'
 import type { Image, User, Video } from './payload-types'
+import type { RevalidationTransport } from './revalidation'
 
 /** One request the S3 stub received. */
 export type S3Request = { method: string; key: string; headers: http.IncomingHttpHeaders }
@@ -95,6 +96,11 @@ export type TestSite = {
   createEditor: (credentials?: { email?: string; password?: string }) => Promise<User>
   /** The R2 stand-in the writer uploads to. */
   s3: S3Stub
+  /**
+   * Every set of cache tags the writer sent to `web`, in order (spec #1, Tags). Clear it with
+   * `revalidations.length = 0`. Recorded before the `revalidate` transport (if any) is called.
+   */
+  revalidations: string[][]
   /** Uploads a generated photo as an Editor would; `alt` defaults to a sample text. */
   uploadImage: (
     editor: User,
@@ -121,13 +127,20 @@ const SECRET = 'test-secret'
 
 export async function createTestSite({
   objectStorage = true,
+  revalidate,
 }: {
   /** `false` leaves media on local disk, as in development. */
   objectStorage?: boolean
+  /**
+   * Delivers the tags after they are recorded, e.g. to `web`'s revalidate route, or a transport
+   * that fails. Without it the tags are only recorded.
+   */
+  revalidate?: RevalidationTransport
 } = {}): Promise<TestSite> {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'taha-site-'))
   const databasePath = path.join(dir, 'site.db')
   const s3 = await startS3Stub()
+  const revalidations: string[][] = []
   const cms = await getPayload({
     // Unique per site, so a second site in the same process gets its own instance.
     key: `test-cms-${randomUUID()}`,
@@ -136,6 +149,10 @@ export async function createTestSite({
       databasePath,
       secret: SECRET,
       push: false,
+      revalidate: async (tags) => {
+        revalidations.push(tags)
+        await revalidate?.(tags)
+      },
       storage: objectStorage
         ? {
             mediaOrigin: TEST_MEDIA_ORIGIN,
@@ -173,6 +190,7 @@ export async function createTestSite({
         },
       }),
     s3,
+    revalidations,
     uploadImage: async (editor, { name = 'photo.jpg', width = 3000, height = 2000, alt } = {}) => {
       const data = await testPhoto(width, height)
       return cms.create({

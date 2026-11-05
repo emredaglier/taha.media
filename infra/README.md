@@ -2,6 +2,16 @@
 
 Compose, Caddy, Litestream, deploy and rollback arrive in later tickets. This file is the runbook for the server bootstrap (ADR-0009).
 
+## Revalidation (input for the Compose and Caddy ticket, #15)
+
+`cms` tells `web` which cache tags a publish touched by POSTing to `web`'s `/internal/revalidate` (ADR-0001, ADR-0012). Requirements:
+
+- **Internal only.** `cms` (and `migrate`, when it seeds) use `REVALIDATE_URL=http://web:3000/internal/revalidate` on the internal Docker network. Caddy must answer `/internal/*` with 404 on every public host, so the route is never reachable from the internet. The smoke spec checks this.
+- **Shared secret.** `REVALIDATE_SECRET` holds the same value on `cms`, `migrate` and `web`. The route rejects a missing or wrong secret with 401, and it rejects every request while `web` has no secret set.
+- **Not `web-preview`.** The preview instance (`PREVIEW=1`) never caches reads, so it needs no notification.
+
+Tag names live in `packages/cms-config/src/tags.ts`. To refresh by hand (for example after editing the database directly), POST `{"tags":["works","home","page:site"]}` with the `x-revalidate-secret` header from inside the `web` container.
+
 ## Server bootstrap: `infra/bootstrap.sh`
 
 Turns a fresh Hetzner ARM VPS (Ubuntu 26.04 LTS) into the Docker host. Not run by tests against a real system; cutover (ADR-0011) runs it once.

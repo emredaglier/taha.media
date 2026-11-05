@@ -32,6 +32,23 @@ export { parseExternalVideoUrl, EXTERNAL_PROVIDERS } from './external-video'
 export type { ExternalProvider, ExternalVideo } from './external-video'
 export { toImage } from './image-read'
 export type { ImageRead } from './image-read'
+export {
+  httpRevalidationTransport,
+  pageRevalidationHooks,
+  workRevalidationHooks,
+  DEFAULT_REVALIDATE_TIMEOUT_MS,
+} from './revalidation'
+export type { HttpRevalidationOptions, RevalidationTransport } from './revalidation'
+export {
+  HOME_TAG,
+  MAX_TAGS_PER_REQUEST,
+  REVALIDATE_SECRET_HEADER,
+  TAG_PATTERN,
+  WORKS_TAG,
+  pageTag,
+  workTag,
+} from './tags'
+export type { PageSlug } from './tags'
 export type {
   Config,
   Image as ImageDoc,

@@ -14,8 +14,10 @@ import {
   type VideoDoc,
   type VideoRead,
 } from '@taha/cms-config'
+import { pageTag } from '@taha/cms-config/tags'
 
 import { getWebPayload } from '../lib/payload'
+import { cachedRead } from './cache'
 
 /** Rich text as a Lexical editor state; the frontend renders it. */
 type RichText = NonNullable<AboutDoc['bio']>
@@ -79,12 +81,15 @@ const richText = <T>(value: T | null | undefined): T | null =>
 
 /**
  * A global that was never published reads as not found: the Local API answers with an empty
- * document, so a missing `_status` means nothing is published yet.
+ * document, so a missing `_status` means nothing is published yet. Cached under the page's own
+ * tag, which `cms` sends when the page is published or unpublished.
  */
-async function readGlobal<T extends 'site' | 'about' | 'privacy'>(slug: T) {
-  const payload = await getWebPayload()
-  const doc = await payload.findGlobal({ slug, ...PUBLISHED })
-  return doc._status === 'published' ? doc : null
+function readGlobal<T extends 'site' | 'about' | 'privacy'>(slug: T) {
+  return cachedRead(['page', slug], [pageTag(slug)], async () => {
+    const payload = await getWebPayload()
+    const doc = await payload.findGlobal({ slug, ...PUBLISHED })
+    return doc._status === 'published' ? doc : null
+  })
 }
 
 export async function getSite(): Promise<Site | null> {

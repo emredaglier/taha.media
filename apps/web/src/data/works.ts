@@ -14,8 +14,10 @@ import {
   type Seo,
   type WorkDoc,
 } from '@taha/cms-config'
+import { HOME_TAG, WORKS_TAG, workTag } from '@taha/cms-config/tags'
 
 import { getWebPayload } from '../lib/payload'
+import { cachedRead } from './cache'
 
 /** A published Work as the site renders it (GLOSSARY: Work). */
 export type Work = {
@@ -129,30 +131,34 @@ export async function getWorks(options: { discipline?: Discipline } = {}): Promi
       `Unknown Discipline "${String(discipline)}" (expected ${DISCIPLINES.join(' | ')}).`,
     )
   }
-  const payload = await getWebPayload()
-  const { docs } = await payload.find({
-    ...PUBLISHED_WORKS,
-    ...(discipline ? { where: { disciplines: { contains: discipline } } } : {}),
-    limit: 0,
-    pagination: false,
+  return cachedRead(['works', discipline ?? 'all'], [WORKS_TAG], async () => {
+    const payload = await getWebPayload()
+    const { docs } = await payload.find({
+      ...PUBLISHED_WORKS,
+      ...(discipline ? { where: { disciplines: { contains: discipline } } } : {}),
+      limit: 0,
+      pagination: false,
+    })
+    return docs.sort(listOrder).map(toWork)
   })
-  return docs.sort(listOrder).map(toWork)
 }
 
 /** Published Featured Works by featured order (Home); those without a place come last. */
-export async function getFeaturedWorks(): Promise<Work[]> {
-  const payload = await getWebPayload()
-  const { docs } = await payload.find({
-    ...PUBLISHED_WORKS,
-    where: { featured: { equals: true } },
-    limit: 0,
-    pagination: false,
+export function getFeaturedWorks(): Promise<Work[]> {
+  return cachedRead(['featured-works'], [HOME_TAG], async () => {
+    const payload = await getWebPayload()
+    const { docs } = await payload.find({
+      ...PUBLISHED_WORKS,
+      where: { featured: { equals: true } },
+      limit: 0,
+      pagination: false,
+    })
+    return docs
+      .sort(
+        (a, b) => (a.featuredOrder ?? Infinity) - (b.featuredOrder ?? Infinity) || listOrder(a, b),
+      )
+      .map(toWork)
   })
-  return docs
-    .sort(
-      (a, b) => (a.featuredOrder ?? Infinity) - (b.featuredOrder ?? Infinity) || listOrder(a, b),
-    )
-    .map(toWork)
 }
 
 /**
@@ -162,38 +168,73 @@ export async function getFeaturedWorks(): Promise<Work[]> {
 export type WorkBySlug =
   { kind: 'work'; work: Work } | { kind: 'redirect'; slug: string } | { kind: 'notFound' }
 
+/** What a slug points at, before the Work itself is read. */
+type SlugLookup = { kind: 'work'; id: number } | Exclude<WorkBySlug, { kind: 'work' }>
+
 /**
  * Resolves a slug from the URL. A current slug wins over an old one; an old slug redirects to the
  * Work's current slug only while that Work is published. A draft or unknown slug is not found.
+ *
+ * Two cached steps: the slug lookup sits under the Works list tag (every Work change touches it,
+ * so a rename, publish or unpublish re-resolves it), and the Work itself under its own id tag.
  */
 export async function getWorkBySlug(slug: string): Promise<WorkBySlug> {
-  const payload = await getWebPayload()
-  const current = await payload.find({
-    ...PUBLISHED_WORKS,
-    where: { slug: { equals: slug } },
-    limit: 1,
-    pagination: false,
-  })
-  if (current.docs[0]) return { kind: 'work', work: toWork(current.docs[0]) }
+  const found = await lookUpSlug(slug)
+  if (found.kind !== 'work') return found
+  const work = await getPublishedWork(found.id)
+  return work ? { kind: 'work', work } : { kind: 'notFound' }
+}
 
-  const renamed = await payload.find({
-    ...PUBLISHED_WORKS,
-    where: { previousSlugs: { equals: slug } },
-    sort: '-updatedAt',
-    limit: 1,
-    pagination: false,
+function lookUpSlug(slug: string): Promise<SlugLookup> {
+  return cachedRead(['work-slug', slug], [WORKS_TAG], async () => {
+    const payload = await getWebPayload()
+    const current = await payload.find({
+      ...PUBLISHED_WORKS,
+      where: { slug: { equals: slug } },
+      depth: 0,
+      select: { slug: true },
+      limit: 1,
+      pagination: false,
+    })
+    if (current.docs[0]) return { kind: 'work', id: current.docs[0].id }
+
+    const renamed = await payload.find({
+      ...PUBLISHED_WORKS,
+      where: { previousSlugs: { equals: slug } },
+      depth: 0,
+      select: { slug: true },
+      sort: '-updatedAt',
+      limit: 1,
+      pagination: false,
+    })
+    return renamed.docs[0] ? { kind: 'redirect', slug: renamed.docs[0].slug } : { kind: 'notFound' }
   })
-  return renamed.docs[0] ? { kind: 'redirect', slug: renamed.docs[0].slug } : { kind: 'notFound' }
+}
+
+/** One published Work by id, or null; tagged with the Work's own tag. */
+function getPublishedWork(id: number): Promise<Work | null> {
+  return cachedRead(['work', String(id)], [workTag(id)], async () => {
+    const payload = await getWebPayload()
+    const { docs } = await payload.find({
+      ...PUBLISHED_WORKS,
+      where: { id: { equals: id } },
+      limit: 1,
+      pagination: false,
+    })
+    return docs[0] ? toWork(docs[0]) : null
+  })
 }
 
 /** The current slug of every published Work, for static params. */
-export async function getPublishedWorkSlugs(): Promise<string[]> {
-  const payload = await getWebPayload()
-  const { docs } = await payload.find({
-    ...PUBLISHED_WORKS,
-    select: { slug: true },
-    limit: 0,
-    pagination: false,
+export function getPublishedWorkSlugs(): Promise<string[]> {
+  return cachedRead(['work-slugs'], [WORKS_TAG], async () => {
+    const payload = await getWebPayload()
+    const { docs } = await payload.find({
+      ...PUBLISHED_WORKS,
+      select: { slug: true },
+      limit: 0,
+      pagination: false,
+    })
+    return docs.map((doc) => doc.slug)
   })
-  return docs.map((doc) => doc.slug)
 }

@@ -5,7 +5,13 @@ import { fileURLToPath } from 'node:url'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
 import { en } from '@payloadcms/translations/languages/en'
 import { tr } from '@payloadcms/translations/languages/tr'
-import { buildConfig, type PayloadEmailAdapter, type SanitizedConfig } from 'payload'
+import {
+  buildConfig,
+  type CollectionConfig,
+  type GlobalConfig,
+  type PayloadEmailAdapter,
+  type SanitizedConfig,
+} from 'payload'
 import sharp from 'sharp'
 
 import { Images } from './collections/Images'
@@ -15,7 +21,14 @@ import { Works } from './collections/Works'
 import { About } from './globals/About'
 import { Privacy } from './globals/Privacy'
 import { Site } from './globals/Site'
+import type { PageSlug } from './tags'
 import { buildDatabase, DEFAULT_BUSY_TIMEOUT_MS } from './db'
+import {
+  httpRevalidationTransport,
+  pageRevalidationHooks,
+  workRevalidationHooks,
+  type RevalidationTransport,
+} from './revalidation'
 import {
   imagesStorage,
   localImagesDir,
@@ -55,6 +68,11 @@ export type SiteConfigOptions = {
    * database file (development). Production sets both, see `storageOptionsFromEnv`.
    */
   storage?: StorageOptions
+  /**
+   * Where `cms` sends the cache tags a publish, unpublish or delete touched (ADR-0012). Only the
+   * writer uses it. Omit it and nothing is sent (local dev without `web`, most tests).
+   */
+  revalidate?: RevalidationTransport
 }
 
 /** Nothing sends mail (ADR-0013). Declared so Payload doesn't warn at boot; it only logs. */
@@ -76,14 +94,20 @@ export function buildSiteConfig(options: SiteConfigOptions): Promise<SanitizedCo
     fs.mkdirSync(path.dirname(path.resolve(options.databasePath)), { recursive: true })
   }
 
+  const revalidate = writer ? options.revalidate : undefined
+  const works = revalidate ? withWorkRevalidation(Works, revalidate) : Works
+  const globals = [Site, About, Privacy].map((global) =>
+    revalidate ? withPageRevalidation(global, revalidate) : global,
+  )
+
   return buildConfig({
     admin: {
       user: Users.slug,
       meta: { titleSuffix: '- taha.media' },
       ...(options.adminBaseDir ? { importMap: { baseDir: options.adminBaseDir } } : {}),
     },
-    collections: [Users, Images, Videos, Works],
-    globals: [Site, About, Privacy],
+    collections: [Users, Images, Videos, works],
+    globals,
     sharp,
     // Default editor; fields that take rich text set their own restricted one (rich-text.ts).
     editor: lexicalEditor(),
@@ -119,6 +143,40 @@ export function buildSiteConfig(options: SiteConfigOptions): Promise<SanitizedCo
   })
 }
 
+function withWorkRevalidation(
+  collection: CollectionConfig,
+  transport: RevalidationTransport,
+): CollectionConfig {
+  const hooks = workRevalidationHooks(transport)
+  const own = collection.hooks ?? {}
+  return {
+    ...collection,
+    hooks: {
+      ...own,
+      // Last, so it sees the data every other hook has settled.
+      beforeChange: [...(own.beforeChange ?? []), hooks.beforeChange],
+      afterChange: [...(own.afterChange ?? []), hooks.afterChange],
+      afterDelete: [...(own.afterDelete ?? []), hooks.afterDelete],
+    },
+  }
+}
+
+function withPageRevalidation(
+  global: GlobalConfig,
+  transport: RevalidationTransport,
+): GlobalConfig {
+  const hooks = pageRevalidationHooks(global.slug as PageSlug, transport)
+  const own = global.hooks ?? {}
+  return {
+    ...global,
+    hooks: {
+      ...own,
+      beforeChange: [...(own.beforeChange ?? []), hooks.beforeChange],
+      afterChange: [...(own.afterChange ?? []), hooks.afterChange],
+    },
+  }
+}
+
 /** `"a, b,,c"` -> `['a', 'b', 'c']`: split on commas, trim, drop empty entries. */
 const commaList = (value: string | undefined): string[] =>
   (value ?? '')
@@ -145,6 +203,7 @@ export function siteConfigOptionsFromEnv(
       'CMS_ORIGINS is not set: production cms needs it for CSRF and CORS (see .env.example).',
     )
   }
+  const revalidate = role === 'cms' ? revalidationFromEnv(env, buildPhase) : undefined
   return {
     role,
     databasePath,
@@ -152,5 +211,36 @@ export function siteConfigOptionsFromEnv(
     ...(pushFlag === undefined ? {} : { push: pushFlag === 'true' }),
     origins,
     storage: storageOptionsFromEnv(env),
+    ...(revalidate ? { revalidate } : {}),
   }
+}
+
+/**
+ * `cms` POSTs cache tags to `web`'s internal revalidate route (ADR-0012). Without it, published
+ * changes never reach the prerendered pages, so a production cms (and anything else that writes
+ * with the cms config, such as the seed in the migrate container) refuses to start without it.
+ */
+function revalidationFromEnv(
+  env: Record<string, string | undefined>,
+  buildPhase: boolean,
+): RevalidationTransport | undefined {
+  const url = env.REVALIDATE_URL?.trim()
+  const secret = env.REVALIDATE_SECRET
+  if (!url) {
+    if (env.NODE_ENV === 'production' && !buildPhase) {
+      throw new Error(
+        'REVALIDATE_URL is not set: production cms must tell web what to refresh (see .env.example).',
+      )
+    }
+    return undefined
+  }
+  if (!secret) {
+    throw new Error('REVALIDATE_URL is set but REVALIDATE_SECRET is not (see .env.example).')
+  }
+  const timeoutMs = Number(env.REVALIDATE_TIMEOUT_MS)
+  return httpRevalidationTransport({
+    url,
+    secret,
+    ...(Number.isFinite(timeoutMs) && timeoutMs > 0 ? { timeoutMs } : {}),
+  })
 }
