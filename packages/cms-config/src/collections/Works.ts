@@ -7,6 +7,7 @@ import {
 
 import { editor, publishedOrEditor } from '../access'
 import { DISCIPLINE_LABELS, DISCIPLINES } from '../disciplines'
+import { cleanSlug, recordPreviousSlugs, slugify } from '../slugs'
 
 export const NO_DISCIPLINE_MESSAGE = 'En az bir disiplin seçin.'
 
@@ -57,8 +58,19 @@ export const Works: CollectionConfig = {
       options: DISCIPLINES.map((value) => ({ value, label: DISCIPLINE_LABELS[value] })),
     },
     { name: 'year', label: 'Yıl', type: 'number', required: true },
-    slugField({ useAsSlug: 'title' }),
+    slugField({ useAsSlug: 'title', slugify }),
+    {
+      name: 'previousSlugs',
+      label: 'Eski adresler',
+      type: 'text',
+      hasMany: true,
+      admin: {
+        readOnly: true,
+        position: 'sidebar',
+        description: 'Bu işin eski adresleri. Yeni adrese yönlendirilir. Otomatik doldurulur.',
+      },
+    },
   ],
-  hooks: { beforeValidate: [requireDiscipline] },
+  hooks: { beforeValidate: [cleanSlug, requireDiscipline], beforeChange: [recordPreviousSlugs] },
   versions: { drafts: true, maxPerDoc: 20 },
 }

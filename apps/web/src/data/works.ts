@@ -38,14 +38,45 @@ export async function getWorks(): Promise<Work[]> {
   return docs.map(toWork)
 }
 
-/** The published Work with this slug, or `null` for an unknown slug or a never-published draft. */
-export async function getWorkBySlug(slug: string): Promise<Work | null> {
+/**
+ * What a Work URL leads to: the Work, a permanent redirect to its current slug (the frontend
+ * answers 301), or nothing.
+ */
+export type WorkBySlug =
+  { kind: 'work'; work: Work } | { kind: 'redirect'; slug: string } | { kind: 'notFound' }
+
+/**
+ * Resolves a slug from the URL. A current slug wins over an old one; an old slug redirects to the
+ * Work's current slug only while that Work is published. A draft or unknown slug is not found.
+ */
+export async function getWorkBySlug(slug: string): Promise<WorkBySlug> {
   const payload = await getWebPayload()
-  const { docs } = await payload.find({
+  const current = await payload.find({
     ...PUBLISHED_WORKS,
     where: { slug: { equals: slug } },
     limit: 1,
     pagination: false,
   })
-  return docs[0] ? toWork(docs[0]) : null
+  if (current.docs[0]) return { kind: 'work', work: toWork(current.docs[0]) }
+
+  const renamed = await payload.find({
+    ...PUBLISHED_WORKS,
+    where: { previousSlugs: { equals: slug } },
+    sort: '-updatedAt',
+    limit: 1,
+    pagination: false,
+  })
+  return renamed.docs[0] ? { kind: 'redirect', slug: renamed.docs[0].slug } : { kind: 'notFound' }
+}
+
+/** The current slug of every published Work, for static params. */
+export async function getPublishedWorkSlugs(): Promise<string[]> {
+  const payload = await getWebPayload()
+  const { docs } = await payload.find({
+    ...PUBLISHED_WORKS,
+    select: { slug: true },
+    limit: 0,
+    pagination: false,
+  })
+  return docs.map((doc) => doc.slug)
 }
