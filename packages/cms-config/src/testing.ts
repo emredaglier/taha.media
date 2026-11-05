@@ -28,20 +28,33 @@ export type S3Stub = {
   objects: Set<string>
   /** Requests that stored a new object (copies excluded), in order. */
   puts: () => S3Request[]
+  /** While true, copy requests (`x-amz-copy-source`) are answered with a 500. */
+  failCopies: boolean
   close: () => Promise<void>
 }
 
 export async function startS3Stub(bucket = 'bucket'): Promise<S3Stub> {
   const requests: S3Request[] = []
   const objects = new Set<string>()
+  const stub: { failCopies: boolean } = { failCopies: false }
   const server = http.createServer((req, res) => {
     req.on('data', () => undefined)
     req.on('end', () => {
       const path = decodeURIComponent((req.url ?? '').split('?')[0] ?? '')
       const key = path.replace(new RegExp(`^/${bucket}/`), '')
       requests.push({ method: req.method ?? '', key, headers: req.headers })
+      if (stub.failCopies && typeof req.headers['x-amz-copy-source'] === 'string') {
+        res.writeHead(500, { 'Content-Type': 'application/xml' })
+        res.end('<Error><Code>InternalError</Code><Message>stub</Message></Error>')
+        return
+      }
       if (req.method === 'PUT') objects.add(key)
       if (req.method === 'DELETE') objects.delete(key)
+      if (typeof req.headers['x-amz-copy-source'] === 'string') {
+        res.writeHead(200, { 'Content-Type': 'application/xml' })
+        res.end('<CopyObjectResult><ETag>"stub"</ETag></CopyObjectResult>')
+        return
+      }
       res.writeHead(req.method === 'DELETE' ? 204 : 200, { ETag: '"stub"' })
       res.end()
     })
@@ -57,6 +70,12 @@ export async function startS3Stub(bucket = 'bucket'): Promise<S3Stub> {
       requests.filter(
         (r) => r.method === 'PUT' && typeof r.headers['x-amz-copy-source'] !== 'string',
       ),
+    get failCopies() {
+      return stub.failCopies
+    },
+    set failCopies(v: boolean) {
+      stub.failCopies = v
+    },
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
   }
 }
