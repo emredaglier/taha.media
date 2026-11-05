@@ -10,21 +10,21 @@ describe('storageOptionsFromEnv', () => {
   it('means R2 when the S3 variables and the media origin are set', () => {
     expect(
       storageOptionsFromEnv({
-        MEDIA_ORIGIN: 'https://media.taha.media',
+        MEDIA_ORIGIN: 'https://cdn.taha.media',
         S3_ENDPOINT: 'https://acct.r2.cloudflarestorage.com',
         S3_BUCKET: 'taha-media',
         S3_ACCESS_KEY_ID: 'k',
         S3_SECRET_ACCESS_KEY: 's',
       }),
     ).toMatchObject({
-      mediaOrigin: 'https://media.taha.media',
+      mediaOrigin: 'https://cdn.taha.media',
       s3: { bucket: 'taha-media', region: 'auto', forcePathStyle: false },
     })
   })
 
   it('lets web build URLs from the media origin alone', () => {
-    expect(storageOptionsFromEnv({ MEDIA_ORIGIN: 'https://media.taha.media' })).toEqual({
-      mediaOrigin: 'https://media.taha.media',
+    expect(storageOptionsFromEnv({ MEDIA_ORIGIN: 'https://cdn.taha.media' })).toEqual({
+      mediaOrigin: 'https://cdn.taha.media',
     })
   })
 
