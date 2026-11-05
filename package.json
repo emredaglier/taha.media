@@ -11,7 +11,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "build": "pnpm -r build",
-    "dev": "pnpm --filter @taha/web dev"
+    "dev": "pnpm --filter @taha/web dev",
+    "seed": "pnpm --filter @taha/cms seed",
+    "seed:production": "pnpm --filter @taha/cms seed:production",
+    "user:reset-password": "pnpm --filter @taha/cms user:reset-password"
   },
   "devDependencies": {
     "@types/node": "24.19.1",
