@@ -43,6 +43,11 @@ the public instance. Every preview response carries `X-Robots-Tag: noindex, nofo
 
 ## CI
 
-Pull requests and main run `pnpm check`. A PR that changes only `docs/` starts no CI run, so it
-needs no check to merge: leave the `check` job out of the required checks for such PRs (GitHub
-can't waive a required check in code).
+Pull requests and main run `pnpm check` (job `check`) and, beside it, build the arm64 images and
+run the release-gate smoke against them (job `build`). On main the smoke-tested images go to GHCR,
+their static files to R2, and the release is deployed with automatic rollback
+([`infra/README.md`, "CI and deploy"](infra/README.md#ci-and-deploy)). **Until the frontend serves
+real pages, `build` fails on the smoke gate and main is not deployable; that is intended.**
+
+A PR that changes only `docs/` starts no CI run, so it needs no check to merge: leave the `check`
+job out of the required checks for such PRs (GitHub can't waive a required check in code).

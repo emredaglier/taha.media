@@ -14,9 +14,12 @@
 // Needs Docker, and Chromium for Playwright once: `pnpm exec playwright install chromium`.
 // Environment:
 //   SMOKE_WEB_IMAGE     use this already built image instead of building one. Then also set
-//                       SMOKE_ASSET_PREFIX to the prefix it was built with (required).
+//                       SMOKE_ASSET_PREFIX and SMOKE_DEPLOYMENT_ID to what it was built with
+//                       (both required; infra/ci.sh smoke sets them).
 //   SMOKE_ASSET_PREFIX  CDN prefix to build with (default https://cdn.taha.media/releases/smoke).
 //                       Its /_next/ requests are answered by the container inside the browser.
+//   SMOKE_DEPLOYMENT_ID deployment id to build with (default smoke). The spec checks that every
+//                       page and asset carries exactly this id (a stale tab's reload depends on it).
 //   SMOKE_PLATFORM      docker build platform (default: native; CI builds linux/arm64 natively)
 //   SMOKE_KEEP=1        keep the temp dir, containers and network for debugging
 //   SMOKE_OUTPUT_DIR    where traces, screenshots and the HTML report go (smoke/.output)
@@ -31,13 +34,14 @@ import { readManifest } from './manifest.ts'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const env = process.env
 const prebuilt = env.SMOKE_WEB_IMAGE
-if (prebuilt && !env.SMOKE_ASSET_PREFIX) {
+if (prebuilt && (!env.SMOKE_ASSET_PREFIX || !env.SMOKE_DEPLOYMENT_ID)) {
   console.error(
-    '[smoke] SMOKE_WEB_IMAGE needs SMOKE_ASSET_PREFIX: the prefix the image was built with.',
+    '[smoke] SMOKE_WEB_IMAGE needs SMOKE_ASSET_PREFIX and SMOKE_DEPLOYMENT_ID: what the image was built with.',
   )
   process.exit(1)
 }
 const assetPrefix = env.SMOKE_ASSET_PREFIX ?? 'https://cdn.taha.media/releases/smoke'
+const deploymentId = env.SMOKE_DEPLOYMENT_ID ?? 'smoke'
 const image = prebuilt ?? 'taha-web:smoke'
 const id = `taha-smoke-${process.pid}`
 const network = id
@@ -129,9 +133,9 @@ try {
       'web',
       '--build-arg',
       `ASSET_PREFIX=${assetPrefix}`,
-      // Production builds always carry both (#17); the spec checks `?dpl=`.
+      // Production builds always carry both (infra/assets.sh build-args); the spec checks the id.
       '--build-arg',
-      'DEPLOYMENT_ID=smoke',
+      `DEPLOYMENT_ID=${deploymentId}`,
       ...(env.SMOKE_PLATFORM ? ['--platform', env.SMOKE_PLATFORM] : []),
       '-t',
       image,
@@ -230,6 +234,7 @@ try {
           SMOKE_PREVIEW_URL: previewUrl,
           SMOKE_REVALIDATE_SECRET: SECRETS.REVALIDATE_SECRET,
           SMOKE_ASSET_PREFIX: assetPrefix,
+          SMOKE_DEPLOYMENT_ID: deploymentId,
           SMOKE_MEDIA_DIR: dataDir,
           SMOKE_MANIFEST: manifestPath,
           SMOKE_OUTPUT_DIR: outputDir,

@@ -34,6 +34,7 @@ const webUrl = env('SMOKE_WEB_URL')
 const previewUrl = env('SMOKE_PREVIEW_URL')
 const revalidateSecret = env('SMOKE_REVALIDATE_SECRET')
 const assetPrefix = env('SMOKE_ASSET_PREFIX')
+const deploymentId = env('SMOKE_DEPLOYMENT_ID')
 const manifest = readManifest(env('SMOKE_MANIFEST'))
 
 /** Text as React writes it into server HTML. */
@@ -308,7 +309,24 @@ test.describe('routes and headers', () => {
     expect(urls.length, 'no /_next/static asset found on Home').toBeGreaterThan(3)
     for (const url of urls) {
       expect(url.startsWith(`${assetPrefix}/_next/static/`), url).toBe(true)
-      expect(url, url).toContain('?dpl=')
+      expect(url, url).toMatch(new RegExp(`[?&]dpl=${deploymentId}(&|$)`))
+    }
+  })
+
+  // ADR-0005: a tab opened before a deploy keeps its old chunks (release-prefixed on the CDN, kept
+  // 30 days) and, on its next client navigation, compares its deployment id with the one the
+  // server answers in `x-nextjs-deployment-id`; when they differ, Next loads the page in full
+  // instead of mixing builds. Both ends must carry this release's id for that to happen.
+  test('a stale tab across a deploy reloads cleanly: pages and navigations carry the deployment id', async ({
+    request,
+  }) => {
+    for (const route of ['/', `/isler/${manifest.works[0]?.slug}`]) {
+      const html = await (await request.get(route)).text()
+      expect(html, route).toMatch(new RegExp(`<html[^>]* data-dpl-id="${deploymentId}"`))
+      // A client navigation (an RSC request) is told which deployment answered it.
+      const rsc = await request.get(route, { headers: { RSC: '1' } })
+      expect(rsc.status(), route).toBe(200)
+      expect(rsc.headers()['x-nextjs-deployment-id'], route).toBe(deploymentId)
     }
   })
 })

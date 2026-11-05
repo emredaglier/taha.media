@@ -1,5 +1,19 @@
-# CI skeleton: lint, typecheck, test and build on every pull request and on main (the same steps as
-# `pnpm check`). Image build, smoke test and deploy jobs arrive with the infra tickets.
+# CI and delivery (ADR-0010, #17). This file only orchestrates; the delivery steps are commands of
+# infra/ci.sh. Runbook, secrets and variables: infra/README.md, "CI and deploy".
+#
+# Shape: `check` (workflow lint, pnpm lint, typecheck, test, build) runs next to `build` (arm64
+# images on the ARM runner, then the release-gate smoke against those images on the same runner).
+# Pull requests stop there. On main, `build` publishes the smoke-tested images' <sha> tags to GHCR
+# and hands their digests on; `upload` puts the release's /_next/static on R2 (cdn.taha.media),
+# `push` moves the `main` tags, and `deploy` joins the tailnet and runs infra/deploy.sh. Nothing is
+# published, uploaded, tagged `main` or deployed unless the smoke gate passed, and nothing is
+# uploaded or deployed unless `check` passed too.
+#
+# The smoke gate is never skipped and has no opt-out. Until the frontend serves real pages it
+# fails, so `build` is red and main is undeployable by design (infra/README.md).
+#
+# Images never travel between jobs as an artifact (GitHub Free's storage quota): only by digest,
+# through the registry.
 name: ci
 
 # A change only under docs/ or .scratch/ starts no run. GitHub cannot waive a *required* check from
@@ -41,7 +55,178 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: infra/ci.sh lint-workflows
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+
+  build:
+    # Native arm64 (ADR-0010). If this runner is not available on the plan, see infra/README.md,
+    # "QEMU fallback".
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      web: ${{ steps.publish.outputs.web }}
+      cms: ${{ steps.publish.outputs.cms }}
+      migrate: ${{ steps.publish.outputs.migrate }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v4
+      - uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/buildx-cache
+          key: buildx-arm64-${{ github.sha }}
+          restore-keys: buildx-arm64-
+      - name: Build web, cms and migrate for linux/arm64
+        env:
+          CI_BUILD_CACHE_DIR: ${{ runner.temp }}/buildx-cache
+        run: infra/ci.sh build "$GITHUB_SHA"
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # The browser download is cached; the system libraries are not part of ~/.cache, so they are
+      # installed on a hit too. Each install has its own timeout: a hung apt mirror fails in
+      # minutes and can be re-run, instead of eating the job's 45.
+      - uses: actions/cache@v6
+        id: playwright
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-chromium-${{ hashFiles('pnpm-lock.yaml') }}
+      - if: steps.playwright.outputs.cache-hit != 'true'
+        timeout-minutes: 10
+        run: pnpm exec playwright install --with-deps chromium
+      - if: steps.playwright.outputs.cache-hit == 'true'
+        timeout-minutes: 5
+        run: pnpm exec playwright install-deps chromium
+      - name: Release-gate smoke against the built web image
+        run: infra/ci.sh smoke "$GITHUB_SHA"
+      - name: Publish the <sha> tags to GHCR
+        id: publish
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: infra/ci.sh publish "$GITHUB_SHA"
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        # A report, not a result: if it can't be stored (the storage quota), the run still fails
+        # on the smoke test itself, not on this step.
+        continue-on-error: true
+        with:
+          name: smoke-output
+          path: smoke/.output
+          include-hidden-files: true
+          retention-days: 2
+          if-no-files-found: ignore
+
+  # Everything below runs on pushes to main only, after the smoke gate.
+
+  upload:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [check, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read
+    env:
+      ASSETS_BUCKET: ${{ vars.ASSETS_BUCKET }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ASSETS_WRITE_KEY_ID: ${{ secrets.R2_ASSETS_WRITE_KEY_ID }}
+      R2_ASSETS_WRITE_SECRET: ${{ secrets.R2_ASSETS_WRITE_SECRET }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check secrets
+        id: gate
+        run: infra/ci.sh gate upload
+      - uses: pnpm/action-setup@v6
+        if: steps.gate.outputs.ready == 'true'
+      - uses: actions/setup-node@v5
+        if: steps.gate.outputs.ready == 'true'
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install the upload dependencies (root only)
+        if: steps.gate.outputs.ready == 'true'
+        run: pnpm install --frozen-lockfile --filter . --ignore-scripts
+      - name: Upload the static files of the published web image to R2
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WEB_IMAGE: ${{ needs.build.outputs.web }}
+        run: infra/ci.sh upload "$GITHUB_SHA"
+
+  push:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [build, upload]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v4
+      - name: Move the main tags to the published digests
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WEB_IMAGE: ${{ needs.build.outputs.web }}
+          CMS_IMAGE: ${{ needs.build.outputs.cms }}
+          MIGRATE_IMAGE: ${{ needs.build.outputs.migrate }}
+        run: infra/ci.sh push "$GITHUB_SHA"
+
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [push, upload]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    # One deploy at a time. A running deploy is never cancelled; a newer one waits.
+    concurrency:
+      group: deploy
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: read
+    env:
+      GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      ASSETS_BUCKET: ${{ vars.ASSETS_BUCKET }}
+      DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      DEPLOY_HOST_KEY: ${{ secrets.DEPLOY_HOST_KEY }}
+      TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+      TS_OAUTH_SECRET: ${{ secrets.TS_OAUTH_SECRET }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ASSETS_WRITE_KEY_ID: ${{ secrets.R2_ASSETS_WRITE_KEY_ID }}
+      R2_ASSETS_WRITE_SECRET: ${{ secrets.R2_ASSETS_WRITE_SECRET }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check secrets
+        id: gate
+        run: infra/ci.sh gate deploy
+      - uses: pnpm/action-setup@v6
+        if: steps.gate.outputs.ready == 'true'
+      - uses: actions/setup-node@v5
+        if: steps.gate.outputs.ready == 'true'
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install the prune dependencies (root only)
+        if: steps.gate.outputs.ready == 'true'
+        run: pnpm install --frozen-lockfile --filter . --ignore-scripts
+      - name: Join the tailnet
+        if: steps.gate.outputs.ready == 'true'
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+      - name: Deploy (red on failure, after the automatic rollback and alert)
+        if: steps.gate.outputs.ready == 'true'
+        run: infra/ci.sh deploy "$GITHUB_SHA"
