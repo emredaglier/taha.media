@@ -8,6 +8,8 @@ import {
 import { editor, publishedOrEditor } from '../access'
 import { DISCIPLINE_LABELS, DISCIPLINES } from '../disciplines'
 import { videoField } from '../video-field'
+import { restrictedRichText } from '../rich-text'
+import { seoField } from '../seo'
 import { cleanSlug, recordPreviousSlugs, slugify } from '../slugs'
 
 export const NO_DISCIPLINE_MESSAGE = 'En az bir disiplin seçin.'
@@ -102,6 +104,36 @@ export const Works: CollectionConfig = {
       required: true,
     },
     videoField({ name: 'previewLoop', label: 'Önizleme döngüsü', use: 'previewLoop' }),
+    { name: 'client', label: 'Müşteri', type: 'text', localized: true },
+    { name: 'role', label: 'Görev', type: 'text', localized: true },
+    {
+      // Array rows keep the order the Editor dragged them into.
+      name: 'credits',
+      label: 'Jenerik',
+      type: 'array',
+      labels: { singular: 'Kişi', plural: 'Kişiler' },
+      fields: [
+        { name: 'name', label: 'Ad', type: 'text', required: true },
+        { name: 'role', label: 'Görev', type: 'text', localized: true },
+      ],
+    },
+    {
+      name: 'description',
+      label: 'Açıklama',
+      type: 'richText',
+      localized: true,
+      editor: restrictedRichText(),
+    },
+    {
+      name: 'stills',
+      label: 'Kareler',
+      type: 'array',
+      labels: { singular: 'Kare', plural: 'Kareler' },
+      fields: [
+        { name: 'image', label: 'Görsel', type: 'upload', relationTo: 'images', required: true },
+      ],
+    },
+    seoField(),
   ],
   hooks: { beforeValidate: [cleanSlug, requireDiscipline], beforeChange: [recordPreviousSlugs] },
   versions: { drafts: true, maxPerDoc: 20 },

@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { lexicalEditor } from '@payloadcms/richtext-lexical'
 import { en } from '@payloadcms/translations/languages/en'
 import { tr } from '@payloadcms/translations/languages/tr'
 import { buildConfig, type PayloadEmailAdapter, type SanitizedConfig } from 'payload'
@@ -80,6 +81,8 @@ export function buildSiteConfig(options: SiteConfigOptions): Promise<SanitizedCo
     },
     collections: [Users, Images, Videos, Works],
     sharp,
+    // Default editor; fields that take rich text set their own restricted one (rich-text.ts).
+    editor: lexicalEditor(),
     // The admin speaks Turkish; English stays selectable for the developer.
     i18n: { fallbackLanguage: 'tr', supportedLanguages: { tr, en } },
     localization: {

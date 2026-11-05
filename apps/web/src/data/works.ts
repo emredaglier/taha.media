@@ -1,5 +1,7 @@
 import {
   DISCIPLINES,
+  resolveSeo,
+  richTextToPlainText,
   toImage,
   toVideo,
   type Discipline,
@@ -7,6 +9,7 @@ import {
   type ImageRead,
   type VideoDoc,
   type VideoRead,
+  type Seo,
   type WorkDoc,
 } from '@taha/cms-config'
 
@@ -25,6 +28,19 @@ export type Work = {
   previewLoop: VideoRead | null
   featured: boolean
   featuredOrder: number | null
+  client: string | null
+  role: string | null
+  /** In the order the Editor set. */
+  credits: { name: string; role: string | null }[]
+  /**
+   * Rich text (paragraphs, bold, italic, links) as a Lexical editor state, or null when empty.
+   * The frontend renders it.
+   */
+  description: NonNullable<WorkDoc['description']> | null
+  /** Optional stills, in order, with a srcset each. */
+  stills: ImageRead[]
+  /** Overrides when set, otherwise the title, the start of the description and the cover. */
+  seo: Seo<ImageRead>
 }
 
 /**
@@ -46,21 +62,44 @@ function toCover(cover: WorkDoc['cover']): ImageRead {
   return toImage(cover as ImageDoc)
 }
 
+/** Populated Images only: an id (not populated) cannot be rendered, so it is skipped. */
+const populated = (value: number | ImageDoc | null | undefined): ImageRead[] =>
+  typeof value === 'object' && value !== null ? [toImage(value)] : []
+
+/** The description counts as empty when it has no text at all (an editor state with one blank paragraph). */
+const hasText = (description: WorkDoc['description']): boolean =>
+  richTextToPlainText(description) !== ''
+
 function toPreviewLoop(video: WorkDoc['previewLoop']): VideoRead | null {
   return typeof video === 'object' && video !== null ? toVideo(video as VideoDoc) : null
 }
 
-const toWork = (doc: WorkDoc): Work => ({
-  cover: toCover(doc.cover),
-  previewLoop: toPreviewLoop(doc.previewLoop),
-  id: doc.id,
-  title: doc.title,
-  slug: doc.slug,
-  disciplines: doc.disciplines,
-  year: doc.year,
-  featured: doc.featured ?? false,
-  featuredOrder: doc.featuredOrder ?? null,
-})
+const toWork = (doc: WorkDoc): Work => {
+  const cover = toCover(doc.cover)
+  return {
+    cover,
+    previewLoop: toPreviewLoop(doc.previewLoop),
+    id: doc.id,
+    title: doc.title,
+    slug: doc.slug,
+    disciplines: doc.disciplines,
+    year: doc.year,
+    featured: doc.featured ?? false,
+    featuredOrder: doc.featuredOrder ?? null,
+    client: doc.client || null,
+    role: doc.role || null,
+    credits: (doc.credits ?? []).map(({ name, role }) => ({ name, role: role || null })),
+    description: doc.description && hasText(doc.description) ? doc.description : null,
+    stills: (doc.stills ?? []).flatMap(({ image }) => populated(image)),
+    seo: resolveSeo({
+      overrides: doc.seo,
+      title: doc.title,
+      description: doc.description,
+      fallbackImage: cover,
+      toImage,
+    }),
+  }
+}
 
 /**
  * The Works list order: Works with a drag position first, by position; the rest (no position
