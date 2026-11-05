@@ -37,6 +37,8 @@ const requireDiscipline: CollectionBeforeValidateHook = ({
 export const Works: CollectionConfig = {
   slug: 'works',
   labels: { singular: 'İş', plural: 'İşler' },
+  // Drag to reorder in the admin list; the public list follows this order.
+  orderable: true,
   access: {
     create: editor,
     update: editor,
@@ -68,6 +70,27 @@ export const Works: CollectionConfig = {
         readOnly: true,
         position: 'sidebar',
         description: 'Bu işin eski adresleri. Yeni adrese yönlendirilir. Otomatik doldurulur.',
+      },
+    },
+    {
+      name: 'featured',
+      label: 'Ana sayfada öne çıkar',
+      type: 'checkbox',
+      defaultValue: false,
+      index: true,
+    },
+    {
+      name: 'featuredOrder',
+      label: 'Ana sayfa sırası',
+      type: 'number',
+      min: 0,
+      admin: { condition: (data) => Boolean(data?.featured) },
+    },
+    {
+      name: 'featuredWarning',
+      type: 'ui',
+      admin: {
+        components: { Field: '@taha/cms-config/admin/featured-warning#FeaturedWarning' },
       },
     },
   ],
