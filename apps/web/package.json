@@ -10,11 +10,17 @@
     "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
+    "@payloadcms/db-sqlite": "3.90.2",
+    "@payloadcms/next": "3.90.2",
+    "@taha/cms-config": "workspace:*",
+    "libsql": "0.4.7",
     "next": "16.3.8",
+    "payload": "3.90.2",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },
   "devDependencies": {
+    "@libsql/client": "0.14.0",
     "@types/node": "24.19.1",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",

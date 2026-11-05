@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./disciplines": "./src/disciplines.ts",
+    "./testing": "./src/testing.ts"
   },
   "scripts": {
     "build": "tsc --noEmit",
@@ -13,5 +15,11 @@
   "devDependencies": {
     "@types/node": "24.19.1",
     "typescript": "5.9.3"
+  },
+  "dependencies": {
+    "@libsql/client": "0.14.0",
+    "@payloadcms/db-sqlite": "3.90.2",
+    "@payloadcms/translations": "3.90.2",
+    "payload": "3.90.2"
   }
 }
