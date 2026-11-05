@@ -103,6 +103,9 @@ export function buildSiteConfig(options: SiteConfigOptions): Promise<SanitizedCo
   return buildConfig({
     admin: {
       user: Users.slug,
+      components: {
+        afterLogin: ['@taha/cms-config/admin/hide-forgot-password#HideForgotPassword'],
+      },
       meta: { titleSuffix: '- taha.media' },
       ...(options.adminBaseDir ? { importMap: { baseDir: options.adminBaseDir } } : {}),
     },

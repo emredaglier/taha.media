@@ -23,6 +23,15 @@ export const Users: CollectionConfig = {
     defaultColumns: ['email', 'updatedAt'],
     useAsTitle: 'email',
   },
+  endpoints: [
+    {
+      // cms sends no email (ADR-0013), so a reset link can never be delivered. Refused before
+      // Payload's own handler, so it creates no token either.
+      path: '/forgot-password',
+      method: 'post',
+      handler: () => Response.json({ errors: [{ message: 'Not found.' }] }, { status: 404 }),
+    },
+  ],
   auth: {
     lockTime: 10 * 60 * 1000,
     maxLoginAttempts: 5,

@@ -10,6 +10,9 @@
     "generate:types": "DATABASE_PATH=${DATABASE_PATH:-./data/codegen.db} PAYLOAD_SECRET=${PAYLOAD_SECRET:-codegen-only-secret} payload generate:types",
     "generate:importmap": "DATABASE_PATH=${DATABASE_PATH:-./data/codegen.db} PAYLOAD_SECRET=${PAYLOAD_SECRET:-codegen-only-secret} payload generate:importmap",
     "migrate": "payload migrate",
+    "seed": "payload run scripts/seed.ts --",
+    "seed:production": "payload run scripts/seed-production.ts --",
+    "user:reset-password": "payload run scripts/reset-password.ts --",
     "migrate:create": "DATABASE_PATH=${DATABASE_PATH:-./data/codegen.db} PAYLOAD_SECRET=${PAYLOAD_SECRET:-codegen-only-secret} payload migrate:create",
     "typecheck": "next typegen && tsc --noEmit"
   },

@@ -8,7 +8,9 @@
     "./disciplines": "./src/disciplines.ts",
     "./tags": "./src/tags.ts",
     "./testing": "./src/testing.ts",
-    "./admin/featured-warning": "./src/admin/FeaturedWarning.tsx"
+    "./admin/featured-warning": "./src/admin/FeaturedWarning.tsx",
+    "./admin/hide-forgot-password": "./src/admin/HideForgotPassword.tsx",
+    "./seed": "./src/seed/index.ts"
   },
   "scripts": {
     "build": "tsc --noEmit",
