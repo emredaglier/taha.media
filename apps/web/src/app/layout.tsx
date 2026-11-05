@@ -1,6 +1,13 @@
+import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 
-export const metadata = { title: 'taha.media' }
+import { isPreviewInstance } from '../lib/preview'
+
+export const metadata: Metadata = {
+  title: 'taha.media',
+  // The preview instance (PREVIEW=1) is never indexed; `proxy.ts` also sends X-Robots-Tag.
+  ...(isPreviewInstance() ? { robots: { index: false, follow: false } } : {}),
+}
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (

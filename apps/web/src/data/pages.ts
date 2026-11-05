@@ -17,7 +17,7 @@ import {
 import { pageTag } from '@taha/cms-config/tags'
 
 import { getWebPayload } from '../lib/payload'
-import { cachedRead } from './cache'
+import { cachedRead, contentVersions } from './cache'
 
 /** Rich text as a Lexical editor state; the frontend renders it. */
 type RichText = NonNullable<AboutDoc['bio']>
@@ -61,13 +61,6 @@ export type Privacy = {
   seo: Seo<ImageRead>
 }
 
-/**
- * Published versions only, with access rules applied (the Local API skips them by default; with no
- * user, the read rule only matches published documents). `draft: false` reads the published
- * version even when a newer draft exists.
- */
-const PUBLISHED = { draft: false, overrideAccess: false, depth: 2 } as const
-
 const image = (value: unknown): ImageRead | null =>
   typeof value === 'object' && value !== null ? toImage(value as ImageDoc) : null
 
@@ -81,14 +74,17 @@ const richText = <T>(value: T | null | undefined): T | null =>
 
 /**
  * A global that was never published reads as not found: the Local API answers with an empty
- * document, so a missing `_status` means nothing is published yet. Cached under the page's own
- * tag, which `cms` sends when the page is published or unpublished.
+ * document, so a missing `_status` means nothing is published yet. On the preview instance the
+ * latest draft counts, so only a page that was never saved is not found. Cached under the page's
+ * own tag, which `cms` sends when the page is published or unpublished.
  */
 function readGlobal<T extends 'site' | 'about' | 'privacy'>(slug: T) {
   return cachedRead(['page', slug], [pageTag(slug)], async () => {
     const payload = await getWebPayload()
-    const doc = await payload.findGlobal({ slug, ...PUBLISHED })
-    return doc._status === 'published' ? doc : null
+    const versions = contentVersions()
+    const doc = await payload.findGlobal({ slug, ...versions, depth: 2 })
+    const visible = versions.draft ? doc._status != null : doc._status === 'published'
+    return visible ? doc : null
   })
 }
 

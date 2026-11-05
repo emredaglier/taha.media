@@ -1,7 +1,20 @@
 import { unstable_cache } from 'next/cache'
 
-/** True in the preview container (ADR-0001), the same image as `web` started with `PREVIEW=1`. */
-export const isPreviewInstance = (): boolean => process.env.PREVIEW === '1'
+import { isPreviewInstance } from '../lib/preview'
+
+/**
+ * Which versions every read sees. The public instance reads published versions only, with the
+ * access rules applied (the Local API skips them by default; with no user, the read rules only
+ * match published documents), and `draft: false` reads the published version even when a newer
+ * draft exists. The preview instance reads the latest version of everything, drafts and
+ * never-published documents included; with no user, that needs the access rules bypassed.
+ *
+ * Decided by the instance alone (`PREVIEW=1`, read once at startup), never by a request.
+ */
+export const contentVersions = () =>
+  isPreviewInstance()
+    ? ({ draft: true, overrideAccess: true } as const)
+    : ({ draft: false, overrideAccess: false } as const)
 
 /**
  * Runs a data-module read through Next's data cache, tagged with the tags `cms` sends when that

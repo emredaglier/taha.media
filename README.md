@@ -20,6 +20,16 @@ file's first line to `import { type MigrateUpArgs, type MigrateDownArgs, sql } .
 types only, and loading the migration fails without `type`), then `generate:types` (and `generate:importmap` when admin
 components change).
 
+## Preview instance
+
+The same `web` build runs as the draft preview when started with `PREVIEW=1` (ADR-0001, Tailscale
+only). It is read once at startup, never from a request. With it, every data-module read returns
+the latest drafts, uncached; without it, drafts can't be read. The admin's preview button (cms
+`PREVIEW_URL`) opens `<PREVIEW_URL>/preview?path=/isler/<slug>` (or `/`, `/hakkimda`, `/gizlilik`):
+that route turns on Next's draft mode so prerendered pages render per request, and answers 404 on
+the public instance. Every preview response carries `X-Robots-Tag: noindex, nofollow`
+(`apps/web/src/proxy.ts`) and the root layout adds a robots `noindex` meta tag.
+
 ## Layout
 
 | Path                  | Role                                                               |

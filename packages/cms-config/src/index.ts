@@ -39,6 +39,7 @@ export {
   DEFAULT_REVALIDATE_TIMEOUT_MS,
 } from './revalidation'
 export type { HttpRevalidationOptions, RevalidationTransport } from './revalidation'
+export { PAGE_PATHS, previewLink, workPath } from './preview'
 export {
   HOME_TAG,
   MAX_TAGS_PER_REQUEST,

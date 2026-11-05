@@ -17,9 +17,13 @@ import {
 import { HOME_TAG, WORKS_TAG, workTag } from '@taha/cms-config/tags'
 
 import { getWebPayload } from '../lib/payload'
-import { cachedRead } from './cache'
+import { isPreviewInstance } from '../lib/preview'
+import { cachedRead, contentVersions } from './cache'
 
-/** A published Work as the site renders it (GLOSSARY: Work). */
+/**
+ * A published Work as the site renders it (GLOSSARY: Work); on the preview instance, its latest
+ * draft.
+ */
 export type Work = {
   id: number
   title: string
@@ -50,17 +54,16 @@ export type Work = {
 }
 
 /**
- * What every public Works read shares: published versions only, with the access rules applied
- * (the Local API skips them by default; with no user, the Works read rule only matches published
- * documents). `draft: false` reads the published version even when a newer draft exists.
+ * What every Works read shares: published versions on the public instance, the latest drafts on
+ * the preview instance (`contentVersions`).
  */
-const PUBLISHED_WORKS = {
-  collection: 'works',
-  draft: false,
-  overrideAccess: false,
-  // Depth 2 populates the cover Image and the preview loop with its poster.
-  depth: 2,
-} as const
+const worksRead = () =>
+  ({
+    collection: 'works',
+    ...contentVersions(),
+    // Depth 2 populates the cover Image and the preview loop with its poster.
+    depth: 2,
+  }) as const
 
 function toCover(cover: WorkDoc['cover']): ImageRead {
   // A published Work always has a populated cover (required on publish, populated by depth 1).
@@ -109,6 +112,22 @@ const toWork = (doc: WorkDoc): Work => {
 }
 
 /**
+ * A draft may still lack what publishing requires (a cover, complete main media), so the preview
+ * instance leaves such a Work out instead of failing the whole page. A published Work always has
+ * them, so on the public instance a missing one is a real error and still throws.
+ */
+function toWorks(docs: WorkDoc[]): Work[] {
+  if (!isPreviewInstance()) return docs.map(toWork)
+  return docs.flatMap((doc) => {
+    try {
+      return [toWork(doc)]
+    } catch {
+      return []
+    }
+  })
+}
+
+/**
  * The Works list order: Works with a drag position first, by position; the rest (no position
  * yet) after them, year descending, then creation date descending.
  */
@@ -134,12 +153,12 @@ export async function getWorks(options: { discipline?: Discipline } = {}): Promi
   return cachedRead(['works', discipline ?? 'all'], [WORKS_TAG], async () => {
     const payload = await getWebPayload()
     const { docs } = await payload.find({
-      ...PUBLISHED_WORKS,
+      ...worksRead(),
       ...(discipline ? { where: { disciplines: { contains: discipline } } } : {}),
       limit: 0,
       pagination: false,
     })
-    return docs.sort(listOrder).map(toWork)
+    return toWorks(docs.sort(listOrder))
   })
 }
 
@@ -148,16 +167,15 @@ export function getFeaturedWorks(): Promise<Work[]> {
   return cachedRead(['featured-works'], [HOME_TAG], async () => {
     const payload = await getWebPayload()
     const { docs } = await payload.find({
-      ...PUBLISHED_WORKS,
+      ...worksRead(),
       where: { featured: { equals: true } },
       limit: 0,
       pagination: false,
     })
-    return docs
-      .sort(
-        (a, b) => (a.featuredOrder ?? Infinity) - (b.featuredOrder ?? Infinity) || listOrder(a, b),
-      )
-      .map(toWork)
+    const sorted = docs.sort(
+      (a, b) => (a.featuredOrder ?? Infinity) - (b.featuredOrder ?? Infinity) || listOrder(a, b),
+    )
+    return toWorks(sorted)
   })
 }
 
@@ -174,6 +192,7 @@ type SlugLookup = { kind: 'work'; id: number } | Exclude<WorkBySlug, { kind: 'wo
 /**
  * Resolves a slug from the URL. A current slug wins over an old one; an old slug redirects to the
  * Work's current slug only while that Work is published. A draft or unknown slug is not found.
+ * On the preview instance, drafts count as published (their latest version).
  *
  * Two cached steps: the slug lookup sits under the Works list tag (every Work change touches it,
  * so a rename, publish or unpublish re-resolves it), and the Work itself under its own id tag.
@@ -189,7 +208,7 @@ function lookUpSlug(slug: string): Promise<SlugLookup> {
   return cachedRead(['work-slug', slug], [WORKS_TAG], async () => {
     const payload = await getWebPayload()
     const current = await payload.find({
-      ...PUBLISHED_WORKS,
+      ...worksRead(),
       where: { slug: { equals: slug } },
       depth: 0,
       select: { slug: true },
@@ -199,7 +218,7 @@ function lookUpSlug(slug: string): Promise<SlugLookup> {
     if (current.docs[0]) return { kind: 'work', id: current.docs[0].id }
 
     const renamed = await payload.find({
-      ...PUBLISHED_WORKS,
+      ...worksRead(),
       where: { previousSlugs: { equals: slug } },
       depth: 0,
       select: { slug: true },
@@ -211,26 +230,29 @@ function lookUpSlug(slug: string): Promise<SlugLookup> {
   })
 }
 
-/** One published Work by id, or null; tagged with the Work's own tag. */
+/** One published Work (preview: latest draft) by id, or null; tagged with the Work's own tag. */
 function getPublishedWork(id: number): Promise<Work | null> {
   return cachedRead(['work', String(id)], [workTag(id)], async () => {
     const payload = await getWebPayload()
     const { docs } = await payload.find({
-      ...PUBLISHED_WORKS,
+      ...worksRead(),
       where: { id: { equals: id } },
       limit: 1,
       pagination: false,
     })
-    return docs[0] ? toWork(docs[0]) : null
+    return toWorks(docs)[0] ?? null
   })
 }
 
-/** The current slug of every published Work, for static params. */
+/**
+ * The current slug of every published Work, for static params. The preview instance (which never
+ * builds) lists draft slugs too.
+ */
 export function getPublishedWorkSlugs(): Promise<string[]> {
   return cachedRead(['work-slugs'], [WORKS_TAG], async () => {
     const payload = await getWebPayload()
     const { docs } = await payload.find({
-      ...PUBLISHED_WORKS,
+      ...worksRead(),
       select: { slug: true },
       limit: 0,
       pagination: false,

@@ -22,6 +22,7 @@ import { About } from './globals/About'
 import { Privacy } from './globals/Privacy'
 import { Site } from './globals/Site'
 import type { PageSlug } from './tags'
+import { parsePreviewUrl, withPagePreview, withWorkPreview } from './preview'
 import { buildDatabase, DEFAULT_BUSY_TIMEOUT_MS } from './db'
 import {
   httpRevalidationTransport,
@@ -73,6 +74,12 @@ export type SiteConfigOptions = {
    * writer uses it. Omit it and nothing is sent (local dev without `web`, most tests).
    */
   revalidate?: RevalidationTransport
+  /**
+   * Origin of the preview instance (`web` with `PREVIEW=1`, Tailscale only, ADR-0001). With it,
+   * the admin shows a preview button on Works and each single-entry page; without it, none.
+   * Only the admin uses it.
+   */
+  previewUrl?: string
 }
 
 /** Nothing sends mail (ADR-0013). Declared so Payload doesn't warn at boot; it only logs. */
@@ -95,10 +102,13 @@ export function buildSiteConfig(options: SiteConfigOptions): Promise<SanitizedCo
   }
 
   const revalidate = writer ? options.revalidate : undefined
-  const works = revalidate ? withWorkRevalidation(Works, revalidate) : Works
-  const globals = [Site, About, Privacy].map((global) =>
-    revalidate ? withPageRevalidation(global, revalidate) : global,
-  )
+  const previewUrl = writer ? options.previewUrl : undefined
+  let works = revalidate ? withWorkRevalidation(Works, revalidate) : Works
+  if (previewUrl) works = withWorkPreview(works, previewUrl)
+  const globals = [Site, About, Privacy].map((global) => {
+    const revalidated = revalidate ? withPageRevalidation(global, revalidate) : global
+    return previewUrl ? withPagePreview(revalidated, previewUrl) : revalidated
+  })
 
   return buildConfig({
     admin: {
@@ -207,6 +217,7 @@ export function siteConfigOptionsFromEnv(
     )
   }
   const revalidate = role === 'cms' ? revalidationFromEnv(env, buildPhase) : undefined
+  const previewUrl = role === 'cms' && env.PREVIEW_URL?.trim()
   return {
     role,
     databasePath,
@@ -215,6 +226,7 @@ export function siteConfigOptionsFromEnv(
     origins,
     storage: storageOptionsFromEnv(env),
     ...(revalidate ? { revalidate } : {}),
+    ...(previewUrl ? { previewUrl: parsePreviewUrl(previewUrl) } : {}),
   }
 }
 
