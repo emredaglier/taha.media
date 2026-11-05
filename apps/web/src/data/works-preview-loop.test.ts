@@ -27,6 +27,7 @@ describe('a Work’s preview loop', () => {
           disciplines: ['motion'],
           year: 2026,
           cover: (await site.uploadImage(editor)).id,
+          mainMedia: { kind: 'image', image: (await site.uploadImage(editor)).id },
           ...(previewLoop ? { previewLoop } : {}),
           _status: 'published',
         },

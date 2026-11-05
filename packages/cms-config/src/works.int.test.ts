@@ -37,7 +37,7 @@ describe('an Editor', () => {
     const cover = await site.uploadImage(editor)
     const draft = await site.cms.create({
       collection: 'works',
-      data: { ...work, cover: cover.id },
+      data: { ...work, cover: cover.id, mainMedia: { kind: 'image', image: cover.id } },
       draft: true,
       user: editor,
       overrideAccess: false,

@@ -21,7 +21,13 @@ async function save(
 ) {
   const editor = await site.createEditor()
   const base = { collection: 'works', user: editor, overrideAccess: false } as const
-  const fields = { disciplines: ['kurgu' as const], year: 2025, cover: coverId, ...data }
+  const fields = {
+    disciplines: ['kurgu' as const],
+    year: 2025,
+    cover: coverId,
+    mainMedia: { kind: 'image' as const, image: coverId },
+    ...data,
+  }
   return status === 'draft'
     ? site.cms.create({ ...base, data: fields, draft: true })
     : site.cms.create({

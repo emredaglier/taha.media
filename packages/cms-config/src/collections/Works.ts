@@ -7,6 +7,7 @@ import {
 
 import { editor, publishedOrEditor } from '../access'
 import { DISCIPLINE_LABELS, DISCIPLINES } from '../disciplines'
+import { mainMediaField, mainMediaHook } from '../main-media'
 import { videoField } from '../video-field'
 import { restrictedRichText } from '../rich-text'
 import { seoField } from '../seo'
@@ -103,6 +104,7 @@ export const Works: CollectionConfig = {
       relationTo: 'images',
       required: true,
     },
+    mainMediaField(),
     videoField({ name: 'previewLoop', label: 'Önizleme döngüsü', use: 'previewLoop' }),
     { name: 'client', label: 'Müşteri', type: 'text', localized: true },
     { name: 'role', label: 'Görev', type: 'text', localized: true },
@@ -135,6 +137,9 @@ export const Works: CollectionConfig = {
     },
     seoField(),
   ],
-  hooks: { beforeValidate: [cleanSlug, requireDiscipline], beforeChange: [recordPreviousSlugs] },
+  hooks: {
+    beforeValidate: [cleanSlug, requireDiscipline, mainMediaHook],
+    beforeChange: [recordPreviousSlugs],
+  },
   versions: { drafts: true, maxPerDoc: 20 },
 }
