@@ -23,6 +23,7 @@
     "@libsql/client": "0.14.0",
     "@payloadcms/db-sqlite": "3.90.2",
     "@payloadcms/plugin-cloud-storage": "3.90.2",
+    "@payloadcms/richtext-lexical": "3.90.2",
     "@payloadcms/translations": "3.90.2",
     "payload": "3.90.2",
     "react": "19.3.0",

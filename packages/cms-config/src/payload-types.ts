@@ -232,6 +232,44 @@ export interface Work {
   featured?: boolean | null;
   featuredOrder?: number | null;
   cover: number | Image;
+  client?: string | null;
+  role?: string | null;
+  credits?:
+    | {
+        name: string;
+        role?: string | null;
+        id?: string | null;
+      }[]
+    | null;
+  description?: {
+    root: {
+      type: string;
+      children: {
+        type: any;
+        version: number;
+        [k: string]: unknown;
+      }[];
+      direction: ('ltr' | 'rtl') | null;
+      format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+      indent: number;
+      version: number;
+    };
+    [k: string]: unknown;
+  } | null;
+  stills?:
+    | {
+        image: number | Image;
+        id?: string | null;
+      }[]
+    | null;
+  /**
+   * İsteğe bağlı. Boş bırakılan alanlar otomatik doldurulur.
+   */
+  seo?: {
+    title?: string | null;
+    description?: string | null;
+    image?: (number | null) | Image;
+  };
   updatedAt: string;
   createdAt: string;
   _status?: ('draft' | 'published') | null;
@@ -425,6 +463,29 @@ export interface WorksSelect<T extends boolean = true> {
   featured?: T;
   featuredOrder?: T;
   cover?: T;
+  client?: T;
+  role?: T;
+  credits?:
+    | T
+    | {
+        name?: T;
+        role?: T;
+        id?: T;
+      };
+  description?: T;
+  stills?:
+    | T
+    | {
+        image?: T;
+        id?: T;
+      };
+  seo?:
+    | T
+    | {
+        title?: T;
+        description?: T;
+        image?: T;
+      };
   updatedAt?: T;
   createdAt?: T;
   _status?: T;
