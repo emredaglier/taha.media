@@ -1,0 +1,28 @@
+{
+  "name": "taha.media",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "lint": "eslint . && prettier --check .",
+    "lint:fix": "eslint . --fix && prettier --write .",
+    "format": "prettier --write .",
+    "typecheck": "tsc --noEmit && pnpm -r --parallel typecheck",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "pnpm -r build",
+    "dev": "pnpm --filter @taha/web dev"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.1",
+    "eslint": "9.39.5",
+    "eslint-config-next": "16.3.8",
+    "prettier": "3.9.9",
+    "typescript": "5.9.3",
+    "vitest": "5.0.3"
+  },
+  "engines": {
+    "node": ">=24.15.0 <25"
+  },
+  "packageManager": "pnpm@11.28.5+sha512.484563d30b4c2ad27cb48aa94ff2b302dbcebc8ff6bf28816c2589886e146ce7f76f354f3bc1a438e6f5e9768c302aa0a6f7add8232903cd4cf81426cbc14d9e"
+}

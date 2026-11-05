@@ -1,0 +1,47 @@
+# CI skeleton: lint, typecheck, test and build on every pull request and on main (the same steps as
+# `pnpm check`). Image build, smoke test and deploy jobs arrive with the infra tickets.
+name: ci
+
+# A change only under docs/ or .scratch/ starts no run. GitHub cannot waive a *required* check from
+# code, so a docs-only PR is merged with the check not required (see CODING_STANDARDS.md, "CI").
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**'
+      - '!docs/**'
+      - '!.scratch/**'
+  pull_request:
+    paths:
+      - '**'
+      - '!docs/**'
+      - '!.scratch/**'
+
+permissions:
+  contents: read
+
+# A newer push to a pull request replaces its running checks. On main nothing is cancelled midway.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CI: 'true'
+  NEXT_TELEMETRY_DISABLED: '1'
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build

@@ -1,6 +1,6 @@
 # taha.media
 
-Portfolio of Taha (video editor, motion designer, graphic designer). Terms: `GLOSSARY.md`. Decisions: `docs/adr/` (backend 0001–0099, frontend 0100+).
+Portfolio of Taha (video editor, motion designer, graphic designer). Terms: `GLOSSARY.md`. Decisions: `docs/adr/` (backend 0001–0099, frontend 0100+). Code and test conventions: `CODING_STANDARDS.md`.
 
 Never wipe the production database or R2 objects without confirming with the owner right before (ADR-0011).
 
