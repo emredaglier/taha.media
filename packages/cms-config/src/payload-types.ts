@@ -149,6 +149,7 @@ export interface User {
  */
 export interface Work {
   id: number;
+  _order?: string | null;
   title: string;
   disciplines: ('kurgu' | 'motion' | 'grafik')[];
   year: number;
@@ -157,6 +158,8 @@ export interface Work {
    */
   generateSlug?: boolean | null;
   slug: string;
+  featured?: boolean | null;
+  featuredOrder?: number | null;
   updatedAt: string;
   createdAt: string;
   _status?: ('draft' | 'published') | null;
@@ -263,11 +266,14 @@ export interface UsersSelect<T extends boolean = true> {
  * via the `definition` "works_select".
  */
 export interface WorksSelect<T extends boolean = true> {
+  _order?: T;
   title?: T;
   disciplines?: T;
   year?: T;
   generateSlug?: T;
   slug?: T;
+  featured?: T;
+  featuredOrder?: T;
   updatedAt?: T;
   createdAt?: T;
   _status?: T;
