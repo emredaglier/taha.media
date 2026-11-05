@@ -1,0 +1,10 @@
+{
+  "Rules": [
+    {
+      "ID": "expire-deleted-media-after-30-days",
+      "Status": "Enabled",
+      "Filter": { "Tag": { "Key": "deleted-at" } },
+      "Expiration": { "Days": 30 }
+    }
+  ]
+}

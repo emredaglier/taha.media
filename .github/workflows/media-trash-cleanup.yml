@@ -1,0 +1,52 @@
+# Removes media objects tagged `deleted-at` more than 30 days ago (ADR-0006). R2's lifecycle rules
+# cannot filter by tag, so this job is the cleanup rule there (infra/media-trash/lifecycle.json is
+# the same rule for storage that can). The key is the media bucket's own read/write key, not the
+# backup's: the backup bucket is never touched. Runbook: infra/README.md.
+name: media-trash-cleanup
+
+on:
+  schedule:
+    - cron: '41 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: media-trash-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      S3_BUCKET: taha-media
+      S3_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+      S3_ACCESS_KEY_ID: ${{ secrets.R2_MEDIA_WRITE_KEY_ID }}
+      S3_SECRET_ACCESS_KEY: ${{ secrets.R2_MEDIA_WRITE_SECRET }}
+    steps:
+      - name: Check secrets
+        id: gate
+        run: |
+          if [ -z "$S3_ACCESS_KEY_ID" ] || [ -z "$S3_SECRET_ACCESS_KEY" ]; then
+            echo "Media write secrets are not set yet (cutover); skipping."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v5
+        if: steps.gate.outputs.ready == 'true'
+      - uses: pnpm/action-setup@v6
+        if: steps.gate.outputs.ready == 'true'
+      - uses: actions/setup-node@v5
+        if: steps.gate.outputs.ready == 'true'
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --filter @taha/cms-config
+        if: steps.gate.outputs.ready == 'true'
+      - name: Delete expired trash
+        if: steps.gate.outputs.ready == 'true'
+        working-directory: packages/cms-config/src
+        run: node media-trash.ts

@@ -7,6 +7,8 @@ import { cloudStoragePlugin } from '@payloadcms/plugin-cloud-storage'
 import type { GeneratedAdapter } from '@payloadcms/plugin-cloud-storage/types'
 import type { Plugin } from 'payload'
 
+import { tagForTrash } from './media-trash'
+
 /** Object keys are unique per upload, so every object is immutable (ADR-0005). */
 export const IMMUTABLE_CACHE_CONTROL = 'public, max-age=31536000, immutable'
 
@@ -89,7 +91,8 @@ export function localVideosDir(databasePath: string): string {
  *   out of it.
  * - Without it (development): files go to the collection's local directory and Payload serves
  *   them from `/api/<collection>/file/<name>`.
- * - Deleting a record never destroys an object: that moves to the soft delete (ADR-0006).
+ * - Deleting a record never destroys an object: R2 objects are tagged for the 30-day cleanup
+ *   (`media-trash.ts`, ADR-0006), and local files stay (development).
  */
 export function imagesStorage(
   options: StorageOptions,
@@ -131,8 +134,11 @@ export function imagesStorage(
               }),
             )
           },
-          // Deleted media is kept on R2 for now; the 30-day trash is its own ticket (ADR-0006).
-          handleDelete: () => undefined,
+          // Deleted media is tagged, not destroyed; the cleanup removes it after 30 days (ADR-0006).
+          handleDelete: async ({ storageFilePath }) => {
+            if (!s3) throw new Error('Object storage is not configured (set the S3_* variables).')
+            await tagForTrash(getClient(s3), s3.bucket, storageFilePath)
+          },
           staticHandler: () => new Response('Not found', { status: 404 }),
         }
       : {

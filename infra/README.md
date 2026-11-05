@@ -32,3 +32,15 @@ Public port 22 is closed last, and only after a guard confirms the admin key is 
 ### Tests
 
 `infra/bootstrap.test.ts` runs the script against a fake system: `BOOTSTRAP_ROOT` redirects every written file into a temp dir and recording stubs replace `ufw`, `tailscale`, `systemctl` and the rest on `PATH`.
+
+## Media: soft delete, backup, restore (ADR-0006)
+
+Deleting an Image or Video in the `cms` admin removes the record and **tags** its R2 objects (the original and every generated size) with `deleted-at=<ISO time>`. Nothing is destroyed at that moment. A cleanup then removes objects whose tag is 30 days old. Code: `packages/cms-config/src/media-trash.ts`.
+
+- **Cleanup rule.** `.github/workflows/media-trash-cleanup.yml` runs `node media-trash.ts` nightly with the media bucket's key. Dry run by hand: `S3_ENDPOINT=... S3_BUCKET=taha-media S3_ACCESS_KEY_ID=... S3_SECRET_ACCESS_KEY=... node packages/cms-config/src/media-trash.ts --dry-run` (lists what it would delete). `infra/media-trash/lifecycle.json` is the same rule as an S3 lifecycle configuration, for storage that can filter by tag (`aws s3api put-bucket-lifecycle-configuration --bucket <bucket> --lifecycle-configuration file://infra/media-trash/lifecycle.json`). Check that your R2 account supports tags before relying on either.
+- **Backup.** `.github/workflows/media-backup.yml` runs `infra/media-backup/media-backup.sh` nightly: it copies only new keys from `taha-media` to `taha-backup` (`rclone copy --ignore-existing`), then checks every listed object is there. It never deletes, so a file the cleanup removed stays in `taha-backup`. The backup bucket's write key should have no delete permission. Secrets (set at cutover): `R2_ACCOUNT_ID`, `R2_MEDIA_READ_KEY_ID`, `R2_MEDIA_READ_SECRET`, `R2_BACKUP_WRITE_KEY_ID`, `R2_BACKUP_WRITE_SECRET`, `R2_MEDIA_WRITE_KEY_ID`, `R2_MEDIA_WRITE_SECRET`. Without them the jobs skip. Our own variables must never start with `RCLONE_` (rclone reads them as flags); only `RCLONE_CONFIG_<remote>_*` is intended.
+- **Restore a deleted file.** The record is gone for good, so putting the objects back changes nothing the site can show. Re-upload the original as a new record:
+  1. Find the original. Within 30 days it is still in `taha-media` (Cloudflare dashboard, R2, `taha-media`, with the `deleted-at` tag; names start with the original file name plus a random suffix, and the original is the one without a size suffix such as `-small`). After 30 days take it from `taha-backup`, same key.
+  2. Download it (dashboard, or `rclone copyto SRC:taha-media/<key> .` with a read key).
+  3. Upload it in the `cms` admin as a new Image (add the alt text again) or Video (use and poster again), then put it back in the Works that used it.
+- **Tests.** `packages/cms-config/src/media-trash.int.test.ts` (delete tags, never deletes), `media-trash.test.ts` (30-day rule) against the S3 stub; `infra/media-backup/media-backup.test.ts` against a fake rclone.

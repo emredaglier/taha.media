@@ -1,0 +1,72 @@
+# Nightly copy of new media from the media bucket to the backup bucket (ADR-0006).
+# Runs on GitHub, so the VPS does no work. The logic is infra/media-backup/media-backup.sh, which
+# only ever COPIES (its test fails if a delete-like command or flag appears). The backup key has no
+# delete permission in practice. Runbook: infra/README.md, "Media: soft delete, backup, restore".
+name: media-backup
+
+on:
+  schedule:
+    - cron: '17 1 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: media-backup
+  cancel-in-progress: false
+
+jobs:
+  copy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      SRC_BUCKET: taha-media
+      DST_BUCKET: taha-backup
+      RCLONE_CONFIG_SRC_TYPE: s3
+      RCLONE_CONFIG_SRC_PROVIDER: Cloudflare
+      RCLONE_CONFIG_SRC_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+      RCLONE_CONFIG_SRC_ACCESS_KEY_ID: ${{ secrets.R2_MEDIA_READ_KEY_ID }}
+      RCLONE_CONFIG_SRC_SECRET_ACCESS_KEY: ${{ secrets.R2_MEDIA_READ_SECRET }}
+      RCLONE_CONFIG_DST_TYPE: s3
+      RCLONE_CONFIG_DST_PROVIDER: Cloudflare
+      RCLONE_CONFIG_DST_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+      RCLONE_CONFIG_DST_ACCESS_KEY_ID: ${{ secrets.R2_BACKUP_WRITE_KEY_ID }}
+      RCLONE_CONFIG_DST_SECRET_ACCESS_KEY: ${{ secrets.R2_BACKUP_WRITE_SECRET }}
+    steps:
+      - name: Check secrets
+        id: gate
+        run: |
+          if [ -z "$RCLONE_CONFIG_SRC_ACCESS_KEY_ID" ] || [ -z "$RCLONE_CONFIG_SRC_SECRET_ACCESS_KEY" ] ||
+            [ -z "$RCLONE_CONFIG_DST_ACCESS_KEY_ID" ] || [ -z "$RCLONE_CONFIG_DST_SECRET_ACCESS_KEY" ]; then
+            echo "Backup secrets are not set yet (cutover); skipping."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v5
+        if: steps.gate.outputs.ready == 'true'
+
+      # A pinned release, not Ubuntu's rclone 1.60.1 (501s from R2 on daglier.com). The checksum is
+      # the release's SHA256SUMS entry. Not named RCLONE_*: rclone reads every RCLONE_* variable as
+      # a flag (RCLONE_VERSION = --version).
+      - name: Install rclone
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          PINNED_RCLONE_VERSION: v1.75.2
+          PINNED_RCLONE_SHA256: 349ac8fba6ff65d6247043f1750cdcb518ec5d500ef91463a10d37c0ccdf3702
+        run: |
+          name="rclone-${PINNED_RCLONE_VERSION}-linux-amd64"
+          curl -fsSLo "$RUNNER_TEMP/$name.zip" \
+            "https://github.com/rclone/rclone/releases/download/${PINNED_RCLONE_VERSION}/$name.zip"
+          echo "${PINNED_RCLONE_SHA256}  $RUNNER_TEMP/$name.zip" | sha256sum -c -
+          unzip -q -j "$RUNNER_TEMP/$name.zip" "$name/rclone" -d "$RUNNER_TEMP/bin"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/bin/rclone" version
+
+      - name: Copy new media and check the backup
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          WORK_DIR: ${{ runner.temp }}
+        run: infra/media-backup/media-backup.sh
