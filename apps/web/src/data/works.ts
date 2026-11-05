@@ -1,9 +1,12 @@
 import {
   DISCIPLINES,
   toImage,
+  toVideo,
   type Discipline,
   type ImageDoc,
   type ImageRead,
+  type VideoDoc,
+  type VideoRead,
   type WorkDoc,
 } from '@taha/cms-config'
 
@@ -18,6 +21,8 @@ export type Work = {
   year: number
   /** Required to publish, so every published Work has one. */
   cover: ImageRead
+  /** The optional silent loop cards play; null when the Work has none. */
+  previewLoop: VideoRead | null
   featured: boolean
   featuredOrder: number | null
 }
@@ -31,8 +36,8 @@ const PUBLISHED_WORKS = {
   collection: 'works',
   draft: false,
   overrideAccess: false,
-  // Depth 1 populates the cover Image.
-  depth: 1,
+  // Depth 2 populates the cover Image and the preview loop with its poster.
+  depth: 2,
 } as const
 
 function toCover(cover: WorkDoc['cover']): ImageRead {
@@ -41,8 +46,13 @@ function toCover(cover: WorkDoc['cover']): ImageRead {
   return toImage(cover as ImageDoc)
 }
 
+function toPreviewLoop(video: WorkDoc['previewLoop']): VideoRead | null {
+  return typeof video === 'object' && video !== null ? toVideo(video as VideoDoc) : null
+}
+
 const toWork = (doc: WorkDoc): Work => ({
   cover: toCover(doc.cover),
+  previewLoop: toPreviewLoop(doc.previewLoop),
   id: doc.id,
   title: doc.title,
   slug: doc.slug,

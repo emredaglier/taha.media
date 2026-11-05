@@ -69,6 +69,7 @@ export interface Config {
   collections: {
     users: User;
     images: Image;
+    videos: Video;
     works: Work;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
@@ -79,6 +80,7 @@ export interface Config {
   collectionsSelect: {
     users: UsersSelect<false> | UsersSelect<true>;
     images: ImagesSelect<false> | ImagesSelect<true>;
+    videos: VideosSelect<false> | VideosSelect<true>;
     works: WorksSelect<false> | WorksSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
@@ -212,6 +214,34 @@ export interface Image {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "videos".
+ */
+export interface Video {
+  id: number;
+  /**
+   * Önizleme döngüsü: en fazla 10 sn, 720p, sessiz, 4 MB. Showreel döngüsü: en fazla 30 sn, 1080p, sessiz, 15 MB. Ana video: en fazla 3 dk, 1080p, sesli olabilir, 60 MB.
+   */
+  use: 'previewLoop' | 'showreel' | 'main';
+  poster: number | Image;
+  /**
+   * Dosyadan otomatik okunur.
+   */
+  duration?: number | null;
+  codec?: string | null;
+  hasAudio?: boolean | null;
+  _objectKey?: string | null;
+  updatedAt: string;
+  createdAt: string;
+  url?: string | null;
+  thumbnailURL?: string | null;
+  filename?: string | null;
+  mimeType?: string | null;
+  filesize?: number | null;
+  width?: number | null;
+  height?: number | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "works".
  */
 export interface Work {
@@ -232,6 +262,7 @@ export interface Work {
   featured?: boolean | null;
   featuredOrder?: number | null;
   cover: number | Image;
+  previewLoop?: (number | null) | Video;
   updatedAt: string;
   createdAt: string;
   _status?: ('draft' | 'published') | null;
@@ -267,6 +298,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'images';
         value: number | Image;
+      } | null)
+    | ({
+        relationTo: 'videos';
+        value: number | Video;
       } | null)
     | ({
         relationTo: 'works';
@@ -412,6 +447,27 @@ export interface ImagesSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "videos_select".
+ */
+export interface VideosSelect<T extends boolean = true> {
+  use?: T;
+  poster?: T;
+  duration?: T;
+  codec?: T;
+  hasAudio?: T;
+  _objectKey?: T;
+  updatedAt?: T;
+  createdAt?: T;
+  url?: T;
+  thumbnailURL?: T;
+  filename?: T;
+  mimeType?: T;
+  filesize?: T;
+  width?: T;
+  height?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "works_select".
  */
 export interface WorksSelect<T extends boolean = true> {
@@ -425,6 +481,7 @@ export interface WorksSelect<T extends boolean = true> {
   featured?: T;
   featuredOrder?: T;
   cover?: T;
+  previewLoop?: T;
   updatedAt?: T;
   createdAt?: T;
   _status?: T;

@@ -9,11 +9,13 @@ import sharp from 'sharp'
 
 import { Images } from './collections/Images'
 import { Users } from './collections/Users'
+import { Videos } from './collections/Videos'
 import { Works } from './collections/Works'
 import { buildDatabase, DEFAULT_BUSY_TIMEOUT_MS } from './db'
 import {
   imagesStorage,
   localImagesDir,
+  localVideosDir,
   storageOptionsFromEnv,
   type StorageOptions,
 } from './storage'
@@ -76,7 +78,7 @@ export function buildSiteConfig(options: SiteConfigOptions): Promise<SanitizedCo
       meta: { titleSuffix: '- taha.media' },
       ...(options.adminBaseDir ? { importMap: { baseDir: options.adminBaseDir } } : {}),
     },
-    collections: [Users, Images, Works],
+    collections: [Users, Images, Videos, Works],
     sharp,
     // The admin speaks Turkish; English stays selectable for the developer.
     i18n: { fallbackLanguage: 'tr', supportedLanguages: { tr, en } },
@@ -92,7 +94,13 @@ export function buildSiteConfig(options: SiteConfigOptions): Promise<SanitizedCo
       migrationDir: MIGRATION_DIR,
       busyTimeoutMs: options.busyTimeoutMs ?? DEFAULT_BUSY_TIMEOUT_MS,
     }),
-    plugins: [imagesStorage(options.storage ?? {}, localImagesDir(options.databasePath))],
+    plugins: [
+      imagesStorage(
+        options.storage ?? {},
+        localImagesDir(options.databasePath),
+        localVideosDir(options.databasePath),
+      ),
+    ],
     cors: options.origins ?? [],
     csrf: options.origins ?? [],
     email: emailAdapter,

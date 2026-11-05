@@ -11,7 +11,7 @@ import { getPayload, type Payload } from 'payload'
 import sharp from 'sharp'
 
 import { buildSiteConfig } from './config'
-import type { Image, User } from './payload-types'
+import type { Image, User, Video } from './payload-types'
 
 /** One request the S3 stub received. */
 export type S3Request = { method: string; key: string; headers: http.IncomingHttpHeaders }
@@ -67,6 +67,10 @@ export const testPhoto = (width: number, height: number): Promise<Buffer> =>
     .jpeg()
     .toBuffer()
 
+/** A committed fixture MP4 (see `fixtures/videos/make-fixtures.sh`), by file name. */
+export const videoFixture = (name: string): Buffer =>
+  fs.readFileSync(new URL(`./fixtures/videos/${name}`, import.meta.url))
+
 export const TEST_MEDIA_ORIGIN = 'https://cdn.test/media'
 
 /**
@@ -96,6 +100,20 @@ export type TestSite = {
     editor: User,
     options?: { name?: string; width?: number; height?: number; alt?: string },
   ) => Promise<Image>
+  /**
+   * Uploads a video as an Editor would. `file` is a fixture name or the bytes themselves; the
+   * poster defaults to a freshly uploaded Image.
+   */
+  uploadVideo: (
+    editor: User,
+    options: {
+      use: Video['use']
+      file?: string | Buffer
+      name?: string
+      mimetype?: string
+      poster?: number
+    },
+  ) => Promise<Video>
   close: () => Promise<void>
 }
 
@@ -136,7 +154,7 @@ export async function createTestSite({
   await cms.db.migrate()
 
   let editors = 0
-  return {
+  const site: TestSite = {
     databasePath,
     cms,
     // Payload types `db.client` as the libsql config; at runtime it is the connected client.
@@ -165,10 +183,24 @@ export async function createTestSite({
         overrideAccess: false,
       })
     },
+    uploadVideo: async (
+      editor,
+      { use, file = 'loop-ok.mp4', name = 'klip.mp4', mimetype = 'video/mp4', poster },
+    ) => {
+      const data = typeof file === 'string' ? videoFixture(file) : file
+      return cms.create({
+        collection: 'videos',
+        data: { use, poster: poster ?? (await site.uploadImage(editor)).id },
+        file: { data, mimetype, name, size: data.length },
+        user: editor,
+        overrideAccess: false,
+      })
+    },
     close: async () => {
       await cms.db.destroy?.()
       await s3.close()
       fs.rmSync(dir, { recursive: true, force: true })
     },
   }
+  return site
 }

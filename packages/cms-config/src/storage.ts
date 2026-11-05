@@ -74,18 +74,28 @@ export function localImagesDir(databasePath: string): string {
   return path.join(path.dirname(path.resolve(databasePath)), 'images')
 }
 
+/** Where `videos` files go on local disk when no object storage is configured. */
+export function localVideosDir(databasePath: string): string {
+  return path.join(path.dirname(path.resolve(databasePath)), 'videos')
+}
+
 /**
- * Stores the `images` collection (the original and every generated size). The plugin is always
- * installed, so the database schema is the same in every environment.
+ * Stores the `images` collection (the original and every generated size) and the `videos`
+ * collection (the MP4 as uploaded). The plugin is always installed, so the database schema is the
+ * same in every environment.
  *
  * - With `mediaOrigin`: objects go to S3-compatible storage (R2) with the immutable Cache-Control
  *   header, and URLs are `mediaOrigin + key`; `disablePayloadAccessControl` keeps the file proxy
  *   out of it.
- * - Without it (development): files go to `localDir` and Payload serves them from
- *   `/api/images/file/<name>`.
+ * - Without it (development): files go to the collection's local directory and Payload serves
+ *   them from `/api/<collection>/file/<name>`.
  * - Deleting a record never destroys an object: that moves to the soft delete (ADR-0006).
  */
-export function imagesStorage(options: StorageOptions, localDir: string): Plugin {
+export function imagesStorage(
+  options: StorageOptions,
+  localImages: string,
+  localVideos = path.join(path.dirname(localImages), 'videos'),
+): Plugin {
   const { mediaOrigin, s3 } = options
   let client: S3Client | undefined
   const getClient = (config: S3Options) =>
@@ -96,63 +106,69 @@ export function imagesStorage(options: StorageOptions, localDir: string): Plugin
       credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey },
     }))
 
-  const localPath = (key: string): string => {
-    const target = path.resolve(localDir, key)
-    if (!target.startsWith(path.resolve(localDir) + path.sep)) throw new Error('Invalid file name.')
-    return target
+  const buildAdapter = (slug: string, localDir: string, contentType: string): GeneratedAdapter => {
+    const localPath = (key: string): string => {
+      const target = path.resolve(localDir, key)
+      if (!target.startsWith(path.resolve(localDir) + path.sep)) {
+        throw new Error('Invalid file name.')
+      }
+      return target
+    }
+    return mediaOrigin
+      ? {
+          name: 'taha-s3',
+          generateURL: ({ filename, prefix }) =>
+            mediaUrl(mediaOrigin, prefix ? `${prefix}/${filename}` : filename),
+          handleUpload: async ({ file, storageFilePath }) => {
+            if (!s3) throw new Error('Object storage is not configured (set the S3_* variables).')
+            await getClient(s3).send(
+              new PutObjectCommand({
+                Bucket: s3.bucket,
+                Key: storageFilePath,
+                Body: file.tempFilePath ? createReadStream(file.tempFilePath) : file.buffer,
+                ContentType: file.mimeType,
+                CacheControl: IMMUTABLE_CACHE_CONTROL,
+              }),
+            )
+          },
+          // Deleted media is kept on R2 for now; the 30-day trash is its own ticket (ADR-0006).
+          handleDelete: () => undefined,
+          staticHandler: () => new Response('Not found', { status: 404 }),
+        }
+      : {
+          name: 'taha-local',
+          generateURL: ({ filename, prefix }) =>
+            `/api/${slug}/file/${prefix ? `${prefix}/${filename}` : filename}`,
+          handleUpload: async ({ file, storageFilePath }) => {
+            const target = localPath(storageFilePath)
+            await fs.mkdir(path.dirname(target), { recursive: true })
+            if (file.tempFilePath) await fs.copyFile(file.tempFilePath, target)
+            else await fs.writeFile(target, file.buffer)
+          },
+          handleDelete: () => undefined,
+          staticHandler: async (_req, { params }) => {
+            try {
+              const body = await fs.readFile(localPath(params.filename))
+              return new Response(new Uint8Array(body), {
+                headers: { 'Content-Type': contentType, 'Cache-Control': IMMUTABLE_CACHE_CONTROL },
+              })
+            } catch {
+              return new Response('Not found', { status: 404 })
+            }
+          },
+        }
   }
 
-  const adapter: GeneratedAdapter = mediaOrigin
-    ? {
-        name: 'taha-s3',
-        generateURL: ({ filename, prefix }) =>
-          mediaUrl(mediaOrigin, prefix ? `${prefix}/${filename}` : filename),
-        handleUpload: async ({ file, storageFilePath }) => {
-          if (!s3) throw new Error('Object storage is not configured (set the S3_* variables).')
-          await getClient(s3).send(
-            new PutObjectCommand({
-              Bucket: s3.bucket,
-              Key: storageFilePath,
-              Body: file.tempFilePath ? createReadStream(file.tempFilePath) : file.buffer,
-              ContentType: file.mimeType,
-              CacheControl: IMMUTABLE_CACHE_CONTROL,
-            }),
-          )
-        },
-        // Deleted media is kept on R2 for now; the 30-day trash is its own ticket (ADR-0006).
-        handleDelete: () => undefined,
-        staticHandler: () => new Response('Not found', { status: 404 }),
-      }
-    : {
-        name: 'taha-local',
-        generateURL: ({ filename, prefix }) =>
-          `/api/images/file/${prefix ? `${prefix}/${filename}` : filename}`,
-        handleUpload: async ({ file, storageFilePath }) => {
-          const target = localPath(storageFilePath)
-          await fs.mkdir(path.dirname(target), { recursive: true })
-          if (file.tempFilePath) await fs.copyFile(file.tempFilePath, target)
-          else await fs.writeFile(target, file.buffer)
-        },
-        handleDelete: () => undefined,
-        staticHandler: async (_req, { params }) => {
-          try {
-            const body = await fs.readFile(localPath(params.filename))
-            return new Response(new Uint8Array(body), {
-              headers: { 'Content-Type': 'image/webp', 'Cache-Control': IMMUTABLE_CACHE_CONTROL },
-            })
-          } catch {
-            return new Response('Not found', { status: 404 })
-          }
-        },
-      }
+  // R2 URLs bypass Payload's file proxy; the local adapter needs it to serve files.
+  const collection = (slug: string, localDir: string, contentType: string) => ({
+    ...(mediaOrigin ? { disablePayloadAccessControl: true as const } : {}),
+    adapter: () => buildAdapter(slug, localDir, contentType),
+  })
 
   return cloudStoragePlugin({
     collections: {
-      images: {
-        // R2 URLs bypass Payload's file proxy; the local adapter needs it to serve files.
-        ...(mediaOrigin ? { disablePayloadAccessControl: true as const } : {}),
-        adapter: () => adapter,
-      },
+      images: collection('images', localImages, 'image/webp'),
+      videos: collection('videos', localVideos, 'video/mp4'),
     },
   })
 }

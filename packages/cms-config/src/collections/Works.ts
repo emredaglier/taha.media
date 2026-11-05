@@ -7,6 +7,7 @@ import {
 
 import { editor, publishedOrEditor } from '../access'
 import { DISCIPLINE_LABELS, DISCIPLINES } from '../disciplines'
+import { videoField } from '../video-field'
 import { cleanSlug, recordPreviousSlugs, slugify } from '../slugs'
 
 export const NO_DISCIPLINE_MESSAGE = 'En az bir disiplin seçin.'
@@ -100,6 +101,7 @@ export const Works: CollectionConfig = {
       relationTo: 'images',
       required: true,
     },
+    videoField({ name: 'previewLoop', label: 'Önizleme döngüsü', use: 'previewLoop' }),
   ],
   hooks: { beforeValidate: [cleanSlug, requireDiscipline], beforeChange: [recordPreviousSlugs] },
   versions: { drafts: true, maxPerDoc: 20 },

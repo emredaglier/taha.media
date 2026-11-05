@@ -25,14 +25,18 @@ export const IMAGE_SRCSET_SIZES = [
  * Makes the stored name unique per upload (new record or replaced file), so an object key is
  * never reused and objects can be cached as immutable (ADR-0005).
  */
-export function uniqueFilename(name: string, suffix = randomBytes(6).toString('hex')): string {
+export function uniqueFilename(
+  name: string,
+  suffix = randomBytes(6).toString('hex'),
+  fallback = 'image',
+): string {
   const { name: base, ext } = path.parse(name)
   const safe =
     base
       .normalize('NFKD')
       .replace(/[^a-zA-Z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '')
-      .toLowerCase() || 'image'
+      .toLowerCase() || fallback
   return `${safe}-${suffix}${ext.toLowerCase()}`
 }
 
