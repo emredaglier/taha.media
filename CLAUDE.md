@@ -1,8 +1,12 @@
 # taha.media
 
-Portfolio of Taha (video editor, motion designer, graphic designer). Terms: `GLOSSARY.md`. Decisions: `docs/adr/` (backend 0001–0099, frontend 0100+).
+Portfolio of Taha (video editor, motion designer, graphic designer). Terms: `GLOSSARY.md`. Decisions: `docs/adr/` (backend 0001–0099, frontend 0100+). Code and test conventions: `CODING_STANDARDS.md`.
 
 Never wipe the production database or R2 objects without confirming with the owner right before (ADR-0011).
+
+## Memory-heavy commands
+
+Subagents and workers (e.g. under `/implement-spec`) must not start Next.js or Docker builds: no `next dev`, `next build`, `pnpm dev`, `pnpm build`, `docker build`/`docker compose build`, and no Playwright or browser runs. Parallel Next processes have crashed the dev machine (lesson from daglier.com). Workers verify with lint, typecheck and unit/integration tests only. Only the lead session runs builds, the smoke spec or Compose, once, after the workers have finished.
 
 ## Agent skills
 

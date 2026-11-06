@@ -1,5 +1,27 @@
 .DS_Store
+.claude/settings.local.json
 node_modules/
+
+# Build output
+.next/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+
+# Env and local data
 .env*
 !.env.example
+*.db
+*.db-shm
+*.db-wal
+
+# Smoke traces, screenshots and report
+smoke/.output/
+
+# Local CMS database
+apps/cms/data/
+
+# Claude Code worktrees
 .claude/worktrees/

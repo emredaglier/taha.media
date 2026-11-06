@@ -1,0 +1,31 @@
+import { randomBytes } from 'node:crypto'
+
+/**
+ * `pnpm user:reset-password <email>`: sets a new password for an existing Editor (ADR-0013).
+ * Reads DATABASE_PATH and PAYLOAD_SECRET from the environment like the cms. The new password is
+ * NEW_PASSWORD when set, otherwise a random one that is printed once.
+ */
+const email = process.argv[2]
+if (!email || email.startsWith('-')) {
+  console.error('Usage: pnpm user:reset-password <email>   (optional: NEW_PASSWORD=...)')
+  process.exit(1)
+}
+const password = process.env.NEW_PASSWORD?.trim() || randomBytes(15).toString('base64url')
+
+const { default: config } = await import('@payload-config')
+const { resetPassword } = await import('@taha/cms-config/seed')
+const { getPayload } = await import('payload')
+
+const payload = await getPayload({ config })
+let code = 0
+try {
+  await resetPassword(payload, email, password)
+  console.log(`Password changed for ${email}.`)
+  if (!process.env.NEW_PASSWORD?.trim()) console.log(`New password: ${password}`)
+} catch (error) {
+  console.error(error instanceof Error ? error.message : error)
+  code = 1
+} finally {
+  await payload.destroy()
+}
+process.exit(code)
