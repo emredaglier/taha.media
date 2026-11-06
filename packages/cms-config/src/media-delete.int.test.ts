@@ -23,8 +23,7 @@ beforeEach(() => {
   site.revalidations.length = 0
 })
 
-const asEditor = { user: undefined as unknown as User, overrideAccess: false } as const
-const as = () => ({ ...asEditor, user: editor })
+const as = () => ({ user: editor, overrideAccess: false })
 
 const image = async () => (await site.uploadImage(editor)).id
 
@@ -134,6 +133,7 @@ describe('deleting a Video that something uses', () => {
       'main',
     ],
     ['the Site showreel', (id) => publishPage('site', { showreel: id }), 'showreel'],
+    ['the Site phone showreel', (id) => publishPage('site', { showreelPhone: id }), 'showreel'],
   ]
 
   it.each(cases)(
@@ -142,12 +142,14 @@ describe('deleting a Video that something uses', () => {
       const media = await site.uploadVideo(editor, { use: kind })
       await use(media.id)
       site.revalidations.length = 0
+      const objects = site.s3.objects.size
 
       const message = await refusal('videos', media.id)
 
       expect(message).toMatch(/Bu video kullanıldığı için silinemez/)
       expect(message).not.toMatch(/Failed query|SQLITE|constraint/i)
       expect(await stillThere('videos', media.id)).toBe(true)
+      expect(site.s3.objects.size).toBe(objects)
       expect(site.revalidations).toEqual([])
     },
   )
@@ -167,6 +169,19 @@ describe('deleting media in the other states', () => {
 
     expect(await refusal('images', draftCover)).toMatch(/Bu görsel kullanıldığı için silinemez/)
     expect(await stillThere('images', draftCover)).toBe(true)
+  })
+
+  it('is refused when only a draft of a page uses it', async () => {
+    const poster = await image()
+    await site.cms.updateGlobal({
+      slug: 'site',
+      data: { showreelPoster: poster, _status: 'draft' },
+      draft: true,
+      ...as(),
+    })
+
+    expect(await refusal('images', poster)).toMatch(/Site sayfası/)
+    expect(await stillThere('images', poster)).toBe(true)
   })
 
   it('goes through when nothing uses it, moving every object to trash/', async () => {
@@ -209,5 +224,35 @@ describe('deleting media in the other states', () => {
     })
     expect(now.cover).toBe(next)
     expect(site.revalidations).toEqual([])
+  })
+
+  it('goes through for a Video and a main image that only old versions used, in every version column', async () => {
+    const oldLoop = (await site.uploadVideo(editor, { use: 'previewLoop' })).id
+    const oldMain = await image()
+    const oldSeo = await image()
+    const work = await createWork('published', {
+      previewLoop: oldLoop,
+      mainMedia: { kind: 'image', image: oldMain },
+      seo: { image: oldSeo },
+    })
+    await site.cms.update({
+      collection: 'works',
+      id: work.id,
+      data: {
+        previewLoop: null,
+        mainMedia: { kind: 'image', image: await image() },
+        seo: { image: null },
+        _status: 'published',
+      },
+      ...as(),
+    })
+
+    expect(await refusal('videos', oldLoop)).toBeNull()
+    expect(await refusal('images', oldMain)).toBeNull()
+    expect(await refusal('images', oldSeo)).toBeNull()
+    const now = await site.cms.findByID({ collection: 'works', id: work.id, draft: false })
+    expect(now.cover).toBeTruthy()
+    expect(now.mainMedia?.kind).toBe('image')
+    expect(now.mainMedia?.image).toBeTruthy()
   })
 })
