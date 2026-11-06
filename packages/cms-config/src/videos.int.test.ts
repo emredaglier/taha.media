@@ -264,6 +264,43 @@ describe('changing a Video’s use', () => {
     )
   })
 
+  it('is refused while a Gallery item uses it, naming the item', async () => {
+    const loop = await site.uploadVideo(editor, { use: 'gallery' })
+    const create = (caption?: string) =>
+      site.cms.create({
+        collection: 'gallery',
+        data: { kind: 'loop', video: loop.id, caption } as never,
+        user: editor,
+        overrideAccess: false,
+      })
+    await create('Set günü')
+    expect(await refusal(changeUse(loop.id, 'showreel'))).toBe(
+      'Bu video kullanıldığı için kullanımı değiştirilemez: “Set günü” galeri öğesi. Önce videoyu oradan kaldırın.',
+    )
+    // A new item goes first in the Gallery, and the refusal lists items in that order.
+    const uncaptioned = await create()
+    expect(await refusal(changeUse(loop.id, 'showreel'))).toBe(
+      `Bu video kullanıldığı için kullanımı değiştirilemez: Galeri öğesi #${uncaptioned.id}, “Set günü” galeri öğesi. Önce videoyu oradan kaldırın.`,
+    )
+  })
+
+  it('is allowed again once no Gallery item uses it', async () => {
+    const loop = await site.uploadVideo(editor, { use: 'gallery' })
+    const item = await site.cms.create({
+      collection: 'gallery',
+      data: { kind: 'loop', video: loop.id } as never,
+      user: editor,
+      overrideAccess: false,
+    })
+    await site.cms.delete({
+      collection: 'gallery',
+      id: item.id,
+      user: editor,
+      overrideAccess: false,
+    })
+    expect((await changeUse(loop.id, 'showreel')).use).toBe('showreel')
+  })
+
   it('is allowed when nothing uses it', async () => {
     const loop = await site.uploadVideo(editor, { use: 'previewLoop' })
     expect((await changeUse(loop.id, 'showreel')).use).toBe('showreel')

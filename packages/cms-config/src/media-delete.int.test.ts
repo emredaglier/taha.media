@@ -155,6 +155,81 @@ describe('deleting a Video that something uses', () => {
   )
 })
 
+describe('deleting media that a Gallery item uses', () => {
+  const galleryItem = (data: Record<string, unknown>) =>
+    site.cms.create({ collection: 'gallery', data: data as never, ...as() })
+
+  it('refuses an Image, naming the item by its caption, and nothing changes', async () => {
+    const used = await site.uploadImage(editor)
+    await galleryItem({ kind: 'image', image: used.id, caption: 'Sabah ışığı' })
+    site.revalidations.length = 0
+    const objects = site.s3.objects.size
+
+    expect(await refusal('images', used.id)).toBe(
+      'Bu görsel kullanıldığı için silinemez: “Sabah ışığı” galeri öğesi. Önce görseli oradan kaldırın.',
+    )
+
+    expect(await stillThere('images', used.id)).toBe(true)
+    expect(site.s3.objects.size).toBe(objects)
+    expect(site.revalidations).toEqual([])
+  })
+
+  it('names an item without a caption by its number', async () => {
+    const used = await image()
+    const item = await galleryItem({ kind: 'image', image: used })
+    expect(await refusal('images', used)).toBe(
+      `Bu görsel kullanıldığı için silinemez: Galeri öğesi #${item.id}. Önce görseli oradan kaldırın.`,
+    )
+  })
+
+  it('refuses a Video used by a loop item, and nothing changes', async () => {
+    const loop = await site.uploadVideo(editor, { use: 'gallery' })
+    await galleryItem({ kind: 'loop', video: loop.id, caption: 'Set günü' })
+    site.revalidations.length = 0
+    const objects = site.s3.objects.size
+
+    expect(await refusal('videos', loop.id)).toBe(
+      'Bu video kullanıldığı için silinemez: “Set günü” galeri öğesi. Önce videoyu oradan kaldırın.',
+    )
+
+    expect(await stillThere('videos', loop.id)).toBe(true)
+    expect(site.s3.objects.size).toBe(objects)
+    expect(site.revalidations).toEqual([])
+  })
+
+  it('refuses the poster Image of a Gallery loop, naming the Video it belongs to', async () => {
+    const poster = await image()
+    const loop = await site.uploadVideo(editor, { use: 'gallery', poster })
+    await galleryItem({ kind: 'loop', video: loop.id })
+
+    expect(await refusal('images', poster)).toBe(
+      `Bu görsel kullanıldığı için silinemez: “${loop.filename}” videosunun posteri. Önce görseli oradan kaldırın.`,
+    )
+    expect(await stillThere('images', poster)).toBe(true)
+  })
+
+  it('names every place when a Work and a Gallery item use the same Image', async () => {
+    const shared = await image()
+    await createWork('published', { title: 'Mavi Saat', cover: shared })
+    await galleryItem({ kind: 'image', image: shared, caption: 'Aynı görsel' })
+    expect(await refusal('images', shared)).toBe(
+      'Bu görsel kullanıldığı için silinemez: “Mavi Saat” işi, “Aynı görsel” galeri öğesi. Önce görseli oradan kaldırın.',
+    )
+  })
+
+  it('goes through once the item is gone, and sends nothing for the media', async () => {
+    const used = await image()
+    const item = await galleryItem({ kind: 'image', image: used })
+    await site.cms.delete({ collection: 'gallery', id: item.id, ...as() })
+    site.revalidations.length = 0
+
+    expect(await refusal('images', used)).toBeNull()
+
+    expect(await stillThere('images', used)).toBe(false)
+    expect(site.revalidations).toEqual([])
+  })
+})
+
 describe('deleting media in the other states', () => {
   it('is refused when only a draft of a Work uses it', async () => {
     const work = await createWork('published')

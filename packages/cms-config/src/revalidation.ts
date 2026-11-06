@@ -222,8 +222,9 @@ export function galleryRevalidationHooks(transport: RevalidationTransport): {
 
 /**
  * The tags of everything visitors see that shows the media: each published Work using it, the
- * Works list and Home when one of them is featured, and each published page using it. An Image is
- * also shown through the Videos it is the poster of. References held only in drafts don't count.
+ * Works list and Home when one of them is featured, each published page using it, and the Gallery
+ * when an item uses it. An Image is also shown through the Videos it is the poster of. References
+ * held only in drafts don't count (Gallery items have no drafts).
  */
 async function mediaTags(
   req: PayloadRequest,
@@ -243,20 +244,21 @@ async function mediaTags(
     })
     refs.push({ target: 'videos', ids: docs.map((video) => video.id) })
   }
-  const { works, pages } = await publishedReferences(req, refs)
+  const { works, pages, usedByGallery } = await publishedReferences(req, refs)
   return [
     ...works.map((work) => workTag(work.id)),
     ...(works.length > 0 ? [WORKS_TAG] : []),
     ...(works.some((work) => work.featured) ? [HOME_TAG] : []),
     ...pages.map(pageTag),
+    ...(usedByGallery ? [GALLERY_TAG] : []),
   ]
 }
 
 /**
  * Hook that tells `web` an Image or Video changed (alt text, focal point, a replaced file or
  * poster), so the published pages showing it are rebuilt. A new upload is shown nowhere yet and
- * sends nothing. A delete sends nothing: media that a Work or page uses can't be deleted
- * (media-delete.ts). Like the other notifications, a failure (here also while finding the
+ * sends nothing. A delete sends nothing: media that a Work, page or Gallery item uses can't be
+ * deleted (media-delete.ts). Like the other notifications, a failure (here also while finding the
  * references) is logged and never blocks the Editor's save.
  */
 export function mediaRevalidationHooks(

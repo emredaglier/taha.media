@@ -84,7 +84,7 @@ export const lockedUseMessage = (places: string[]): string =>
 
 /**
  * Each field that references a Video accepts one use (`videoField`), so a Video's use must not
- * change while a Work or page references it, in a draft or published: the field would then hold a
+ * change while a Work, page or Gallery item references it, in a draft or published: the field would then hold a
  * wrongly-used Video without anyone seeing a refusal.
  */
 const keepUseWhileReferenced: CollectionBeforeValidateHook = async ({
