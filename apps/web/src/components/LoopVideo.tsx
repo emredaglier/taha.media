@@ -17,12 +17,15 @@ export function LoopVideo({
   sizes,
   hoverToPlay = false,
   className,
+  fill = false,
 }: {
   video: VideoRead
   sizes: string
   /** Cards pass true: with a fine pointer they play on hover instead of in view. */
   hoverToPlay?: boolean
   className?: string
+  /** Fills a positioned parent (cropping to it) instead of reserving its own aspect-ratio box. */
+  fill?: boolean
 }) {
   const mode = useLoopMode(hoverToPlay)
   const box = useRef<HTMLDivElement>(null)
@@ -65,8 +68,8 @@ export function LoopVideo({
   return (
     <div
       ref={box}
-      className={`relative overflow-hidden bg-placeholder ${className ?? ''}`}
-      style={{ aspectRatio: `${video.width} / ${video.height}` }}
+      className={`overflow-hidden bg-placeholder ${fill ? 'absolute inset-0 size-full' : 'relative'} ${className ?? ''}`}
+      style={fill ? undefined : { aspectRatio: `${video.width} / ${video.height}` }}
     >
       <Picture
         image={video.poster}

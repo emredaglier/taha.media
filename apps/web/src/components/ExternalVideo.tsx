@@ -29,6 +29,7 @@ export function ExternalVideo({
   title,
   sizes,
   className,
+  autoStart = false,
 }: {
   provider: ExternalProvider
   /** The provider's video id. */
@@ -41,8 +42,10 @@ export function ExternalVideo({
   title: string
   sizes: string
   className?: string
+  /** Mounted by a click that already asked to play (Home's "watch with sound"): no second click. */
+  autoStart?: boolean
 }) {
-  const [playing, setPlaying] = useState(false)
+  const [playing, setPlaying] = useState(autoStart)
   return (
     <div
       className={`relative mx-auto overflow-hidden bg-placeholder ${className ?? ''}`}
