@@ -241,6 +241,22 @@ describe('a single-entry page', () => {
       expect(sent()).toEqual([])
     },
   )
+
+  it('the Statement touches only the Site tag on publish, and nothing on a draft save', async () => {
+    const saveStatement = (status: 'draft' | 'published', text: string) =>
+      site.cms.updateGlobal({
+        slug: 'site',
+        data: { statementBefore: text, statementAfter: text, _status: status },
+        draft: status === 'draft',
+        user: as.user(),
+        overrideAccess: as.overrideAccess,
+      })
+    await saveStatement('published', 'Önce ve sonra.')
+    expect(sent()).toEqual([[pageTag('site')]])
+    site.revalidations.length = 0
+    await saveStatement('draft', 'Taslak metin.')
+    expect(sent()).toEqual([])
+  })
 })
 
 describe('a failed notification', () => {

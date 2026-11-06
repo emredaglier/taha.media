@@ -281,7 +281,8 @@ async function seedPages(seeder: Seeder): Promise<void> {
         showreelPhone: await uploadVideo(seeder, 'showreel', 'portrait.mp4', 'Showreel telefon'),
         showreelPoster: await uploadImage(seeder, 'Showreel görseli'),
         showreelLink: { url: 'https://vimeo.com/76979871' },
-        intro: 'Kurgu, motion ve grafik tasarım: hikayeyi hareketle anlatıyorum.',
+        statementBefore: 'Kurgu, motion ve grafik tasarımla',
+        statementAfter: 'hikayeyi hareketle anlatıyorum.',
         email: 'merhaba@example.com',
         socials: [
           { platform: 'Instagram', url: 'https://instagram.com/example' },

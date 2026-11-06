@@ -53,7 +53,8 @@ describe('the local seed', () => {
   it('fills and publishes the single-entry pages', async () => {
     const siteDoc = await site.cms.findGlobal({ slug: 'site' })
     expect(siteDoc._status).toBe('published')
-    expect(siteDoc.intro).toBeTruthy()
+    expect(siteDoc.statementBefore).toBeTruthy()
+    expect(siteDoc.statementAfter).toBeTruthy()
     expect(siteDoc.email).toBeTruthy()
     expect(siteDoc.showreel).toBeTruthy()
     expect(siteDoc.socials?.length).toBeGreaterThan(0)
@@ -112,7 +113,8 @@ describe('the production seed', () => {
 
       const siteDoc = await prod.cms.findGlobal({ slug: 'site' })
       expect(siteDoc._status).toBe('published')
-      expect(siteDoc.intro).toBeFalsy()
+      expect(siteDoc.statementBefore).toBeFalsy()
+      expect(siteDoc.statementAfter).toBeFalsy()
       expect(siteDoc.showreel).toBeFalsy()
       expect(siteDoc.socials ?? []).toHaveLength(0)
       const about = await prod.cms.findGlobal({ slug: 'about' })

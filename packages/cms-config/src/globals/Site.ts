@@ -15,7 +15,27 @@ export const Site: GlobalConfig = {
     videoField({ name: 'showreelPhone', label: 'Showreel telefon sürümü', use: 'showreel' }),
     { name: 'showreelPoster', label: 'Showreel görseli', type: 'upload', relationTo: 'images' },
     showreelLinkField(),
-    { name: 'intro', label: 'Tanıtım cümlesi', type: 'text', localized: true },
+    // The Statement (GLOSSARY): one sentence with the Showreel clip between these two texts.
+    {
+      name: 'statementBefore',
+      label: 'Tanıtım cümlesi: klipten önce',
+      type: 'text',
+      localized: true,
+      admin: {
+        description:
+          'Ana sayfadaki cümlenin Showreel klibinden önceki kısmı. Klip bu metinle sonraki metin arasında yer alır.',
+      },
+    },
+    {
+      name: 'statementAfter',
+      label: 'Tanıtım cümlesi: klipten sonra',
+      type: 'text',
+      localized: true,
+      admin: {
+        description:
+          'Ana sayfadaki cümlenin Showreel klibinden sonraki kısmı. Klip önceki metinle bu metin arasında yer alır.',
+      },
+    },
     { name: 'email', label: 'İletişim e-postası', type: 'email' },
     {
       name: 'socials',

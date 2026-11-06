@@ -638,7 +638,14 @@ export interface Site {
     provider?: ('vimeo' | 'youtube') | null;
     videoId?: string | null;
   };
-  intro?: string | null;
+  /**
+   * Ana sayfadaki cümlenin Showreel klibinden önceki kısmı. Klip bu metinle sonraki metin arasında yer alır.
+   */
+  statementBefore?: string | null;
+  /**
+   * Ana sayfadaki cümlenin Showreel klibinden sonraki kısmı. Klip önceki metinle bu metin arasında yer alır.
+   */
+  statementAfter?: string | null;
   email?: string | null;
   socials?:
     | {
@@ -753,7 +760,8 @@ export interface SiteSelect<T extends boolean = true> {
         provider?: T;
         videoId?: T;
       };
-  intro?: T;
+  statementBefore?: T;
+  statementAfter?: T;
   email?: T;
   socials?:
     | T
