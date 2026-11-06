@@ -34,6 +34,18 @@ describe.each(['/', '/yok-boyle-bir-sayfa'])('the shell around %s', (url) => {
     )
   })
 
+  it('has the menu links in the server HTML, so they work without JavaScript', async () => {
+    const html = await htmlOf(url)
+    expect(html).toMatch(/<details[\s\S]*<summary[^>]*aria-controls="site-menu-panel"/)
+    for (const [href, label] of [
+      ['/isler', 'İşler'],
+      ['/galeri', 'Galeri'],
+      ['/hakkimda', 'Hakkımda'],
+    ]) {
+      expect(html).toMatch(new RegExp(`<a[^>]*href="${href}"[^>]*>${label}</a>`))
+    }
+  })
+
   it('has the footer with the year and the Gizlilik link', async () => {
     const html = await htmlOf(url)
     expect(html).toContain(`© ${new Date().getFullYear()} Taha Çiftçi`)
