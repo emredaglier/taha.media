@@ -6,6 +6,11 @@ import { seoToMetadata } from '../../lib/seo'
 
 const TITLE = 'Gizlilik'
 
+// The Docker image builds with no database, and a page must not read content at build time
+// (infra/README.md, "What the frontend must provide", item 8). So this renders per request; the
+// read is still tag-cached, so it is cheap and revalidates when the Privacy page is published.
+export const dynamic = 'force-dynamic'
+
 export async function generateMetadata(): Promise<Metadata> {
   const privacy = await getPrivacy()
   return privacy ? seoToMetadata(privacy.seo) : { title: TITLE }
