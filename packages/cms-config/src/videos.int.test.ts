@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { Discipline } from './disciplines'
 import type { User } from './payload-types'
 import { createTestSite, TEST_MEDIA_ORIGIN, videoFixture, type TestSite } from './testing'
+import type { VideoUse } from './video-limits'
 
 let site: TestSite
 let editor: User
@@ -266,5 +267,87 @@ describe('changing a Video’s use', () => {
   it('is allowed when nothing uses it', async () => {
     const loop = await site.uploadVideo(editor, { use: 'previewLoop' })
     expect((await changeUse(loop.id, 'showreel')).use).toBe('showreel')
+  })
+})
+
+describe('a Gallery loop', () => {
+  // 15 s, 1080p, silent, 10 MB (ADR-0008); these fixtures break the caps of the other uses.
+  it.each(['long-12s.mp4', 'hd-1080.mp4'] as const)('accepts %s', async (file) => {
+    const video = await site.uploadVideo(editor, { use: 'gallery', file })
+    expect(video.use).toBe('gallery')
+    expect(video.codec).toBe('avc1')
+  })
+
+  it('stores the width, height and duration of a portrait loop', async () => {
+    const video = await site.uploadVideo(editor, { use: 'gallery', file: 'portrait.mp4' })
+    expect(video).toMatchObject({ width: 360, height: 640, hasAudio: false })
+    expect(video.duration).toBeCloseTo(2, 1)
+  })
+
+  it('is refused when too long, naming the limit and the actual length', async () => {
+    expect(await refusal(site.uploadVideo(editor, { use: 'gallery', file: 'long-35s.mp4' }))).toBe(
+      'Süre en fazla 15 sn olabilir; bu videonun süresi 35 sn.',
+    )
+  })
+
+  it('is refused above 1080p, naming the limit and the actual size', async () => {
+    expect(await refusal(site.uploadVideo(editor, { use: 'gallery', file: 'uhd-1440.mp4' }))).toBe(
+      'Çözünürlük en fazla 1080p (1920×1080) olabilir; bu video 2560×1440.',
+    )
+  })
+
+  it('is refused with audio', async () => {
+    expect(
+      await refusal(site.uploadVideo(editor, { use: 'gallery', file: 'with-audio.mp4' })),
+    ).toBe('Bu kullanımda video sessiz olmalı; bu videoda ses kanalı var.')
+  })
+
+  it('is refused over 10 MB, naming the limit and the actual size', async () => {
+    expect(
+      await refusal(
+        site.uploadVideo(editor, { use: 'gallery', file: padded('loop-ok.mp4', 11_000_000) }),
+      ),
+    ).toBe('Dosya boyutu en fazla 10 MB olabilir; bu dosya 10,5 MB.')
+  })
+
+  it('is refused when it is not H.264', async () => {
+    expect(await refusal(site.uploadVideo(editor, { use: 'gallery', file: 'hevc.mp4' }))).toBe(
+      'Video H.264 olmalı; bu videonun kodeği hvc1.',
+    )
+  })
+
+  it('needs a poster Image like every Video', async () => {
+    const data = videoFixture('loop-ok.mp4')
+    await expect(
+      site.cms.create({
+        collection: 'videos',
+        data: { use: 'gallery' } as never,
+        file: { data, mimetype: 'video/mp4', name: 'a.mp4', size: data.length },
+        user: editor,
+        overrideAccess: false,
+      }),
+    ).rejects.toThrow()
+  })
+
+  const changeUse = (id: number, use: VideoUse) =>
+    site.cms.update({
+      collection: 'videos',
+      id,
+      data: { use },
+      user: editor,
+      overrideAccess: false,
+    })
+
+  it('is re-checked against the new use’s caps when its use changes', async () => {
+    const loop = await site.uploadVideo(editor, { use: 'gallery', file: 'long-12s.mp4' })
+    expect(await refusal(changeUse(loop.id, 'previewLoop'))).toBe(
+      'Süre en fazla 10 sn olabilir; bu videonun süresi 12 sn.',
+    )
+    expect((await changeUse(loop.id, 'showreel')).use).toBe('showreel')
+  })
+
+  it('can take over a preview loop that fits the Gallery caps', async () => {
+    const loop = await site.uploadVideo(editor, { use: 'previewLoop' })
+    expect((await changeUse(loop.id, 'gallery')).use).toBe('gallery')
   })
 })

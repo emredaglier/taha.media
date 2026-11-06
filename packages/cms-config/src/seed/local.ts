@@ -252,6 +252,24 @@ async function seedWork(seeder: Seeder, work: DemoWork): Promise<boolean> {
   return true
 }
 
+/** One Gallery loop, so the demo library holds a Video of every use; nothing shows it yet. */
+async function seedGalleryLoop(seeder: Seeder): Promise<void> {
+  const { payload, log } = seeder
+  const existing = await payload.find({
+    collection: 'videos',
+    where: { use: { equals: 'gallery' } },
+    limit: 1,
+    depth: 0,
+    pagination: false,
+  })
+  if (existing.docs.length > 0) {
+    log('gallery loop: exists')
+    return
+  }
+  await uploadVideo(seeder, 'gallery', 'loop-ok.mp4', 'Galeri döngüsü')
+  log('gallery loop: created')
+}
+
 async function seedPages(seeder: Seeder): Promise<void> {
   const { payload, log } = seeder
 
@@ -336,4 +354,5 @@ export async function seedLocal(
 
   for (const work of DEMO_WORKS) await seedWork(seeder, work)
   await seedPages(seeder)
+  await seedGalleryLoop(seeder)
 }

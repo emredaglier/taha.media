@@ -1,12 +1,13 @@
 import type { Mp4Info } from './mp4'
 
-export const VIDEO_USES = ['previewLoop', 'showreel', 'main'] as const
+export const VIDEO_USES = ['previewLoop', 'showreel', 'gallery', 'main'] as const
 /** What a Video is for. Fields that reference a Video accept only the matching use. */
 export type VideoUse = (typeof VIDEO_USES)[number]
 
 export const VIDEO_USE_LABELS: Record<VideoUse, string> = {
   previewLoop: 'Önizleme döngüsü',
   showreel: 'Showreel döngüsü',
+  gallery: 'Galeri döngüsü',
   main: 'Ana video',
 }
 
@@ -33,6 +34,12 @@ export const VIDEO_LIMITS: Record<VideoUse, VideoLimits> = {
     maxFrame: { width: 1920, height: 1080, label: '1080p' },
     audio: false,
     maxBytes: 15 * MB,
+  },
+  gallery: {
+    maxSeconds: 15,
+    maxFrame: { width: 1920, height: 1080, label: '1080p' },
+    audio: false,
+    maxBytes: 10 * MB,
   },
   main: {
     maxSeconds: 180,

@@ -227,9 +227,9 @@ export interface Image {
 export interface Video {
   id: number;
   /**
-   * Önizleme döngüsü: en fazla 10 sn, 720p, sessiz, 4 MB. Showreel döngüsü: en fazla 30 sn, 1080p, sessiz, 15 MB. Ana video: en fazla 3 dk, 1080p, sesli olabilir, 60 MB.
+   * Önizleme döngüsü: en fazla 10 sn, 720p, sessiz, 4 MB. Showreel döngüsü: en fazla 30 sn, 1080p, sessiz, 15 MB. Galeri döngüsü: en fazla 15 sn, 1080p, sessiz, 10 MB. Ana video: en fazla 3 dk, 1080p, sesli olabilir, 60 MB.
    */
-  use: 'previewLoop' | 'showreel' | 'main';
+  use: 'previewLoop' | 'showreel' | 'gallery' | 'main';
   poster: number | Image;
   /**
    * Dosyadan otomatik okunur.
