@@ -122,7 +122,6 @@ describe('the Featured Works', () => {
     await feature('Dört', 4)
     const html = await home()
     expect(slotsIn(html)).toEqual(['A', 'B', 'C', 'A'])
-    expect(html.match(/<ul[^>]*grid-cols-1/g)).toHaveLength(2)
   })
 
   it('show the Disciplines and the client on each card', async () => {

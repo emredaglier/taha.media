@@ -54,9 +54,21 @@ export function Hero({ site }: { site: Site | null }) {
       <div className="relative bg-background/60 px-6 py-8">
         <h1 className="font-serif text-5xl">{OWNER_NAME}</h1>
         {site?.intro ? <p className="mt-4 max-w-xl text-lg">{site.intro}</p> : null}
-        {link && poster ? (
+        {link ? (
           <div className="mt-4">
-            <WatchWithSound provider={link.provider} id={link.id} url={link.url} poster={poster} />
+            {poster ? (
+              <WatchWithSound
+                provider={link.provider}
+                id={link.id}
+                url={link.url}
+                poster={poster}
+              />
+            ) : (
+              // The click-to-load player needs our own poster; without one it is a plain link.
+              <a href={link.url} className="underline">
+                Sesli izle
+              </a>
+            )}
           </div>
         ) : null}
       </div>

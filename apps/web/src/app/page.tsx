@@ -28,14 +28,17 @@ export default async function HomePage() {
       <Hero site={site} />
       <FeaturedWorks works={featured} />
       {about?.portrait || intro ? (
-        <section aria-labelledby="about-heading" className="grid gap-6 py-12 md:grid-cols-2">
+        <section
+          aria-labelledby="about-heading"
+          className="grid gap-6 py-12 min-[700px]:grid-cols-2"
+        >
           <h2 id="about-heading" className="sr-only">
             Hakkımda
           </h2>
           {about?.portrait ? (
             <Picture
               image={about.portrait}
-              sizes="(min-width: 768px) 50vw, 100vw"
+              sizes="(min-width: 700px) 50vw, 100vw"
               className="h-auto w-full"
             />
           ) : null}
