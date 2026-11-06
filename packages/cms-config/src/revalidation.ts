@@ -9,6 +9,7 @@ import type {
 
 import { publishedReferences, type MediaCollection, type MediaRefs } from './media-references'
 import {
+  GALLERY_TAG,
   HOME_TAG,
   MAX_TAGS_PER_REQUEST,
   REVALIDATE_SECRET_HEADER,
@@ -185,6 +186,35 @@ export function pageRevalidationHooks(
       const changed =
         doc._status === 'published' || (was !== null && (await readMain(req)) === null)
       if (changed) await notify(transport, [pageTag(slug)], req)
+      return doc
+    },
+  }
+}
+
+/** Requests that already told `web` the Gallery changed. */
+const galleryNotified = new WeakSet<PayloadRequest>()
+
+/**
+ * Hooks that tell `web` the Gallery changed: a new, changed, reordered or deleted item sends the
+ * Gallery tag and nothing else. Items have no drafts, so every save is visible at once. The admin
+ * saves every item a drag moves inside one request, so the tag is sent once per request.
+ */
+export function galleryRevalidationHooks(transport: RevalidationTransport): {
+  afterChange: CollectionAfterChangeHook
+  afterDelete: CollectionAfterDeleteHook
+} {
+  const notifyOnce = async (req: PayloadRequest) => {
+    if (galleryNotified.has(req)) return
+    galleryNotified.add(req)
+    await notify(transport, [GALLERY_TAG], req)
+  }
+  return {
+    afterChange: async ({ doc, req }) => {
+      await notifyOnce(req)
+      return doc
+    },
+    afterDelete: async ({ doc, req }) => {
+      await notifyOnce(req)
       return doc
     },
   }

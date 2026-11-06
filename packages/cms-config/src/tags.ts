@@ -17,6 +17,9 @@ export const WORKS_TAG = 'works'
 /** Home's Featured Works (GLOSSARY: Featured Work). */
 export const HOME_TAG = 'home'
 
+/** The Gallery page's items, in order (GLOSSARY: Gallery item). */
+export const GALLERY_TAG = 'gallery'
+
 /** The single-entry pages, by global slug. */
 export type PageSlug = 'site' | 'about' | 'privacy'
 
@@ -24,7 +27,7 @@ export type PageSlug = 'site' | 'about' | 'privacy'
 export const pageTag = (slug: PageSlug): string => `page:${slug}`
 
 /** What the revalidate route accepts: our own tag shapes only. */
-export const TAG_PATTERN = /^(?:works|home|work:\d+|page:(?:site|about|privacy))$/
+export const TAG_PATTERN = /^(?:works|home|gallery|work:\d+|page:(?:site|about|privacy))$/
 
 /** A notification carries at most a handful of tags; anything bigger is not from `cms`. */
 export const MAX_TAGS_PER_REQUEST = 20

@@ -42,13 +42,16 @@ describe('POST /internal/revalidate', () => {
   })
 
   it('accepts the right secret and expires each tag at once', async () => {
-    const response = await call(right, { tags: ['work:3', 'works', 'home', 'page:about'] })
+    const response = await call(right, {
+      tags: ['work:3', 'works', 'home', 'page:about', 'gallery'],
+    })
     expect(response.status).toBe(200)
     expect(nextCache.revalidated).toEqual([
       { tag: 'work:3', profile: { expire: 0 } },
       { tag: 'works', profile: { expire: 0 } },
       { tag: 'home', profile: { expire: 0 } },
       { tag: 'page:about', profile: { expire: 0 } },
+      { tag: 'gallery', profile: { expire: 0 } },
     ])
   })
 
@@ -57,6 +60,8 @@ describe('POST /internal/revalidate', () => {
     expect((await call(right, { tags: [] })).status).toBe(400)
     expect((await call(right, { tags: ['anything'] })).status).toBe(400)
     expect((await call(right, { tags: ['work:abc'] })).status).toBe(400)
+    expect((await call(right, { tags: ['gallery:1'] })).status).toBe(400)
+    expect((await call(right, { tags: ['galleries'] })).status).toBe(400)
     expect((await call(right, { tags: [42] })).status).toBe(400)
     expect(nextCache.revalidated).toEqual([])
   })

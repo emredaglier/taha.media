@@ -24,6 +24,7 @@ const counts = async () => ({
   images: (await site.cms.count({ collection: 'images' })).totalDocs,
   videos: (await site.cms.count({ collection: 'videos' })).totalDocs,
   users: (await site.cms.count({ collection: 'users' })).totalDocs,
+  gallery: (await site.cms.count({ collection: 'gallery' })).totalDocs,
 })
 
 describe('the local seed', () => {
@@ -68,6 +69,21 @@ describe('the local seed', () => {
     expect(privacy.body).toBeTruthy()
   })
 
+  it('fills the Gallery with image items and a loop, newest first', async () => {
+    const { docs } = await site.cms.find({
+      collection: 'gallery',
+      sort: '_order',
+      limit: 100,
+      depth: 1,
+    })
+    expect(docs.length).toBeGreaterThanOrEqual(3)
+    // The loop is the first demo item: created last, so it shows on top.
+    expect(docs[0]?.kind).toBe('loop')
+    expect(typeof docs[0]?.video).toBe('object')
+    expect(docs.filter((item) => item.kind === 'image').length).toBeGreaterThanOrEqual(2)
+    expect(docs.some((item) => item.caption)).toBe(true)
+  })
+
   it('creates a demo Editor that can sign in', async () => {
     const { token } = await site.cms.login({
       collection: 'users',
@@ -107,7 +123,7 @@ describe('the production seed', () => {
         }),
       ).resolves.toMatchObject({ token: expect.any(String) })
 
-      for (const collection of ['works', 'images', 'videos'] as const) {
+      for (const collection of ['works', 'images', 'videos', 'gallery'] as const) {
         expect((await prod.cms.count({ collection })).totalDocs).toBe(0)
       }
 

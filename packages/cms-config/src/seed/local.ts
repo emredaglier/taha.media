@@ -252,22 +252,43 @@ async function seedWork(seeder: Seeder, work: DemoWork): Promise<boolean> {
   return true
 }
 
-/** One Gallery loop, so the demo library holds a Video of every use; nothing shows it yet. */
-async function seedGalleryLoop(seeder: Seeder): Promise<void> {
+/** The demo Gallery as the Galeri page shows it, top first (a loop among pictures). */
+const DEMO_GALLERY: { kind: 'image' | 'loop'; caption?: string; year?: number }[] = [
+  { kind: 'loop', caption: 'Setten bir döngü', year: 2025 },
+  { kind: 'image', caption: 'İstanbul, sabah', year: 2025 },
+  { kind: 'image', caption: 'Afiş çalışması', year: 2024 },
+  { kind: 'image' },
+]
+
+/** Gallery items, only while the Gallery is empty, so a re-run never adds to it or reorders it. */
+async function seedGallery(seeder: Seeder): Promise<void> {
   const { payload, log } = seeder
-  const existing = await payload.find({
+  if ((await payload.count({ collection: 'gallery' })).totalDocs > 0) {
+    log('gallery: exists')
+    return
+  }
+  // A Gallery loop left over from an earlier seed run is reused, not uploaded again.
+  const leftover = await payload.find({
     collection: 'videos',
     where: { use: { equals: 'gallery' } },
     limit: 1,
     depth: 0,
     pagination: false,
   })
-  if (existing.docs.length > 0) {
-    log('gallery loop: exists')
-    return
+  const loop =
+    leftover.docs[0]?.id ?? (await uploadVideo(seeder, 'gallery', 'loop-ok.mp4', 'Galeri döngüsü'))
+
+  // A new item goes first, so the last one in the list is created first.
+  for (const { kind, caption, year } of [...DEMO_GALLERY].reverse()) {
+    await payload.create({
+      collection: 'gallery',
+      data:
+        kind === 'loop'
+          ? { kind, video: loop, caption, year }
+          : { kind, image: await uploadImage(seeder, caption ?? 'Galeri görseli'), caption, year },
+    })
   }
-  await uploadVideo(seeder, 'gallery', 'loop-ok.mp4', 'Galeri döngüsü')
-  log('gallery loop: created')
+  log('gallery: created')
 }
 
 async function seedPages(seeder: Seeder): Promise<void> {
@@ -355,5 +376,5 @@ export async function seedLocal(
 
   for (const work of DEMO_WORKS) await seedWork(seeder, work)
   await seedPages(seeder)
-  await seedGalleryLoop(seeder)
+  await seedGallery(seeder)
 }
