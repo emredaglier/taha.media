@@ -8,6 +8,7 @@ import {
 } from 'payload'
 
 import { editor } from '../access'
+import { guardMediaDelete } from '../media-delete'
 import { anyReferences } from '../media-references'
 import { readMp4, type Mp4Info } from '../mp4'
 import {
@@ -124,6 +125,7 @@ export const Videos: CollectionConfig = {
   },
   admin: { useAsTitle: 'filename', defaultColumns: ['filename', 'use', 'duration', 'createdAt'] },
   hooks: {
+    beforeDelete: [guardMediaDelete('videos')],
     beforeOperation: [
       ({ args, operation, req }) => {
         if ((operation === 'create' || operation === 'update') && req.file) {

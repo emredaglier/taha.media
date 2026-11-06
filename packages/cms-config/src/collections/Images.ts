@@ -4,6 +4,7 @@ import path from 'node:path'
 import type { CollectionConfig, ImageUploadFormatOptions } from 'payload'
 
 import { editor } from '../access'
+import { guardMediaDelete } from '../media-delete'
 
 // Every upload and every generated size is re-encoded to WebP. `formatOptions` is not inherited
 // from `upload` by the sizes, so each one sets it.
@@ -53,6 +54,7 @@ export const Images: CollectionConfig = {
   },
   admin: { useAsTitle: 'alt', defaultColumns: ['alt', 'filename', 'createdAt'] },
   hooks: {
+    beforeDelete: [guardMediaDelete('images')],
     beforeOperation: [
       ({ args, operation, req }) => {
         // Also on update: replacing the file of an existing record must not reuse a key either.
