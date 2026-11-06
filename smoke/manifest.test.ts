@@ -54,9 +54,11 @@ describe('parseManifest', () => {
 describe('publicRoutes', () => {
   const manifest = parseManifest(valid())
 
-  it('lists Home, About, Privacy and one page per published Work', () => {
+  it('lists Home, İşler with a filter, About, Privacy and one page per published Work', () => {
     expect(publicRoutes(manifest).map((route) => route.path)).toEqual([
       '/',
+      '/isler',
+      '/isler?disiplin=motion',
       '/hakkimda',
       '/gizlilik',
       '/isler/a',
@@ -77,6 +79,7 @@ describe('publicRoutes', () => {
   it('expects Home to show every featured Work, and the pages their seeded text', () => {
     const byPath = Object.fromEntries(publicRoutes(manifest).map((route) => [route.path, route]))
     expect(byPath['/']?.featuredTitles).toEqual(['A (canlı)'])
+    expect(byPath['/isler']?.workTitles).toEqual(['A (canlı)', 'B', 'C'])
     expect(byPath['/hakkimda']?.text).toBe('Merhaba, ben Taha.')
     expect(byPath['/gizlilik']?.text).toBe('Gizlilik Politikası')
   })

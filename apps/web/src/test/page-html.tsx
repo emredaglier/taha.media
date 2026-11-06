@@ -9,6 +9,7 @@
  * Routes come from the real `app/**\/page.tsx` files, so an unknown path is not-found here for
  * the same reason it is in Next. No test starts Next (CLAUDE.md).
  */
+import type { Discipline } from '@taha/cms-config'
 import { createTestSite, type TestSite } from '@taha/cms-config/testing'
 import type { ComponentType, ReactElement } from 'react'
 import { prerender } from 'react-dom/static'
@@ -115,14 +116,29 @@ export async function renderRoute(url: string): Promise<RouteOutcome> {
   }
 }
 
+export type WorkFields = {
+  title: string
+  slug?: string
+  year?: number
+  disciplines?: Discipline[]
+  /** The id of a Video with use `previewLoop`. */
+  previewLoop?: number
+}
+
 export type PageSite = {
   site: TestSite
+  editor: Awaited<ReturnType<TestSite['createEditor']>>
   /** Publishes (or saves as a draft) a global as the Editor does; its page then renders it. */
   publishGlobal: (
     slug: 'site' | 'about' | 'privacy',
     data: Record<string, unknown>,
     status?: 'draft' | 'published',
   ) => Promise<unknown>
+  /**
+   * Publishes a Work with a cover and an image as main media. The slug defaults to the title,
+   * lower-cased and dashed. Works list in the order they were published.
+   */
+  publishWork: (fields: WorkFields) => Promise<unknown>
   render: typeof renderRoute
   close: () => Promise<void>
 }
@@ -132,8 +148,10 @@ export async function startPageSite(): Promise<PageSite> {
   const site = await createTestSite()
   Object.assign(process.env, site.webEnv)
   const editor = await site.createEditor()
+  let coverId: number | undefined
   return {
     site,
+    editor,
     publishGlobal: (slug, data, status = 'published') =>
       site.cms.updateGlobal({
         slug,
@@ -142,6 +160,23 @@ export async function startPageSite(): Promise<PageSite> {
         user: editor,
         overrideAccess: false,
       }),
+    publishWork: async (fields) => {
+      coverId ??= (await site.uploadImage(editor, { alt: 'Kapak' })).id
+      return site.cms.create({
+        collection: 'works',
+        data: {
+          disciplines: ['kurgu'],
+          year: 2025,
+          slug: fields.title.toLowerCase().replaceAll(' ', '-'),
+          cover: coverId,
+          mainMedia: { kind: 'image', image: coverId },
+          ...fields,
+          _status: 'published',
+        },
+        user: editor,
+        overrideAccess: false,
+      })
+    },
     render: renderRoute,
     close: () => site.close(),
   }

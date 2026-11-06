@@ -157,7 +157,9 @@ test.describe('public routes', () => {
       const failures = await visit(route.path)
       const main = page.locator('main').first()
       await expect(main).toBeVisible()
-      for (const title of route.featuredTitles ?? []) await expect(main).toContainText(title)
+      for (const title of [...(route.featuredTitles ?? []), ...(route.workTitles ?? [])]) {
+        await expect(main).toContainText(title)
+      }
       if (route.text) await expect(main).toContainText(route.text)
       if (route.path.startsWith('/isler/')) {
         await expect(page.locator('h1').first()).toContainText(route.text ?? '')
@@ -167,7 +169,9 @@ test.describe('public routes', () => {
       // The server HTML already holds the content: the pages are prerendered (ADR-0012), and
       // nothing is hidden until JavaScript hydrates.
       const html = await (await request.get(route.path)).text()
-      for (const title of route.featuredTitles ?? []) expect(html).toContain(asHtml(title))
+      for (const title of [...(route.featuredTitles ?? []), ...(route.workTitles ?? [])]) {
+        expect(html).toContain(asHtml(title))
+      }
       if (route.text) expect(html).toContain(asHtml(route.text))
     })
   }

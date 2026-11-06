@@ -84,6 +84,8 @@ export type PublicRoute = {
   text?: string
   /** Home only: the title of every Featured Work. */
   featuredTitles?: string[]
+  /** İşler only: the title of every published Work. */
+  workTitles?: string[]
 }
 
 /** Every public route of the site, with what must be on it. */
@@ -95,6 +97,10 @@ export function publicRoutes(manifest: SmokeManifest): PublicRoute[] {
         .filter((work) => work.featured)
         .map((work) => expectedTitle(manifest, work)),
     },
+    { path: '/isler', workTitles: manifest.works.map((work) => expectedTitle(manifest, work)) },
+    // The manifest holds no Disciplines, so this one checks that the filter page loads and shows
+    // its filter link.
+    { path: '/isler?disiplin=motion', text: 'Motion' },
     { path: '/hakkimda', text: manifest.about.text },
     { path: '/gizlilik', text: manifest.privacy.text },
     ...manifest.works.map((work) => ({
