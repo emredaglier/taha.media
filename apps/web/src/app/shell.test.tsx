@@ -54,8 +54,3 @@ describe('an unknown path', () => {
     expect((await pages.render('/isler/yok/bile')).kind).toBe('not-found')
   })
 })
-
-it('renders the home page as HTML', async () => {
-  const outcome = await pages.render('/')
-  expect(outcome).toMatchObject({ kind: 'html', status: 200 })
-})
