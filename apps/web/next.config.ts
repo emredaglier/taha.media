@@ -1,7 +1,14 @@
 import path from 'node:path'
 
 import { withPayload } from '@payloadcms/next/withPayload'
+import { sentryWebpackPlugin } from '@sentry/webpack-plugin'
 import type { NextConfig } from 'next'
+
+// Source maps go to Sentry only in a CI build that has the secret auth token, an org and a
+// project; without all three nothing is generated or uploaded (frontend-handoff.md). The token
+// is never baked into the image: it is only read here, at build time.
+const { SENTRY_AUTH_TOKEN, SENTRY_ORG, SENTRY_PROJECT } = process.env
+const uploadSourceMaps = Boolean(SENTRY_AUTH_TOKEN && SENTRY_ORG && SENTRY_PROJECT)
 
 const nextConfig: NextConfig = {
   // Workspace packages ship TypeScript source; list each one web imports.
@@ -18,6 +25,28 @@ const nextConfig: NextConfig = {
   // deployment id for skew protection. CI sets them (#17); both may be empty.
   ...(process.env.ASSET_PREFIX ? { assetPrefix: process.env.ASSET_PREFIX } : {}),
   ...(process.env.DEPLOYMENT_ID ? { deploymentId: process.env.DEPLOYMENT_ID } : {}),
+  ...(uploadSourceMaps
+    ? {
+        productionBrowserSourceMaps: true,
+        webpack: (config, { isServer, dev }) => {
+          // Browser bundles of a production build only: Sentry is browser-side only.
+          if (!isServer && !dev) {
+            config.plugins.push(
+              sentryWebpackPlugin({
+                authToken: SENTRY_AUTH_TOKEN,
+                org: SENTRY_ORG,
+                project: SENTRY_PROJECT,
+                release: { name: process.env.DEPLOYMENT_ID || undefined },
+                // Uploaded, then removed, so the maps never ship in the image.
+                sourcemaps: { filesToDeleteAfterUpload: ['.next/static/**/*.map'] },
+                telemetry: false,
+              }),
+            )
+          }
+          return config
+        },
+      }
+    : {}),
 }
 
 // web has no admin and no API routes (ADR-0001); withPayload is only here to bundle Payload's

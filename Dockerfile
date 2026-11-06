@@ -36,10 +36,24 @@ ENV NEXT_STANDALONE=1
 ARG ASSET_PREFIX=""
 ARG DEPLOYMENT_ID=""
 ENV ASSET_PREFIX=${ASSET_PREFIX} DEPLOYMENT_ID=${DEPLOYMENT_ID}
+# Public build-time variables of the web layout (#35, infra/cloudflare/frontend-handoff.md): the
+# Cloudflare Web Analytics site token and the Sentry DSN (both public by design), and the Sentry
+# org and project for source-map upload. All may be empty: the beacon and Sentry then stay off.
+ARG NEXT_PUBLIC_CLOUDFLARE_BEACON_TOKEN=""
+ARG NEXT_PUBLIC_SENTRY_DSN=""
+ARG SENTRY_ORG=""
+ARG SENTRY_PROJECT=""
+ENV NEXT_PUBLIC_CLOUDFLARE_BEACON_TOKEN=${NEXT_PUBLIC_CLOUDFLARE_BEACON_TOKEN} \
+    NEXT_PUBLIC_SENTRY_DSN=${NEXT_PUBLIC_SENTRY_DSN} \
+    SENTRY_ORG=${SENTRY_ORG} SENTRY_PROJECT=${SENTRY_PROJECT}
 RUN mkdir -p apps/web/public apps/cms/public
 # web builds with no database: pages must not read content at build time (infra/README.md,
-# "What the frontend must provide").
-RUN pnpm --filter @taha/web build
+# "What the frontend must provide"). The Sentry auth token is a BuildKit secret (`--secret
+# id=sentry_auth_token`), never a build argument, so it stays out of the image and its history;
+# without it the build uploads no source maps.
+RUN --mount=type=secret,id=sentry_auth_token \
+    SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token 2>/dev/null || true)" \
+    pnpm --filter @taha/web build
 # cms's own `build` script is only a typecheck (so `pnpm build` stays light); the image needs the
 # real Next build. The config loads at build time, so it gets throwaway settings that never leave
 # this stage.

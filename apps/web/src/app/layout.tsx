@@ -1,8 +1,16 @@
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 
+import { Observability } from '../components/Observability'
 import { SiteFooter } from '../components/SiteFooter'
 import { SiteHeader } from '../components/SiteHeader'
+import {
+  beaconAttributes,
+  beaconToken,
+  releaseId,
+  sentryDsn,
+  sentryOptions,
+} from '../lib/observability'
 import { isPreviewInstance } from '../lib/preview'
 import { SITE_NAME, SITE_ORIGIN } from '../lib/site'
 import './globals.css'
@@ -16,6 +24,16 @@ export const metadata: Metadata = {
 
 /** The shell every public route renders in: skip link, header, `main`, footer. */
 export default function RootLayout({ children }: { children: ReactNode }) {
+  const sentry = sentryOptions({
+    dsn: sentryDsn(),
+    preview: isPreviewInstance(),
+    release: releaseId(),
+  })
+  const beacon = beaconAttributes({
+    token: beaconToken(),
+    production: process.env.NODE_ENV === 'production',
+    preview: isPreviewInstance(),
+  })
   return (
     <html lang="tr">
       <body className="flex min-h-dvh flex-col bg-background font-sans text-text">
@@ -30,6 +48,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           {children}
         </main>
         <SiteFooter />
+        {sentry ? <Observability options={sentry} /> : null}
+        {beacon ? <script defer {...beacon} /> : null}
       </body>
     </html>
   )

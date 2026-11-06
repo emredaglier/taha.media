@@ -12,6 +12,7 @@
   "dependencies": {
     "@payloadcms/db-sqlite": "3.90.2",
     "@payloadcms/next": "3.90.2",
+    "@sentry/browser": "11.9.0",
     "@taha/cms-config": "workspace:*",
     "@tailwindcss/postcss": "4.3.3",
     "libsql": "0.4.7",
@@ -25,6 +26,7 @@
   },
   "devDependencies": {
     "@libsql/client": "0.14.0",
+    "@sentry/webpack-plugin": "11.9.0",
     "@types/node": "24.19.1",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
