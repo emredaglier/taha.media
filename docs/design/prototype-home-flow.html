@@ -1,0 +1,392 @@
+<!doctype html>
+<!--
+  PROTOTYPE, throwaway. Not production code.
+  Question: does the Home "FLOW" (docs/design/flow/FLOW #1–#13) work when it is actually scrolled?
+  Fidelity: grey-box wireframe. Every media box is a video (timecode runs while it is in view).
+  One flow, not variants: the owner drew one design. The yellow bar toggles the open motion choices
+  (scrub vs snap, parallax speeds), jumps to each FLOW frame and overlays the matching PNG.
+  Open by double-clicking. Needs internet for GSAP from cdnjs.
+-->
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PROTOTİP · Ana sayfa akışı</title>
+<style>
+  :root{
+    --ink:#050505; --grey:#171717; --fg:#f2f2f2; --mute:#9a9a9a;
+    --box:#2a2a2a; --boxline:#4d4d4d;
+    --serif:"Times New Roman",Times,serif;            /* stand-in for the display serif */
+    --sans:"Helvetica Neue",Helvetica,Arial,sans-serif; /* stand-in for the grotesk */
+    --mono:ui-monospace,Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{background:var(--ink);color:var(--fg)}
+  body{font-family:var(--sans);background:var(--ink);-webkit-font-smoothing:antialiased}
+  a{color:inherit}
+  button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+
+  /* ---------- header ---------- */
+  .hdr{position:fixed;inset:0 0 auto 0;z-index:50;height:8.6vh;min-height:52px;padding:0 2.1vw;
+       display:flex;justify-content:space-between;align-items:center;color:#fff;mix-blend-mode:difference;pointer-events:none}
+  .hdr a,.hdr button{pointer-events:auto;text-decoration:none}
+  .logo b{font:800 clamp(14px,1.15vw,22px)/1 var(--sans);letter-spacing:-.01em}
+  .logo i{font:400 clamp(15px,1.3vw,24px)/1 var(--serif);margin-left:.35em}
+  .menu-btn{font:400 clamp(15px,1.3vw,24px)/1 var(--serif);letter-spacing:.01em}
+
+  .menu{position:fixed;inset:0;z-index:40;background:#222;display:flex;flex-direction:column;justify-content:center;padding:0 6vw;gap:4vh}
+  .menu[hidden]{display:none}
+  .menu nav{display:flex;flex-direction:column;gap:1vh}
+  .menu nav a{font:400 clamp(40px,7vw,120px)/1 var(--serif);text-decoration:none}
+  .wf-note{font:12px/1.4 var(--mono);color:#111;background:#ffd84d;padding:6px 8px;border-radius:4px;align-self:flex-start}
+
+  /* ---------- media placeholder (every one is a video) ---------- */
+  .media{position:relative;display:block;background:var(--box);overflow:hidden;container-type:inline-size}
+  .media .x{position:absolute;inset:0;width:100%;height:100%}
+  .media line{stroke:var(--boxline);stroke-width:1;vector-effect:non-scaling-stroke}
+  .media .cap{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;gap:1.2em;
+       padding:.5em .8em;background:#000a;border-radius:3px;font:600 clamp(7px,1.5cqw,13px)/1 var(--mono);letter-spacing:.04em;color:#c4c4c4;white-space:nowrap}
+  .media .bar{position:absolute;left:0;right:0;bottom:0;height:3px;background:#ffffff14;display:block}
+  .media .bar i{display:block;height:100%;width:0;background:#c4c4c4}
+  .media.paused .tc::before{content:"❚❚ "}
+
+  /* ---------- scene: showreel + hero text + statement (static layout first) ---------- */
+  .scene{position:relative;background:var(--ink)}
+  .reel{width:100%;height:100vh}
+  .hero-text{position:absolute;inset:0 0 auto 0;height:100vh;pointer-events:none;z-index:3}
+  .name{position:absolute;left:2.2vw;bottom:5vh;font:400 clamp(44px,7vw,140px)/.9 var(--serif);letter-spacing:-.02em}
+  .intro{position:absolute;left:62.5vw;right:2.5vw;bottom:4.3vh;font:400 clamp(15px,2.3vw,44px)/1.1 var(--serif);letter-spacing:-.01em}
+  .copy{position:absolute;left:2.7vw;bottom:2.6vh;font:400 clamp(10px,.72vw,14px)/1 var(--sans);opacity:.85}
+  .statement{display:flex;justify-content:center;align-items:center;gap:1.8vw;min-height:100vh;
+       font:400 3.4vw/1 var(--serif);letter-spacing:-.015em;white-space:nowrap}
+  .slot{display:block;width:9.9vw;aspect-ratio:2.03;flex:none}
+  .slot .media{width:100%;height:100%}
+
+  /* ---------- works: three featured cards ---------- */
+  .works{position:relative;height:170vh;background:var(--grey);z-index:5}
+  .card{position:absolute;display:block;text-decoration:none}
+  .card .lbl{display:flex;justify-content:space-between;gap:1vw;margin-bottom:.7vw;
+       font:700 clamp(10px,.88vw,17px)/1 var(--sans);text-transform:uppercase;letter-spacing:.01em;white-space:nowrap}
+  .card .client{color:var(--mute)}
+  /* tops = FLOW #10 positions + 30vh, because at the section's midpoint its top sits 30vh above the viewport */
+  .card-a{left:4.9vw;top:60vh;width:35.1vw;z-index:1}
+  .card-a .media{aspect-ratio:2.13}
+  .card-b{left:22.5vw;top:59.7vh;width:44.4vw;z-index:2}
+  .card-b .media{aspect-ratio:1.98}
+  .card-c{left:71.8vw;top:52.6vh;width:24.7vw;z-index:1}
+  .card-c .media{aspect-ratio:.6}
+
+  /* ---------- about ---------- */
+  .about{position:relative;min-height:100vh;background:var(--grey);padding:15.3vh 0 14vh;display:flex;flex-direction:column;align-items:center;z-index:5}
+  .portrait{width:35.3vw;aspect-ratio:801/871}
+  .bio{position:relative;z-index:1;width:26.5vw;margin-top:-6.3vh;text-align:center;font:400 clamp(14px,1.06vw,20px)/1.4 var(--sans)}
+
+  /* ---------- motion layout (added by JS on wide screens without reduced motion) ---------- */
+  .motion .scene{height:100vh;overflow:hidden}
+  .motion .reel{position:absolute;left:0;top:0;width:100%;height:100%;z-index:2}
+  .motion .statement{position:absolute;inset:0;min-height:0;z-index:1}
+  .motion .slot .media{visibility:hidden}
+  .motion .works{margin-top:-100vh}
+
+  /* ---------- phones: not designed yet, static stack ---------- */
+  @media (max-width:699px){
+    .hero-text{display:flex;flex-direction:column;justify-content:flex-end;gap:14px;padding:0 16px 24px}
+    .name,.intro,.copy{position:static}
+    .statement{white-space:normal;flex-wrap:wrap;font-size:9vw;line-height:1.1;padding:20vh 16px;min-height:0;text-align:center}
+    .slot{width:30vw}
+    .works{height:auto;padding:12vh 16px;display:flex;flex-direction:column;gap:9vh}
+    .card{position:static;width:100%!important}
+    .portrait{width:78vw}
+    .bio{width:auto;margin:-5vh 16px 0}
+  }
+
+  /* ---------- prototype controls (not part of the design) ---------- */
+  .hud{position:fixed;left:50%;bottom:12px;transform:translateX(-50%);z-index:100;max-width:calc(100vw - 24px);
+       background:#ffd84d;color:#111;font:12px/1.3 var(--mono);border-radius:10px;padding:8px 10px;box-shadow:0 6px 24px #0008;display:flex;flex-direction:column;gap:6px}
+  .hud[hidden]{display:none}
+  .hud-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .hud button{background:#111;color:#ffd84d;border-radius:5px;padding:3px 7px;font:inherit}
+  .hud button[aria-pressed="true"]{background:#fff;color:#111;outline:2px solid #111}
+  .hud .fr{min-width:26px}
+  .hud-note{max-width:640px}
+  .hud-par[hidden]{display:none}
+  .hud-par label{display:flex;gap:6px;align-items:center}
+  .hud-par input{width:110px}
+  #ref{position:fixed;inset:0;width:100vw;height:100vh;object-fit:fill;opacity:.5;z-index:90;pointer-events:none}
+  #ref[hidden]{display:none}
+</style>
+</head>
+<body>
+
+<header class="hdr">
+  <a class="logo" href="#top"><b>TAHA</b><i>creative director</i></a>
+  <button class="menu-btn" aria-expanded="false" aria-controls="menu">MENU</button>
+</header>
+
+<div id="menu" class="menu" hidden>
+  <nav aria-label="Ana menü"><a href="#works">İşler</a><a href="#works">Galeri</a><a href="#about">Hakkımda</a></nav>
+  <p class="wf-note">Each item opens its own page (/isler, /galeri, /hakkimda), not built in this prototype.</p>
+</div>
+
+<main>
+  <div class="scene" id="top">
+    <figure class="media reel" data-kind="SHOWREEL · ≤30 sn" data-len="30" aria-label="Showreel (video yer tutucu)"></figure>
+    <div class="hero-text">
+      <h1 class="name">Taha Çiftçi</h1>
+      <p class="intro">Taha is a hybrid production company fusing high-end commercial work with a drive to explore the unconventional.</p>
+      <small class="copy">© Taha Çiftçi. All rights reserved.</small>
+    </div>
+    <div class="statement">
+      <span class="w w-l">Quisque nunc neque,</span>
+      <span class="slot"><span class="media mini" data-kind="SHOWREEL" data-len="30" aria-hidden="true"></span></span>
+      <span class="w w-r">lementum placerat ligula.</span>
+    </div>
+  </div>
+
+  <section class="works" id="works" aria-label="Öne çıkan işler">
+    <a class="card card-a" data-k="a" href="#works">
+      <div class="lbl"><span lang="en">Motion design * Editorial</span><span class="client">Fokus +</span></div>
+      <figure class="media" data-kind="ÖNİZLEME · ≤10 sn" data-len="10"></figure>
+    </a>
+    <a class="card card-b" data-k="b" href="#works">
+      <div class="lbl"><span lang="en">Editorial * Graphic design * Motion</span><span class="client" lang="en">Freelance</span></div>
+      <figure class="media" data-kind="ÖNİZLEME · ≤10 sn" data-len="10"></figure>
+    </a>
+    <a class="card card-c" data-k="c" href="#works">
+      <div class="lbl"><span lang="en">Video edit</span><span class="client">El Birliği Vakfı</span></div>
+      <figure class="media" data-kind="ÖNİZLEME 9:16" data-len="10"></figure>
+    </a>
+  </section>
+
+  <section class="about" id="about" aria-label="Hakkımda">
+    <figure class="media portrait" data-kind="PORTRE · video?" data-len="10"></figure>
+    <div class="bio">
+      <p>Placeholder bio: Taha's own text goes here. Who he is, what he makes, who he works with. Three or four sentences, centred, overlapping the bottom of the portrait.</p>
+    </div>
+  </section>
+</main>
+
+<aside class="hud" aria-label="Prototype controls">
+  <div class="hud-row">
+    <strong>FLOW <span id="hud-frame">#1</span></strong>
+    <span id="hud-pct">0%</span>
+    <span id="hud-mode"></span>
+  </div>
+  <div class="hud-row" id="hud-frames"></div>
+  <div class="hud-note" id="hud-note"></div>
+  <div class="hud-row">
+    <button id="t-ref" aria-pressed="false" title="O">Overlay FLOW png</button>
+    <button id="t-snap" aria-pressed="false">Snap</button>
+    <button id="t-static" aria-pressed="false">Static fallback</button>
+    <button id="t-markers" aria-pressed="false">Markers</button>
+    <button id="t-par" aria-pressed="false">Parallax speeds</button>
+    <span>← → frames · H hides this bar</span>
+  </div>
+  <div class="hud-row hud-par" id="hud-par" hidden>
+    <label>A <input type="range" min="0.2" max="1.8" step="0.05" data-k="a"><output></output></label>
+    <label>B <input type="range" min="0.2" max="1.8" step="0.05" data-k="b"><output></output></label>
+    <label>C <input type="range" min="0.2" max="1.8" step="0.05" data-k="c"><output></output></label>
+  </div>
+</aside>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+const $$ = (s) => [...document.querySelectorAll(s)];
+const q = new URLSearchParams(location.search);
+const FORCE_STATIC = q.has('static'), SNAP = q.has('snap'), MARKERS = q.has('markers');
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const NOTES = [
+  'Showreel full-bleed; name and intro over the video.',
+  'Reel letterboxes to 74% of the height; black band at the top.',
+  'Name and intro start sliding down.',
+  'Reel shrinks to 72% width, centred; the text is leaving.',
+  'Reel at 30% width, centred; the text is gone.',
+  'Reel lands in the gap in the sentence. The words sliding in from the sides is my guess.',
+  'The grey section starts covering the pinned sentence.',
+  'Grey is 42% of the way up.',
+  'Cards enter at three speeds (A 0.6×, B 1×, C 0.85× are guesses; FLOW 9–12 don\'t agree on one speed per card, so try the sliders).',
+  'Cards overlap and B covers A. The header blending over the cards (difference) is a guess.',
+  'Cards leave at different speeds and pass under the header.',
+  'Empty grey. The transition into About isn\'t drawn.',
+  'About: portrait (video?) with the bio overlapping its bottom.'
+];
+const speeds = { a: 0.6, b: 1.0, c: 0.85 };
+
+/* ---------- media placeholders: a running timecode shows "video plays here" ---------- */
+const media = $$('.media').map((el) => {
+  el.innerHTML = '<svg class="x" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><line x1="0" y1="0" x2="100" y2="100"/><line x1="100" y1="0" x2="0" y2="100"/></svg>' +
+    '<span class="cap"><span>▶ ' + el.dataset.kind + '</span><span class="tc">' + (reduced ? 'POSTER' : '00:00:00') + '</span></span><span class="bar"><i></i></span>';
+  return { el, len: +el.dataset.len || 10, t: Math.random() * 4, on: false, tc: el.querySelector('.tc'), bar: el.querySelector('.bar i'), lastF: -1 };
+});
+const io = new IntersectionObserver((ents) => ents.forEach((e) => {
+  const m = media.find((x) => x.el === e.target);
+  m.on = e.isIntersecting && !reduced;
+  m.el.classList.toggle('paused', !m.on && !reduced);
+}));
+media.forEach((m) => io.observe(m.el));
+let last = performance.now();
+const pad = (n) => String(n).padStart(2, '0');
+(function tick(now) {
+  const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  for (const m of media) {
+    if (!m.on) continue;
+    m.t = (m.t + dt) % m.len;
+    const f = Math.floor(m.t * 25);
+    if (f === m.lastF) continue;
+    m.lastF = f;
+    const s = Math.floor(m.t);
+    m.tc.textContent = pad(Math.floor(s / 60)) + ':' + pad(s % 60) + ':' + pad(f % 25);
+    m.bar.style.width = (m.t / m.len * 100) + '%';
+  }
+  requestAnimationFrame(tick);
+})(last);
+
+/* ---------- menu ---------- */
+const menuBtn = $('.menu-btn'), menu = $('#menu');
+function setMenu(open) {
+  menu.hidden = !open; menuBtn.setAttribute('aria-expanded', open); menuBtn.textContent = open ? 'KAPAT' : 'MENU';
+}
+menuBtn.addEventListener('click', () => setMenu(menu.hidden));
+menu.addEventListener('click', (e) => { if (e.target.closest('a')) setMenu(false); });
+addEventListener('keydown', (e) => { if (e.key === 'Escape' && !menu.hidden) { setMenu(false); menuBtn.focus(); } });
+
+/* ---------- scroll choreography ---------- */
+gsap.registerPlugin(ScrollTrigger);
+const scene = $('.scene'), reel = $('.reel'), heroText = $('.hero-text'), slot = $('.slot'), stmt = $('.statement');
+const works = $('.works'), about = $('.about');
+let motionOn = false, frameY = [];
+const W = () => innerWidth, H = () => innerHeight;
+const centred = (f) => ({ left: () => (W() - W() * f) / 2, top: () => (H() - W() * f * 9 / 16) / 2, width: () => W() * f, height: () => W() * f * 9 / 16 });
+const slotRect = () => { const s = slot.getBoundingClientRect(), p = scene.getBoundingClientRect(); return { x: s.left - p.left, y: s.top - p.top, w: s.width, h: s.height }; };
+const docTop = (el) => el.getBoundingClientRect().top + scrollY;
+
+const mm = gsap.matchMedia();
+mm.add({
+  motion: '(min-width: 700px) and (prefers-reduced-motion: no-preference)',
+  still: '(max-width: 699px), (prefers-reduced-motion: reduce)'
+}, (ctx) => {
+  if (!ctx.conditions.motion || FORCE_STATIC) {
+    motionOn = false;
+    requestAnimationFrame(computeFrames);
+    return;
+  }
+  motionOn = true;
+  document.documentElement.classList.add('motion');
+
+  // Scenes 1–6: the reel is pinned and travels from full-bleed into the sentence. 10 timeline units = 400% scroll.
+  const tl = gsap.timeline({
+    defaults: { ease: 'none' },
+    scrollTrigger: {
+      id: 'flow', trigger: scene, pin: true, start: 'top top', end: '+=400%', scrub: 0.6, invalidateOnRefresh: true, markers: MARKERS,
+      snap: SNAP ? { snapTo: 'labelsDirectional', duration: { min: 0.25, max: 0.8 }, delay: 0.05, ease: 'power2.inOut' } : false
+    }
+  });
+  tl.addLabel('f1', 0)
+    .to(reel, { top: () => H() * 0.146, height: () => H() * 0.74, duration: 1.5, ease: 'power1.inOut' }, 0)
+    .addLabel('f2', 1.5)
+    .to(heroText, { y: () => H() * 0.07, duration: 2.2 }, 0)
+    .addLabel('f3', 2.2)
+    .to(reel, { ...centred(0.716), duration: 1.8, ease: 'power1.inOut' }, 2.2)
+    .to(heroText, { y: () => H() * 0.16, duration: 1.8 }, 2.2)
+    .addLabel('f4', 4)
+    .to(reel, { ...centred(0.299), duration: 1.5, ease: 'power1.inOut' }, 4)
+    .to(heroText, { y: () => H() * 0.5, duration: 1.5, ease: 'power1.in' }, 4)
+    .addLabel('f5', 5.5)
+    .to(reel, { left: () => slotRect().x, top: () => slotRect().y, width: () => slotRect().w, height: () => slotRect().h, duration: 1.6, ease: 'power2.inOut' }, 5.5)
+    .fromTo('.w-l', { x: () => -W() * 0.04, autoAlpha: 0 }, { x: 0, autoAlpha: 1, duration: 1, ease: 'power2.out' }, 6.3)
+    .fromTo('.w-r', { x: () => W() * 0.04, autoAlpha: 0 }, { x: 0, autoAlpha: 1, duration: 1, ease: 'power2.out' }, 6.3)
+    .addLabel('f6', 7.5)
+    .to({}, { duration: 2.5 }, 7.5) // hold: the grey works section scrolls up over the pinned sentence (it has margin-top: -100vh)
+    .addLabel('end', 10);
+
+  // Scenes 9–12: each card moves at its own speed (1 = page speed).
+  const L = () => works.offsetHeight + H();
+  $$('.card').forEach((card) => {
+    const k = () => speeds[card.dataset.k];
+    gsap.fromTo(card, { y: () => (k() - 1) * L() / 2 }, {
+      y: () => -(k() - 1) * L() / 2, ease: 'none',
+      scrollTrigger: { trigger: works, start: 'top bottom', end: 'bottom top', scrub: true, invalidateOnRefresh: true, markers: MARKERS }
+    });
+  });
+  gsap.fromTo('.card-b', { x: () => W() * 0.026 }, { x: 0, ease: 'none', scrollTrigger: { trigger: works, start: 'top bottom', end: 'center center', scrub: true, invalidateOnRefresh: true } });
+
+  return () => document.documentElement.classList.remove('motion');
+});
+
+function computeFrames() {
+  const st = ScrollTrigger.getById('flow');
+  if (motionOn && st) {
+    const at = (t) => st.start + (st.end - st.start) * t / 10;
+    const mid = docTop(works) + works.offsetHeight / 2 - H() / 2;
+    frameY = [at(0), at(1.5), at(2.2), at(4), at(5.5), at(7.5), at(7.5 + 2.5 * 0.13), at(7.5 + 2.5 * 0.42), at(7.5 + 2.5 * 0.784),
+              mid, mid + H() * 0.3, mid + H() * 0.55, docTop(about)];
+  } else {
+    const s = docTop(stmt) + stmt.offsetHeight / 2 - H() / 2, w = docTop(works);
+    frameY = [0, 0, 0, 0, 0, s, s, s, w - H() * 0.2, w + H() * 0.2, w + H() * 0.5, w + works.offsetHeight - H() * 0.5, docTop(about)];
+  }
+  frameY = frameY.map((y) => Math.round(y));
+  updateHud();
+}
+ScrollTrigger.addEventListener('refresh', computeFrames);
+addEventListener('load', computeFrames);
+
+/* ---------- HUD ---------- */
+const hud = $('.hud'), ref = Object.assign(document.createElement('img'), { id: 'ref', alt: '', hidden: true });
+document.body.append(ref);
+let cur = 0, refOn = false;
+$('#hud-frames').innerHTML = NOTES.map((_, i) => '<button class="fr" data-i="' + i + '">' + (i + 1) + '</button>').join('');
+$('#hud-frames').addEventListener('click', (e) => { const b = e.target.closest('.fr'); if (b) go(+b.dataset.i); });
+function go(i) {
+  i = Math.max(0, Math.min(frameY.length - 1, i));
+  scrollTo({ top: frameY[i], behavior: 'instant' });
+  cur = i; updateHud(true);
+}
+function nearest() {
+  const y = scrollY + 2; let n = 0;
+  frameY.forEach((fy, i) => { if (fy <= y) n = i; });
+  return n;
+}
+function updateHud(forced) {
+  if (!forced) cur = nearest();
+  const max = document.documentElement.scrollHeight - H();
+  $('#hud-frame').textContent = '#' + (cur + 1);
+  $('#hud-pct').textContent = Math.round(scrollY / Math.max(1, max) * 100) + '%';
+  $('#hud-mode').textContent = motionOn ? ('motion · ' + (SNAP ? 'snap' : 'scrub')) : 'static (phone / reduced motion / ?static)';
+  $('#hud-note').textContent = NOTES[cur];
+  $$('.fr').forEach((b, i) => b.setAttribute('aria-pressed', i === cur));
+  if (refOn) { ref.src = 'flow/FLOW%20%23' + (cur + 1) + '.png'; }
+}
+let ticking = false;
+addEventListener('scroll', () => { if (!ticking) { ticking = true; requestAnimationFrame(() => { ticking = false; updateHud(); }); } }, { passive: true });
+
+function reloadWith(key, on) { const p = new URLSearchParams(location.search); on ? p.set(key, '1') : p.delete(key); location.search = p.toString(); }
+const tRef = $('#t-ref');
+function setRef(on) { refOn = on; ref.hidden = !on; tRef.setAttribute('aria-pressed', on); updateHud(true); }
+tRef.addEventListener('click', () => setRef(!refOn));
+$('#t-snap').setAttribute('aria-pressed', SNAP);
+$('#t-snap').addEventListener('click', () => reloadWith('snap', !SNAP));
+$('#t-static').setAttribute('aria-pressed', FORCE_STATIC);
+$('#t-static').addEventListener('click', () => reloadWith('static', !FORCE_STATIC));
+$('#t-markers').setAttribute('aria-pressed', MARKERS);
+$('#t-markers').addEventListener('click', () => reloadWith('markers', !MARKERS));
+const par = $('#hud-par');
+$('#t-par').addEventListener('click', (e) => { par.hidden = !par.hidden; e.currentTarget.setAttribute('aria-pressed', !par.hidden); });
+par.querySelectorAll('input').forEach((inp) => {
+  const out = inp.nextElementSibling;
+  inp.value = speeds[inp.dataset.k]; out.textContent = (+inp.value).toFixed(2) + '×';
+  inp.addEventListener('input', () => { speeds[inp.dataset.k] = +inp.value; out.textContent = (+inp.value).toFixed(2) + '×'; ScrollTrigger.refresh(); });
+});
+addEventListener('keydown', (e) => {
+  if (e.target.closest('input,textarea,[contenteditable]')) return;
+  if (e.key === 'ArrowRight') { e.preventDefault(); go(cur + 1); }
+  if (e.key === 'ArrowLeft') { e.preventDefault(); go(cur - 1); }
+  if (e.key === 'h' || e.key === 'H') hud.hidden = !hud.hidden;
+  if (e.key === 'o' || e.key === 'O') setRef(!refOn);
+});
+window.__proto = { get frames() { return frameY; }, go, setRef };
+</script>
+</body>
+</html>

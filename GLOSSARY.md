@@ -20,6 +20,20 @@ _Avoid_: Highlight, selected, pinned
 Taha's reel of his best work: a short silent loop at the top of the home page, plus a link to the full-length version.
 _Avoid_: Reel, hero video, intro video
 
+**Gallery item** (Galeri öğesi):
+A single image or short silent loop of Taha's visual work outside client projects, such as photography or a personal or experimental piece. It is not a Work: it has no page of its own, only an optional caption and year.
+_Avoid_: Photo, post, gallery Work, shot
+
+**Gallery** (Galeri):
+The collection of all Gallery items, in the order the Editor sets.
+_Avoid_: Archive, playground, lab, moodboard
+
 **Editor**:
 A person who manages content in the admin. Every Editor has the same rights.
 _Avoid_: Admin, user, author
+
+### Presentation
+
+**Preview loop** (Önizleme):
+A short, silent clip of a Work that plays on its card while it is in view or hovered, and stands in for the cover image.
+_Avoid_: Teaser, hover video, thumbnail video
