@@ -60,6 +60,8 @@ describe('the published notice', () => {
       textNode(' ve '),
       linkNode('https://example.com/yeni', 'yeni sekme', true),
       textNode('.'),
+      { type: 'linebreak', version: 1 },
+      textNode('Yeni satır.'),
     ]),
     block('heading', [textNode('Veriler')], { tag: 'h2' }),
     block('heading', [textNode('Çerezler')], { tag: 'h3' }),
@@ -90,6 +92,7 @@ describe('the published notice', () => {
     expect(html).toMatch(/<strong>kalın<\/strong>/)
     expect(html).toMatch(/<em>eğik<\/em>/)
     expect(html).toMatch(/<em><strong>ikisi<\/strong><\/em>/)
+    expect(html).toMatch(/<br\/?>Yeni satır\./)
     expect(html).toMatch(/<a[^>]*href="https:\/\/example.com\/kvkk"[^>]*>bir bağlantı<\/a>/)
     expect(html).toMatch(/<h2[^>]*>Veriler<\/h2>/)
     expect(html).toMatch(/<h3[^>]*>Çerezler<\/h3>/)
