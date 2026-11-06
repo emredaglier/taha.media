@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
+import { menuLinks } from '../lib/nav-links'
 import { startPageSite, type PageSite } from '../test/page-html'
 
 let pages: PageSite
@@ -36,13 +37,10 @@ describe.each(['/', '/yok-boyle-bir-sayfa'])('the shell around %s', (url) => {
 
   it('has the menu links in the server HTML, so they work without JavaScript', async () => {
     const html = await htmlOf(url)
-    expect(html).toMatch(/<details[\s\S]*<summary[^>]*aria-controls="site-menu-panel"/)
-    for (const [href, label] of [
-      ['/isler', 'İşler'],
-      ['/galeri', 'Galeri'],
-      ['/hakkimda', 'Hakkımda'],
-    ]) {
-      expect(html).toMatch(new RegExp(`<a[^>]*href="${href}"[^>]*>${label}</a>`))
+    const details = /<details[\s\S]*<\/details>/.exec(html)?.[0] ?? ''
+    expect(details).toMatch(/<summary[^>]*aria-controls="site-menu-panel"/)
+    for (const { href, label } of menuLinks) {
+      expect(details).toMatch(new RegExp(`<a[^>]*href="${href}"[^>]*>${label}</a>`))
     }
   })
 

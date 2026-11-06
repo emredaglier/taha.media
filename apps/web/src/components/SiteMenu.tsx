@@ -45,14 +45,14 @@ export function SiteMenu() {
         summary.focus()
       } else if (event.key === 'Tab') {
         const focusables = [summary, ...panel.querySelectorAll<HTMLElement>('a[href], button')]
-        const to = nextFocus(
+        const target = nextFocus(
           focusables,
           document.activeElement as HTMLElement | null,
           event.shiftKey,
         )
-        if (to) {
+        if (target) {
           event.preventDefault()
-          to.focus()
+          target.focus()
         }
       }
     }
@@ -64,7 +64,7 @@ export function SiteMenu() {
   }, [open])
 
   return (
-    <details ref={detailsRef} className="site-menu">
+    <details ref={detailsRef}>
       <summary
         ref={summaryRef}
         aria-controls={PANEL_ID}
@@ -73,7 +73,7 @@ export function SiteMenu() {
         onClick={(event) => {
           // Pre-hydration this is the native toggle; after, state drives `details.open`.
           event.preventDefault()
-          setOpen((on) => !on)
+          setOpen((wasOpen) => !wasOpen)
         }}
       >
         {open ? 'KAPAT' : 'MENU'}
@@ -91,6 +91,7 @@ export function SiteMenu() {
                   href={href}
                   className="font-serif text-5xl"
                   aria-current={pathname === href ? 'page' : undefined}
+                  // A link to the current page changes no pathname, so it closes the menu itself.
                   onClick={() => setOpen(false)}
                 >
                   {label}
