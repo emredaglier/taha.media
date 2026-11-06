@@ -62,6 +62,7 @@ describe('with Works', () => {
     const html = await htmlOf('/isler')
     expect(html).toMatch(/<a[^>]*href="\/isler\/ikinci"[^>]*>[\s\S]*İkinci[\s\S]*Motion · Grafik/)
     expect(html).toMatch(/<a[^>]*href="\/isler\/ikinci"[^>]*>[\s\S]*2024/)
+    expect(html).toMatch(/<a[^>]*href="\/isler\/birinci"[^>]*>[\s\S]*Birinci[\s\S]*Kurgu<\/p>/)
     expect(html).toMatch(/href="\/isler\/ucuncu"/)
   })
 
