@@ -2,7 +2,6 @@ import type {
   CollectionAfterChangeHook,
   CollectionAfterDeleteHook,
   CollectionBeforeChangeHook,
-  CollectionBeforeDeleteHook,
   GlobalAfterChangeHook,
   GlobalBeforeChangeHook,
   PayloadRequest,
@@ -223,22 +222,18 @@ async function mediaTags(
   ]
 }
 
-/** Tags worked out before a media delete, while the references still exist. */
-const beforeMediaDelete = new WeakMap<PayloadRequest, Map<string, string[]>>()
-
 /**
- * Hooks that tell `web` an Image or Video changed (alt text, focal point, a replaced file or
- * poster) or was deleted, so the published pages showing it are rebuilt. A new upload is shown
- * nowhere yet and sends nothing. Like the other notifications, a failure (here also while finding
- * the references) is logged and never blocks the Editor's save.
+ * Hook that tells `web` an Image or Video changed (alt text, focal point, a replaced file or
+ * poster), so the published pages showing it are rebuilt. A new upload is shown nowhere yet and
+ * sends nothing. A delete sends nothing: media that a Work or page uses can't be deleted
+ * (media-delete.ts). Like the other notifications, a failure (here also while finding the
+ * references) is logged and never blocks the Editor's save.
  */
 export function mediaRevalidationHooks(
   collection: MediaCollection,
   transport: RevalidationTransport,
 ): {
   afterChange: CollectionAfterChangeHook
-  beforeDelete: CollectionBeforeDeleteHook
-  afterDelete: CollectionAfterDeleteHook
 } {
   const tagsOrNone = async (req: PayloadRequest, id: number | string): Promise<string[]> => {
     try {
@@ -252,18 +247,6 @@ export function mediaRevalidationHooks(
     afterChange: async ({ doc, operation, req }) => {
       if (operation !== 'update') return doc
       const tags = await tagsOrNone(req, doc.id)
-      if (tags.length > 0) await notify(transport, tags, req)
-      return doc
-    },
-    beforeDelete: async ({ id, req }) => {
-      const pending = beforeMediaDelete.get(req) ?? new Map<string, string[]>()
-      pending.set(String(id), await tagsOrNone(req, id))
-      beforeMediaDelete.set(req, pending)
-    },
-    afterDelete: async ({ doc, id, req }) => {
-      const pending = beforeMediaDelete.get(req)
-      const tags = pending?.get(String(id)) ?? []
-      pending?.delete(String(id))
       if (tags.length > 0) await notify(transport, tags, req)
       return doc
     },

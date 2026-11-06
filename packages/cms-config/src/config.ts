@@ -192,8 +192,6 @@ function withMediaRevalidation(
     hooks: {
       ...own,
       afterChange: [...(own.afterChange ?? []), hooks.afterChange],
-      beforeDelete: [...(own.beforeDelete ?? []), hooks.beforeDelete],
-      afterDelete: [...(own.afterDelete ?? []), hooks.afterDelete],
     },
   }
 }

@@ -154,17 +154,10 @@ describe('editing an Image', () => {
   })
 })
 
+// Media that a Work or page uses can't be deleted at all (media-delete.int.test.ts, issue #20):
+// the refusal sends nothing, and media only old versions used changes nothing visitors see. So
+// no delete reaches a published page, and the only delete left to assert here is an unused one.
 describe('deleting an Image', () => {
-  it('touches the published Works that used it', async () => {
-    const still = await image()
-    const work = await createWork('published', { stills: [{ image: still }] })
-    site.revalidations.length = 0
-
-    await site.cms.delete({ collection: 'images', id: still, ...asUser() })
-
-    expect(sent()).toEqual([tagSet(workTag(work.id), WORKS_TAG)])
-  })
-
   it('sends nothing when nothing used it', async () => {
     const unused = await image()
     await site.cms.delete({ collection: 'images', id: unused, ...asUser() })
@@ -190,16 +183,6 @@ describe('a Video', () => {
     })
 
     expect(sent()).toEqual([tagSet(workTag(work.id), WORKS_TAG, HOME_TAG)])
-  })
-
-  it('deleting it touches the published page that showed it', async () => {
-    const showreel = await site.uploadVideo(editor, { use: 'showreel' })
-    await publishPage('site', { showreelPhone: showreel.id })
-    site.revalidations.length = 0
-
-    await site.cms.delete({ collection: 'videos', id: showreel.id, ...asUser() })
-
-    expect(sent()).toEqual([[pageTag('site')]])
   })
 })
 
