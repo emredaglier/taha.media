@@ -1,0 +1,25 @@
+@import 'tailwindcss';
+
+/*
+ * Wireframe tokens (prototype stage, #23). Named by role, never by value: the Figma pass replaces
+ * the values here and nothing else. Components use only these (`bg-background`, `text-text-muted`,
+ * `font-serif`, ...), never a hard-coded colour or font. One dark theme, no toggle.
+ */
+@theme {
+  --color-background: #101010;
+  --color-background-raised: #1a1a1a;
+  --color-text: #ededed;
+  --color-text-muted: #8f8f8f;
+  --color-placeholder: #2a2a2a;
+
+  /* Stand-ins until the Figma fonts exist. System stacks cover ı İ ğ ş ç ö ü. */
+  --font-serif: ui-serif, Georgia, 'Times New Roman', serif;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+    background-color: var(--color-background);
+  }
+}
