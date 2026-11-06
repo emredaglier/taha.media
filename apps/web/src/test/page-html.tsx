@@ -123,6 +123,8 @@ export type WorkFields = {
   disciplines?: Discipline[]
   /** The id of a Video with use `previewLoop`. */
   previewLoop?: number
+  /** Any other Work fields (main media, client, role, credits, description, stills), spread last. */
+  extra?: Record<string, unknown>
 }
 
 export type PageSite = {
@@ -160,7 +162,7 @@ export async function startPageSite(): Promise<PageSite> {
         user: editor,
         overrideAccess: false,
       }),
-    publishWork: async (fields) => {
+    publishWork: async ({ extra, ...fields }) => {
       coverId ??= (await site.uploadImage(editor, { alt: 'Kapak' })).id
       return site.cms.create({
         collection: 'works',
@@ -171,6 +173,7 @@ export async function startPageSite(): Promise<PageSite> {
           cover: coverId,
           mainMedia: { kind: 'image', image: coverId },
           ...fields,
+          ...extra,
           _status: 'published',
         },
         user: editor,
