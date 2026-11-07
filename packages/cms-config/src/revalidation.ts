@@ -9,6 +9,7 @@ import type {
 
 import { publishedReferences, type MediaCollection, type MediaRefs } from './media-references'
 import {
+  GALLERY_TAG,
   HOME_TAG,
   MAX_TAGS_PER_REQUEST,
   REVALIDATE_SECRET_HEADER,
@@ -190,10 +191,40 @@ export function pageRevalidationHooks(
   }
 }
 
+/** Requests that already told `web` the Gallery changed. */
+const galleryNotified = new WeakSet<PayloadRequest>()
+
+/**
+ * Hooks that tell `web` the Gallery changed: a new, changed, reordered or deleted item sends the
+ * Gallery tag and nothing else. Items have no drafts, so every save is visible at once. The admin
+ * saves every item a drag moves inside one request, so the tag is sent once per request.
+ */
+export function galleryRevalidationHooks(transport: RevalidationTransport): {
+  afterChange: CollectionAfterChangeHook
+  afterDelete: CollectionAfterDeleteHook
+} {
+  const notifyOnce = async (req: PayloadRequest) => {
+    if (galleryNotified.has(req)) return
+    galleryNotified.add(req)
+    await notify(transport, [GALLERY_TAG], req)
+  }
+  return {
+    afterChange: async ({ doc, req }) => {
+      await notifyOnce(req)
+      return doc
+    },
+    afterDelete: async ({ doc, req }) => {
+      await notifyOnce(req)
+      return doc
+    },
+  }
+}
+
 /**
  * The tags of everything visitors see that shows the media: each published Work using it, the
- * Works list and Home when one of them is featured, and each published page using it. An Image is
- * also shown through the Videos it is the poster of. References held only in drafts don't count.
+ * Works list and Home when one of them is featured, each published page using it, and the Gallery
+ * when an item uses it. An Image is also shown through the Videos it is the poster of. References
+ * held only in drafts don't count (Gallery items have no drafts).
  */
 async function mediaTags(
   req: PayloadRequest,
@@ -213,20 +244,21 @@ async function mediaTags(
     })
     refs.push({ target: 'videos', ids: docs.map((video) => video.id) })
   }
-  const { works, pages } = await publishedReferences(req, refs)
+  const { works, pages, usedByGallery } = await publishedReferences(req, refs)
   return [
     ...works.map((work) => workTag(work.id)),
     ...(works.length > 0 ? [WORKS_TAG] : []),
     ...(works.some((work) => work.featured) ? [HOME_TAG] : []),
     ...pages.map(pageTag),
+    ...(usedByGallery ? [GALLERY_TAG] : []),
   ]
 }
 
 /**
  * Hook that tells `web` an Image or Video changed (alt text, focal point, a replaced file or
  * poster), so the published pages showing it are rebuilt. A new upload is shown nowhere yet and
- * sends nothing. A delete sends nothing: media that a Work or page uses can't be deleted
- * (media-delete.ts). Like the other notifications, a failure (here also while finding the
+ * sends nothing. A delete sends nothing: media that a Work, page or Gallery item uses can't be
+ * deleted (media-delete.ts). Like the other notifications, a failure (here also while finding the
  * references) is logged and never blocks the Editor's save.
  */
 export function mediaRevalidationHooks(

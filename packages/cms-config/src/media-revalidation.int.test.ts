@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { User, Work } from './payload-types'
-import { HOME_TAG, MAX_TAGS_PER_REQUEST, WORKS_TAG, pageTag, workTag } from './tags'
+import { GALLERY_TAG, HOME_TAG, MAX_TAGS_PER_REQUEST, WORKS_TAG, pageTag, workTag } from './tags'
 import { createTestSite, type TestSite } from './testing'
 
 let site: TestSite
@@ -183,6 +183,84 @@ describe('a Video', () => {
     })
 
     expect(sent()).toEqual([tagSet(workTag(work.id), WORKS_TAG, HOME_TAG)])
+  })
+})
+
+describe('media a Gallery item uses', () => {
+  const galleryItem = (data: Record<string, unknown>) =>
+    site.cms.create({ collection: 'gallery', data: data as never, ...asUser() })
+
+  it('an Image edit touches only the Gallery', async () => {
+    const used = await image()
+    await galleryItem({ kind: 'image', image: used })
+    site.revalidations.length = 0
+
+    await editAlt(used)
+
+    expect(sent()).toEqual([[GALLERY_TAG]])
+  })
+
+  it('a focal point change on an Image it uses touches only the Gallery', async () => {
+    const used = await image()
+    await galleryItem({ kind: 'image', image: used })
+    site.revalidations.length = 0
+
+    await site.cms.update({
+      collection: 'images',
+      id: used,
+      data: { focalX: 30, focalY: 60 },
+      ...asUser(),
+    })
+
+    expect(sent()).toEqual([[GALLERY_TAG]])
+  })
+
+  it('a loop’s new poster touches only the Gallery', async () => {
+    const loop = await site.uploadVideo(editor, { use: 'gallery' })
+    await galleryItem({ kind: 'loop', video: loop.id })
+    site.revalidations.length = 0
+
+    await site.cms.update({
+      collection: 'videos',
+      id: loop.id,
+      data: { poster: await image() },
+      ...asUser(),
+    })
+
+    expect(sent()).toEqual([[GALLERY_TAG]])
+  })
+
+  it('editing the poster Image of a Gallery loop is found through the Video', async () => {
+    const poster = await image()
+    const loop = await site.uploadVideo(editor, { use: 'gallery', poster })
+    await galleryItem({ kind: 'loop', video: loop.id })
+    site.revalidations.length = 0
+
+    await editAlt(poster)
+
+    expect(sent()).toEqual([[GALLERY_TAG]])
+  })
+
+  it('an Image shared with a published Work touches both', async () => {
+    const shared = await image()
+    const work = await createWork('published', { cover: shared })
+    await galleryItem({ kind: 'image', image: shared })
+    site.revalidations.length = 0
+
+    await editAlt(shared)
+
+    expect(sent()).toEqual([tagSet(workTag(work.id), WORKS_TAG, GALLERY_TAG)])
+  })
+
+  it('sends nothing once the item is gone', async () => {
+    const used = await image()
+    const item = await galleryItem({ kind: 'image', image: used })
+    await site.cms.delete({ collection: 'gallery', id: item.id, ...asUser() })
+    site.revalidations.length = 0
+
+    await editAlt(used)
+
+    expect(sent()).toEqual([])
   })
 })
 

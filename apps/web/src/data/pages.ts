@@ -35,11 +35,12 @@ export type Site = {
   showreelPoster: ImageRead | null
   /** The full-length Showreel on Vimeo or YouTube; null when not set. */
   showreelLink: { provider: 'vimeo' | 'youtube'; id: string; url: string } | null
-  intro: string | null
+  /** The Statement: the text before and after the Showreel clip, each trimmed; null when blank. */
+  statement: { before: string | null; after: string | null }
   email: string | null
   /** In the order the Editor set. */
   socials: { platform: string; url: string }[]
-  /** Overrides when set, otherwise the site name, the intro line and the Showreel poster. */
+  /** Overrides when set, otherwise the site name, the Statement and the Showreel poster. */
   seo: Seo<ImageRead>
 }
 
@@ -93,6 +94,7 @@ export async function getSite(): Promise<Site | null> {
   if (!doc) return null
   const showreelPoster = image(doc.showreelPoster)
   const link = doc.showreelLink
+  const statement = { before: text(doc.statementBefore), after: text(doc.statementAfter) }
   return {
     showreel: video(doc.showreel),
     showreelPhone: video(doc.showreelPhone),
@@ -101,13 +103,13 @@ export async function getSite(): Promise<Site | null> {
       link?.provider && link.videoId && link.url
         ? { provider: link.provider, id: link.videoId, url: link.url }
         : null,
-    intro: text(doc.intro),
+    statement,
     email: text(doc.email),
     socials: (doc.socials ?? []).map(({ platform, url }) => ({ platform, url })),
     seo: resolveSeo({
       overrides: doc.seo,
       title: SITE_TITLE,
-      description: plainParagraph(doc.intro),
+      description: plainParagraph([statement.before, statement.after].filter(Boolean).join(' ')),
       fallbackImage: showreelPoster,
       toImage,
     }),

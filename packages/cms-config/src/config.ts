@@ -14,6 +14,7 @@ import {
 } from 'payload'
 import sharp from 'sharp'
 
+import { Gallery } from './collections/Gallery'
 import { Images } from './collections/Images'
 import { Users } from './collections/Users'
 import { Videos } from './collections/Videos'
@@ -26,6 +27,7 @@ import { parsePreviewUrl, withPagePreview, withWorkPreview } from './preview'
 import { buildDatabase, DEFAULT_BUSY_TIMEOUT_MS } from './db'
 import type { MediaCollection } from './media-references'
 import {
+  galleryRevalidationHooks,
   httpRevalidationTransport,
   mediaRevalidationHooks,
   pageRevalidationHooks,
@@ -105,6 +107,15 @@ export function buildSiteConfig(options: SiteConfigOptions): Promise<SanitizedCo
 
   const revalidate = writer ? options.revalidate : undefined
   const previewUrl = writer ? options.previewUrl : undefined
+  // Payload adds the position field and hook of an `orderable` collection to the `fields` and
+  // `hooks.beforeChange` arrays in place. A collection with drafts (Works) gets a fresh `fields`
+  // array from Payload first; Gallery has none, so it gets copies here. Without them a second
+  // build in one process (tests) finds `_order` twice and piles up hooks.
+  const gallery: CollectionConfig = {
+    ...Gallery,
+    fields: [...Gallery.fields],
+    hooks: { ...Gallery.hooks, beforeChange: [...(Gallery.hooks?.beforeChange ?? [])] },
+  }
   let works = revalidate ? withWorkRevalidation(Works, revalidate) : Works
   if (previewUrl) works = withWorkPreview(works, previewUrl)
   const globals = [Site, About, Privacy].map((global) => {
@@ -126,6 +137,7 @@ export function buildSiteConfig(options: SiteConfigOptions): Promise<SanitizedCo
       revalidate ? withMediaRevalidation(Images, revalidate) : Images,
       revalidate ? withMediaRevalidation(Videos, revalidate) : Videos,
       works,
+      revalidate ? withGalleryRevalidation(gallery, revalidate) : gallery,
     ],
     globals,
     sharp,
@@ -175,6 +187,22 @@ function withWorkRevalidation(
       ...own,
       // Last, so it sees the data every other hook has settled.
       beforeChange: [...(own.beforeChange ?? []), hooks.beforeChange],
+      afterChange: [...(own.afterChange ?? []), hooks.afterChange],
+      afterDelete: [...(own.afterDelete ?? []), hooks.afterDelete],
+    },
+  }
+}
+
+function withGalleryRevalidation(
+  collection: CollectionConfig,
+  transport: RevalidationTransport,
+): CollectionConfig {
+  const hooks = galleryRevalidationHooks(transport)
+  const own = collection.hooks ?? {}
+  return {
+    ...collection,
+    hooks: {
+      ...own,
       afterChange: [...(own.afterChange ?? []), hooks.afterChange],
       afterDelete: [...(own.afterDelete ?? []), hooks.afterDelete],
     },

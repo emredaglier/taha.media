@@ -252,6 +252,45 @@ async function seedWork(seeder: Seeder, work: DemoWork): Promise<boolean> {
   return true
 }
 
+/** The demo Gallery as the Galeri page shows it, top first (a loop among pictures). */
+const DEMO_GALLERY: { kind: 'image' | 'loop'; caption?: string; year?: number }[] = [
+  { kind: 'loop', caption: 'Setten bir döngü', year: 2025 },
+  { kind: 'image', caption: 'İstanbul, sabah', year: 2025 },
+  { kind: 'image', caption: 'Afiş çalışması', year: 2024 },
+  { kind: 'image' },
+]
+
+/** Gallery items, only while the Gallery is empty, so a re-run never adds to it or reorders it. */
+async function seedGallery(seeder: Seeder): Promise<void> {
+  const { payload, log } = seeder
+  if ((await payload.count({ collection: 'gallery' })).totalDocs > 0) {
+    log('gallery: exists')
+    return
+  }
+  // A Gallery loop left over from an earlier seed run is reused, not uploaded again.
+  const leftover = await payload.find({
+    collection: 'videos',
+    where: { use: { equals: 'gallery' } },
+    limit: 1,
+    depth: 0,
+    pagination: false,
+  })
+  const loop =
+    leftover.docs[0]?.id ?? (await uploadVideo(seeder, 'gallery', 'loop-ok.mp4', 'Galeri döngüsü'))
+
+  // A new item goes first, so the last one in the list is created first.
+  for (const { kind, caption, year } of [...DEMO_GALLERY].reverse()) {
+    await payload.create({
+      collection: 'gallery',
+      data:
+        kind === 'loop'
+          ? { kind, video: loop, caption, year }
+          : { kind, image: await uploadImage(seeder, caption ?? 'Galeri görseli'), caption, year },
+    })
+  }
+  log('gallery: created')
+}
+
 async function seedPages(seeder: Seeder): Promise<void> {
   const { payload, log } = seeder
 
@@ -263,7 +302,8 @@ async function seedPages(seeder: Seeder): Promise<void> {
         showreelPhone: await uploadVideo(seeder, 'showreel', 'portrait.mp4', 'Showreel telefon'),
         showreelPoster: await uploadImage(seeder, 'Showreel görseli'),
         showreelLink: { url: 'https://vimeo.com/76979871' },
-        intro: 'Kurgu, motion ve grafik tasarım: hikayeyi hareketle anlatıyorum.',
+        statementBefore: 'Kurgu, motion ve grafik tasarımla',
+        statementAfter: 'hikayeyi hareketle anlatıyorum.',
         email: 'merhaba@example.com',
         socials: [
           { platform: 'Instagram', url: 'https://instagram.com/example' },
@@ -336,4 +376,5 @@ export async function seedLocal(
 
   for (const work of DEMO_WORKS) await seedWork(seeder, work)
   await seedPages(seeder)
+  await seedGallery(seeder)
 }

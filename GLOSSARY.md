@@ -32,6 +32,10 @@ _Avoid_: Archive, playground, lab, moodboard
 A person who manages content in the admin. Every Editor has the same rights.
 _Avoid_: Admin, user, author
 
+**Statement** (Tanıtım cümlesi):
+The sentence on the home page with the Showreel clip inside it: the text before the clip and the text after it.
+_Avoid_: Intro, tagline
+
 ### Presentation
 
 **Preview loop** (Önizleme):

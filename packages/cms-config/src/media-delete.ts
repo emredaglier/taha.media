@@ -30,8 +30,8 @@ async function videosUsingAsPoster(req: PayloadRequest, id: number | string): Pr
 
 /**
  * `beforeDelete` for Images and Videos (issue #20). Refuses, in Turkish, to delete media that a
- * Work (published row or latest draft) or a single-entry page uses, or an Image that is a Video's
- * poster. Media that only old versions used goes through (their references are cleared first), so
+ * Work (published row or latest draft), a single-entry page or a Gallery item uses, or an Image
+ * that is a Video's poster. Media that only old versions used goes through (their references are cleared first), so
  * a file is never undeletable just because it once appeared in a version. A refused delete changes
  * nothing: no objects move and no revalidation is sent.
  *

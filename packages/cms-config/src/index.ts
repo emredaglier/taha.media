@@ -10,6 +10,7 @@ export { Users } from './collections/Users'
 export { Images, IMAGE_SRCSET_SIZES, uniqueFilename } from './collections/Images'
 export { Videos } from './collections/Videos'
 export { Works } from './collections/Works'
+export { Gallery } from './collections/Gallery'
 export { Site } from './globals/Site'
 export { About } from './globals/About'
 export { Privacy } from './globals/Privacy'
@@ -30,9 +31,10 @@ export { toMainMedia } from './main-media-read'
 export type { MainMedia } from './main-media-read'
 export { parseExternalVideoUrl, EXTERNAL_PROVIDERS } from './external-video'
 export type { ExternalProvider, ExternalVideo } from './external-video'
-export { toImage } from './image-read'
+export { fullSizeUrl, toImage } from './image-read'
 export type { ImageRead } from './image-read'
 export {
+  galleryRevalidationHooks,
   httpRevalidationTransport,
   pageRevalidationHooks,
   workRevalidationHooks,
@@ -41,6 +43,7 @@ export {
 export type { HttpRevalidationOptions, RevalidationTransport } from './revalidation'
 export { PAGE_PATHS, previewLink, workPath } from './preview'
 export {
+  GALLERY_TAG,
   HOME_TAG,
   MAX_TAGS_PER_REQUEST,
   REVALIDATE_SECRET_HEADER,
@@ -56,6 +59,7 @@ export type {
   User,
   Video as VideoDoc,
   Work as WorkDoc,
+  Gallery as GalleryDoc,
   Site as SiteDoc,
   About as AboutDoc,
   Privacy as PrivacyDoc,

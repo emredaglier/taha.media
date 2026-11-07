@@ -75,8 +75,8 @@ beforeAll(async () => {
       draft: status === 'draft',
       ...as,
     })
-  await writeGlobal('site', { intro: 'Yayındaki giriş.' }, 'published')
-  await writeGlobal('site', { intro: 'Taslak giriş.' }, 'draft')
+  await writeGlobal('site', { statementBefore: 'Yayındaki giriş.' }, 'published')
+  await writeGlobal('site', { statementBefore: 'Taslak giriş.' }, 'draft')
   await writeGlobal('about', { disciplineLines: { kurgu: 'Taslak kurgu satırı.' } }, 'draft')
   await writeGlobal('privacy', {}, 'draft')
 }, 60_000)
@@ -119,7 +119,7 @@ describe('the preview instance (PREVIEW=1)', () => {
   })
 
   it('reads each single-entry page as its latest draft, published before or not', async () => {
-    expect((await getSite())?.intro).toBe('Taslak giriş.')
+    expect((await getSite())?.statement.before).toBe('Taslak giriş.')
     expect((await getAbout())?.disciplineLines).toEqual([
       { discipline: 'kurgu', line: 'Taslak kurgu satırı.' },
     ])

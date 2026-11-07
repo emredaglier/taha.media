@@ -71,6 +71,7 @@ export interface Config {
     images: Image;
     videos: Video;
     works: Work;
+    gallery: Gallery;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -82,6 +83,7 @@ export interface Config {
     images: ImagesSelect<false> | ImagesSelect<true>;
     videos: VideosSelect<false> | VideosSelect<true>;
     works: WorksSelect<false> | WorksSelect<true>;
+    gallery: GallerySelect<false> | GallerySelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -227,9 +229,9 @@ export interface Image {
 export interface Video {
   id: number;
   /**
-   * Önizleme döngüsü: en fazla 10 sn, 720p, sessiz, 4 MB. Showreel döngüsü: en fazla 30 sn, 1080p, sessiz, 15 MB. Ana video: en fazla 3 dk, 1080p, sesli olabilir, 60 MB.
+   * Önizleme döngüsü: en fazla 10 sn, 720p, sessiz, 4 MB. Showreel döngüsü: en fazla 30 sn, 1080p, sessiz, 15 MB. Galeri döngüsü: en fazla 15 sn, 1080p, sessiz, 10 MB. Ana video: en fazla 3 dk, 1080p, sesli olabilir, 60 MB.
    */
-  use: 'previewLoop' | 'showreel' | 'main';
+  use: 'previewLoop' | 'showreel' | 'gallery' | 'main';
   poster: number | Image;
   /**
    * Dosyadan otomatik okunur.
@@ -333,6 +335,21 @@ export interface Work {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "gallery".
+ */
+export interface Gallery {
+  id: number;
+  _order?: string | null;
+  kind: 'image' | 'loop';
+  image?: (number | null) | Image;
+  video?: (number | null) | Video;
+  caption?: string | null;
+  year?: number | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv".
  */
 export interface PayloadKv {
@@ -370,6 +387,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'works';
         value: number | Work;
+      } | null)
+    | ({
+        relationTo: 'gallery';
+        value: number | Gallery;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -586,6 +607,20 @@ export interface WorksSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "gallery_select".
+ */
+export interface GallerySelect<T extends boolean = true> {
+  _order?: T;
+  kind?: T;
+  image?: T;
+  video?: T;
+  caption?: T;
+  year?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv_select".
  */
 export interface PayloadKvSelect<T extends boolean = true> {
@@ -638,7 +673,14 @@ export interface Site {
     provider?: ('vimeo' | 'youtube') | null;
     videoId?: string | null;
   };
-  intro?: string | null;
+  /**
+   * Ana sayfadaki cümlenin Showreel klibinden önceki kısmı. Klip bu metinle sonraki metin arasında yer alır.
+   */
+  statementBefore?: string | null;
+  /**
+   * Ana sayfadaki cümlenin Showreel klibinden sonraki kısmı. Klip önceki metinle bu metin arasında yer alır.
+   */
+  statementAfter?: string | null;
   email?: string | null;
   socials?:
     | {
@@ -753,7 +795,8 @@ export interface SiteSelect<T extends boolean = true> {
         provider?: T;
         videoId?: T;
       };
-  intro?: T;
+  statementBefore?: T;
+  statementAfter?: T;
   email?: T;
   socials?:
     | T

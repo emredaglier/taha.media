@@ -66,6 +66,36 @@ const worksFields = (req: PayloadRequest): Field[] => req.payload.collections.wo
 const globalFields = (req: PayloadRequest, slug: PageSlug): Field[] =>
   req.payload.config.globals.find((global) => global.slug === slug)?.fields ?? []
 
+const galleryFields = (req: PayloadRequest): Field[] =>
+  req.payload.collections.gallery.config.fields
+
+type GalleryItemRef = { id: number | string; caption?: string | null }
+
+/**
+ * The Gallery items that use any of the media. Items have no drafts, so what is stored is what
+ * visitors see.
+ */
+async function galleryItemsUsing(req: PayloadRequest, refs: MediaRefs): Promise<GalleryItemRef[]> {
+  const where = referencingWhere(galleryFields(req), refs)
+  if (!where) return []
+  const { docs } = await req.payload.find({
+    collection: 'gallery',
+    where,
+    select: { caption: true },
+    // The Gallery's own order, so a refusal lists the items the way the Editor sees them.
+    sort: '_order',
+    depth: 0,
+    pagination: false,
+    overrideAccess: true,
+    req,
+  })
+  return docs
+}
+
+/** How the Editor knows a Gallery item: by its caption, or by its number when it has none. */
+const galleryItemLabel = ({ id, caption }: GalleryItemRef) =>
+  caption?.trim() ? `“${caption.trim()}” galeri öğesi` : `Galeri öğesi #${id}`
+
 /** A `where` matching documents that reference any of the media, or null when nothing can. */
 function referencingWhere(fields: Field[], refs: MediaRefs) {
   const or = refs.flatMap(({ target, ids }) =>
@@ -86,12 +116,18 @@ function pageReferences(req: PayloadRequest, slug: PageSlug, doc: Row, refs: Med
 
 /**
  * What visitors see that uses the media: the published Works (their main rows, so a reference held
- * only in a draft does not count) and the published single-entry pages.
+ * only in a draft does not count), the published single-entry pages, and whether any Gallery item
+ * uses it.
  */
 export async function publishedReferences(
   req: PayloadRequest,
   refs: MediaRefs,
-): Promise<{ works: { id: number | string; featured: boolean }[]; pages: PageSlug[] }> {
+): Promise<{
+  works: { id: number | string; featured: boolean }[]
+  pages: PageSlug[]
+  /** Whether any Gallery item uses the media. */
+  usedByGallery: boolean
+}> {
   const where = referencingWhere(worksFields(req), refs)
   const works = where
     ? (
@@ -112,12 +148,13 @@ export async function publishedReferences(
     const main = (await req.payload.db.findGlobal({ slug, req })) as Row | null
     if (main?._status === 'published' && pageReferences(req, slug, main, refs)) pages.push(slug)
   }
-  return { works, pages }
+  return { works, pages, usedByGallery: (await galleryItemsUsing(req, refs)).length > 0 }
 }
 
 /**
  * Everything that references the media in any state: each Work's main row and its latest draft,
- * and each page's main row and latest draft. Returns Turkish labels for the Editor.
+ * each page's main row and latest draft, and each Gallery item. Returns Turkish labels for the
+ * Editor.
  */
 export async function anyReferences(req: PayloadRequest, refs: MediaRefs): Promise<string[]> {
   const labels = new Set<string>()
@@ -151,5 +188,6 @@ export async function anyReferences(req: PayloadRequest, refs: MediaRefs): Promi
       }
     }
   }
+  for (const item of await galleryItemsUsing(req, refs)) labels.add(galleryItemLabel(item))
   return [...labels]
 }

@@ -6,6 +6,9 @@ import * as migration_20261105_211456_work_details from './20261105_211456_work_
 import * as migration_20261105_211929_videos from './20261105_211929_videos';
 import * as migration_20261105_212508_single_entry_pages from './20261105_212508_single_entry_pages';
 import * as migration_20261105_212844_main_media from './20261105_212844_main_media';
+import * as migration_20261106_083348_statement_fields from './20261106_083348_statement_fields';
+import * as migration_20261106_083406_drop_site_intro from './20261106_083406_drop_site_intro';
+import * as migration_20261106_084415_gallery_items from './20261106_084415_gallery_items';
 
 export const migrations = [
   {
@@ -46,6 +49,21 @@ export const migrations = [
   {
     up: migration_20261105_212844_main_media.up,
     down: migration_20261105_212844_main_media.down,
-    name: '20261105_212844_main_media'
+    name: '20261105_212844_main_media',
+  },
+  {
+    up: migration_20261106_083348_statement_fields.up,
+    down: migration_20261106_083348_statement_fields.down,
+    name: '20261106_083348_statement_fields',
+  },
+  {
+    up: migration_20261106_083406_drop_site_intro.up,
+    down: migration_20261106_083406_drop_site_intro.down,
+    name: '20261106_083406_drop_site_intro',
+  },
+  {
+    up: migration_20261106_084415_gallery_items.up,
+    down: migration_20261106_084415_gallery_items.down,
+    name: '20261106_084415_gallery_items'
   },
 ];

@@ -84,7 +84,7 @@ export const lockedUseMessage = (places: string[]): string =>
 
 /**
  * Each field that references a Video accepts one use (`videoField`), so a Video's use must not
- * change while a Work or page references it, in a draft or published: the field would then hold a
+ * change while a Work, page or Gallery item references it, in a draft or published: the field would then hold a
  * wrongly-used Video without anyone seeing a refusal.
  */
 const keepUseWhileReferenced: CollectionBeforeValidateHook = async ({
@@ -145,7 +145,7 @@ export const Videos: CollectionConfig = {
       options: VIDEO_USES.map((value) => ({ value, label: VIDEO_USE_LABELS[value] })),
       admin: {
         description:
-          'Önizleme döngüsü: en fazla 10 sn, 720p, sessiz, 4 MB. Showreel döngüsü: en fazla 30 sn, 1080p, sessiz, 15 MB. Ana video: en fazla 3 dk, 1080p, sesli olabilir, 60 MB.',
+          'Önizleme döngüsü: en fazla 10 sn, 720p, sessiz, 4 MB. Showreel döngüsü: en fazla 30 sn, 1080p, sessiz, 15 MB. Galeri döngüsü: en fazla 15 sn, 1080p, sessiz, 10 MB. Ana video: en fazla 3 dk, 1080p, sesli olabilir, 60 MB.',
       },
     },
     {

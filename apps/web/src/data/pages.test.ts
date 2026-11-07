@@ -86,7 +86,7 @@ describe('Site', () => {
     await expect(write('site', { showreelPhone: loop.id }, 'draft')).rejects.toThrow(/showreel/i)
   })
 
-  it('reads the showreel, phone variant, poster, link, intro, email and socials', async () => {
+  it('reads the showreel, phone variant, poster, link, statement, email and socials', async () => {
     const reel = await site.uploadVideo(editor, { use: 'showreel' })
     const phone = await site.uploadVideo(editor, { use: 'showreel' })
     const poster = await site.uploadImage(editor, { alt: 'Showreel kapağı' })
@@ -97,7 +97,8 @@ describe('Site', () => {
         showreelPhone: phone.id,
         showreelPoster: poster.id,
         showreelLink: { url: 'https://vimeo.com/123456789' },
-        intro: 'Kurgu, hareket ve grafik.',
+        statementBefore: 'Kurgu, hareket ve grafik.',
+        statementAfter: 'Hikayeyi hareketle anlatıyorum.',
         email: 'taha@example.com',
         socials: [
           { platform: 'Instagram', url: 'https://instagram.com/taha' },
@@ -112,7 +113,7 @@ describe('Site', () => {
       showreelPhone: { id: phone.id },
       showreelPoster: { alt: 'Showreel kapağı' },
       showreelLink: { provider: 'vimeo', id: '123456789', url: 'https://vimeo.com/123456789' },
-      intro: 'Kurgu, hareket ve grafik.',
+      statement: { before: 'Kurgu, hareket ve grafik.', after: 'Hikayeyi hareketle anlatıyorum.' },
       email: 'taha@example.com',
     })
     expect(result?.socials.map((s) => s.platform)).toEqual(['Instagram', 'Vimeo'])
@@ -136,11 +137,11 @@ describe('Site', () => {
     })
   })
 
-  it('falls back to the site name, the intro and the poster in SEO, with overrides winning', async () => {
+  it('falls back to the site name, the statement and the poster in SEO, with overrides winning', async () => {
     const result = await getSite()
     expect(result?.seo).toMatchObject({
       title: 'taha.media',
-      description: 'Kurgu, hareket ve grafik.',
+      description: 'Kurgu, hareket ve grafik. Hikayeyi hareketle anlatıyorum.',
       image: { alt: 'Showreel kapağı' },
     })
     const share = await site.uploadImage(editor, { alt: 'Paylaşım' })
@@ -154,6 +155,55 @@ describe('Site', () => {
       description: 'Özel açıklama',
       image: { alt: 'Paylaşım' },
     })
+  })
+})
+
+describe('the Statement', () => {
+  // Each case writes both sides and clears the SEO override, so the cases do not depend on order.
+  const saveStatement = (before: string | null, after: string | null) =>
+    write(
+      'site',
+      {
+        statementBefore: before,
+        statementAfter: after,
+        seo: { title: '', description: '', image: null },
+      },
+      'published',
+    )
+
+  it('trims both sides', async () => {
+    await saveStatement('  Kurgu ve motion.  ', '\n Hikayeyi anlatıyorum. ')
+    expect((await getSite())?.statement).toEqual({
+      before: 'Kurgu ve motion.',
+      after: 'Hikayeyi anlatıyorum.',
+    })
+  })
+
+  it('reads a blank or whitespace-only side as null, and keeps the other', async () => {
+    await saveStatement('Yalnız başlangıç.', '   ')
+    expect((await getSite())?.statement).toEqual({ before: 'Yalnız başlangıç.', after: null })
+    await saveStatement('', 'Yalnız son.')
+    expect((await getSite())?.statement).toEqual({ before: null, after: 'Yalnız son.' })
+  })
+
+  it('reads two nulls when neither side is set', async () => {
+    await saveStatement(null, null)
+    expect((await getSite())?.statement).toEqual({ before: null, after: null })
+  })
+
+  it('gives the SEO description from whichever side exists, or both joined by one space', async () => {
+    await saveStatement('Yalnız başlangıç.', null)
+    expect((await getSite())?.seo.description).toBe('Yalnız başlangıç.')
+    await saveStatement(null, 'Yalnız son.')
+    expect((await getSite())?.seo.description).toBe('Yalnız son.')
+    await saveStatement('Önce.', 'Sonra.')
+    expect((await getSite())?.seo.description).toBe('Önce. Sonra.')
+  })
+
+  it('lets an SEO description the Editor wrote win', async () => {
+    await saveStatement('Önce.', 'Sonra.')
+    await write('site', { seo: { description: 'Özel açıklama' } }, 'published')
+    expect((await getSite())?.seo.description).toBe('Özel açıklama')
   })
 })
 

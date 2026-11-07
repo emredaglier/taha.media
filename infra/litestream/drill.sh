@@ -45,10 +45,10 @@ login=$(curl -fsS -X POST "$CMS/api/users/first-register" -H 'content-type: appl
 TOKEN=$(printf '%s' "$login" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
 [[ -n "$TOKEN" ]] || fail "could not register the first user: $login"
 
-save_site() { # $1 = intro sentence, published so it lands in the main table
+save_site() { # $1 = Statement text before the clip, published so it lands in the main table
   curl -fsS -X POST "$CMS/api/globals/site" -H 'content-type: application/json' \
     -H "Authorization: JWT $TOKEN" \
-    -d "{\"intro\":\"$1\",\"_status\":\"published\"}" >/dev/null
+    -d "{\"statementBefore\":\"$1\",\"_status\":\"published\"}" >/dev/null
 }
 
 replicate() { # block until everything written so far is in the bucket (the deploy hook)
@@ -62,10 +62,10 @@ restore_into() { # $1 = empty dir (the runbook's script)
 
 q() { sqlite3 "$1" "$2"; }
 
-check() { # $1 = restored file, $2 = expected intro
+check() { # $1 = restored file, $2 = expected Statement text before the clip
   [[ "$(q "$1" 'PRAGMA integrity_check')" == "ok" ]] || fail "integrity_check failed on $1"
   [[ "$(q "$1" 'PRAGMA journal_mode')" == "wal" ]] || fail "restored DB is not in WAL mode"
-  [[ "$(q "$1" "SELECT intro FROM site_locales LIMIT 1")" == "$2" ]] || fail "intro differs in $1"
+  [[ "$(q "$1" "SELECT statement_before FROM site_locales LIMIT 1")" == "$2" ]] || fail "statement differs in $1"
   [[ "$(q "$1" "SELECT email FROM users")" == "$EMAIL" ]] || fail "user missing in $1"
 }
 
