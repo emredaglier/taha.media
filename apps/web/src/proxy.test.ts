@@ -33,8 +33,7 @@ describe('robots on the preview instance', () => {
   })
 })
 
-// #61: the Work page's own `permanentRedirect` sent `Location` twice on the render that filled the
-// cache (a Next bug no unit test can start). The proxy answers instead, before any page renders.
+// #61: the proxy answers a renamed Work's old address itself; src/proxy.ts says why.
 describe('a renamed Work', () => {
   let site: TestSite
 
@@ -86,11 +85,37 @@ describe('a renamed Work', () => {
   })
 
   it('lets the current address, an unknown slug and every other path through to the pages', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
     const run = await startInstance(false)
     for (const path of ['/isler/yeni-ad', '/isler/yok-boyle', '/isler/%E0%A4%A', '/isler', '/']) {
       const response = await run(path)
       expect(response.headers.get('location'), path).toBeNull()
       expect(response.headers.get('x-middleware-next'), path).toBe('1')
     }
+    expect(logged).not.toHaveBeenCalled()
+    logged.mockRestore()
+  })
+})
+
+describe('an old-slug lookup that fails', () => {
+  afterEach(() => {
+    vi.doUnmock('./lib/payload')
+    vi.restoreAllMocks()
+  })
+
+  it('logs and lets the request through to the Work page', async () => {
+    // A plain function, not a vi.fn: Vitest reports an error that a mock throws as a test failure.
+    vi.doMock('./lib/payload', () => ({
+      getWebPayload: () => Promise.reject(new Error('unable to open database file')),
+    }))
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const run = await startInstance(false)
+    const response = await run('/isler/baska-ad')
+    expect(response.headers.get('location')).toBeNull()
+    expect(response.headers.get('x-middleware-next')).toBe('1')
+    expect(logged).toHaveBeenCalledWith(
+      expect.stringContaining('/isler/baska-ad'),
+      expect.any(Error),
+    )
   })
 })

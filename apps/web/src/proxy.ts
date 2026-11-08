@@ -8,15 +8,24 @@ const WORK_PATH = /^\/isler\/([^/]+)\/?$/
 
 /**
  * Where a request for a renamed Work's old address should go, or null to let it through. Never
- * throws: a failed lookup lets the request through, and the Work page redirects as well.
+ * throws: a malformed address names no Work, and a failed lookup lets the request through to the
+ * Work page's own redirect. That fallback is the one with the duplicate `Location`, so a failed
+ * lookup is logged.
  */
 async function renamedWorkPath(pathname: string): Promise<string | null> {
   const match = WORK_PATH.exec(pathname)
   if (!match) return null
+  let slug: string
   try {
-    const slug = await getRenamedWorkSlug(decodeURIComponent(match[1]!))
-    return slug ? `/isler/${encodeURIComponent(slug)}` : null
+    slug = decodeURIComponent(match[1]!)
   } catch {
+    return null
+  }
+  try {
+    const current = await getRenamedWorkSlug(slug)
+    return current ? `/isler/${encodeURIComponent(current)}` : null
+  } catch (error) {
+    console.error(`proxy: old-slug lookup failed for ${pathname}; the Work page redirects`, error)
     return null
   }
 }
