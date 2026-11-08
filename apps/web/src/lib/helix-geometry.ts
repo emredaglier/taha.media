@@ -1,5 +1,8 @@
 import { HELIX_TUNING } from './helix-tuning'
 
+/** A point on the screen, 0 to 1 across (left to right) and up (bottom to top). */
+export type ScreenPoint = { x: number; y: number }
+
 /**
  * The Helix's shape (#45, "The Helix: rendering"): the 21st.dev dither helix carousel's geometry
  * as the prototype tuned it, flipped so that the next card comes up from below. World units; the

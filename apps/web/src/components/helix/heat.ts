@@ -23,6 +23,8 @@ export type HeatTrail = {
 const HEAT = HELIX_TUNING.heat
 /** How many cells cover the screen's height (the prototype's), whatever its size. */
 const ROWS = 160
+/** The most cells across: a canvas with next to no height doesn't ask for a huge texture. */
+const MAX_COLUMNS = 2048
 /** The heat is kept below this, however long the cursor circles one place. */
 const MAX_HEAT = 1.5
 /** Somewhere off the trail: a splat there does nothing. */
@@ -111,7 +113,7 @@ export function createHeatTrail(gl: WebGL2RenderingContext): HeatTrail {
     resize(aspect) {
       free()
       carry = HEAT_AT_REST
-      size = { width: Math.max(8, Math.round(ROWS * aspect)), height: ROWS }
+      size = { width: Math.min(MAX_COLUMNS, Math.max(8, Math.round(ROWS * aspect))), height: ROWS }
       if (!canFloat) return
       targets = [stateTarget(gl, size.width, size.height), stateTarget(gl, size.width, size.height)]
       // No trail after all where half floats can't be drawn into.

@@ -1,7 +1,5 @@
+import type { ScreenPoint } from './helix-geometry'
 import { HELIX_TUNING } from './helix-tuning'
-
-/** A point on the screen, 0 to 1 across (left to right) and up (bottom to top). */
-export type ScreenPoint = { x: number; y: number }
 
 /** Where the pointer went since the last frame, and how fast it moved (CSS px per second). */
 export type PointerPath = { from: ScreenPoint; to: ScreenPoint; speed: number }

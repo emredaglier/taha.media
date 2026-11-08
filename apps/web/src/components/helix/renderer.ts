@@ -5,11 +5,12 @@ import {
   HELIX_SHAPE,
   lensFor,
   turnOnScreen,
+  type ScreenPoint,
 } from '../../lib/helix-geometry'
+import type { PointerPath } from '../../lib/helix-heat'
 import type { HelixWork } from '../FeaturedWorks'
 import type { HelixShowreel } from '../Hero'
-import type { PointerPath, ScreenPoint } from '../../lib/helix-heat'
-import { createComposite, DEEP_FADE, MELT_INPUTS_GLSL } from './composite'
+import { createComposite, MELT_INPUTS_GLSL } from './composite'
 import { CYLINDER_GLSL } from './cylinder'
 import {
   colourTexture,
@@ -112,8 +113,9 @@ void main() {
 // card is not there (it hasn't appeared yet in the opening, or it is in the last slot before the
 // edge of the visible band, so a card beyond it, which may repeat a Work on screen, is never
 // seen), dimmed or hovered, and how deep in the Helix (the prototype's light haze, which the
-// hovered card doesn't get). The page colour shows through wherever a card fades (alpha), so the
-// canvas never reads a CSS colour (playbook: canvas-colours).
+// hovered card doesn't get; the composite fades deep cards by it). Alpha is the card's coverage
+// alone, so the composite can trace the cards' outline from it. The page colour shows through
+// wherever a card fades (alpha), so the canvas never reads a CSS colour (playbook: canvas-colours).
 const FRAGMENT = `#version 300 es
 precision highp float;
 in vec2 vUv;
@@ -121,7 +123,6 @@ in float vDepth;
 uniform sampler2D uMap;
 uniform vec4 uCrop;
 uniform float uSlot, uBand, uPresence, uHovered, uDimmed;
-const float DEEP_FADE = ${float(DEEP_FADE)};
 layout(location = 0) out vec4 outColor;
 layout(location = 1) out vec4 outMeltInputs;
 ${MELT_INPUTS_GLSL}
@@ -130,8 +131,7 @@ void main() {
   if (!gl_FrontFacing) uv.x = 1.0 - uv.x;   // past the side of the cylinder: never mirrored
   vec4 c = texture(uMap, uv * uCrop.xy + uCrop.zw);
   float deep = smoothstep(8.0, 20.6, vDepth) * (1.0 - uHovered);
-  float alpha = c.a * (1.0 - deep * DEEP_FADE);
-  outColor = vec4(c.rgb * alpha, alpha);
+  outColor = vec4(c.rgb * c.a, c.a);
   float gone = max(1.0 - uPresence, smoothstep(uBand - 1.0, uBand, abs(uSlot)));
   outMeltInputs = packMeltInputs(MeltInputs(gone, uDimmed, uHovered, deep));
 }`

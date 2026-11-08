@@ -42,10 +42,11 @@ vec4 packMeltInputs(MeltInputs m) { return vec4(m.gone, m.dimmed, m.hovered, m.d
 MeltInputs unpackMeltInputs(vec4 v) { return MeltInputs(v.r, v.g, v.b, v.a); }`
 
 /**
- * How much the card pass fades a card deep in the Helix (alpha × (1 - DEEP_FADE × deep), the
- * prototype's light haze). The composite needs it too, to tell how much of a card covers a pixel.
+ * How much a card deep in the Helix fades (colour and alpha × (1 - DEEP_FADE × deep), the
+ * prototype's light haze). The card pass leaves it to the composite, so the scene's alpha stays
+ * the cards' coverage, which the outline is traced from.
  */
-export const DEEP_FADE = 0.35
+const DEEP_FADE = 0.35
 
 export type CompositeFrame = {
   /** Whether the Showreel layer was drawn this frame. */
@@ -157,13 +158,9 @@ float meltAt(vec2 uv) {
   v = max(v, m.gone);
   return clamp(v, 0.0, 1.0);
 }
-// How much of a card covers uv, 0 to 1: the scene's alpha before the card pass faded it for
-// depth. Alpha and deep are both scaled by coverage (and blended alike at the cards' edges), so
-// alpha + DEEP_FADE * deep is the coverage itself.
-float coverAt(vec2 uv) {
-  vec2 p = clamp(uv, 0.001, 0.999);
-  return textureLod(uScene, p, 0.0).a + DEEP_FADE * textureLod(uMeltInputs, p, 0.0).a;
-}
+// How much of a card covers uv, 0 to 1: the scene's alpha, which the card pass writes unfaded
+// (the picture's own alpha times the coverage; the pictures are opaque).
+float coverAt(vec2 uv) { return textureLod(uScene, clamp(uv, 0.001, 0.999), 0.0).a; }
 ${EDGE}
 vec4 sceneAt(vec2 uv, float lod) { return textureLod(uScene, clamp(uv, 0.001, 0.999), lod); }
 vec4 showreelAt(vec2 uv, float lod) {
@@ -197,6 +194,11 @@ void main() {
   vec4 green = sceneAt(pos, lod);
   vec4 blue = sceneAt(pos - vec2(ca, 0.0), lod);
   vec4 c = vec4(red.r, green.g, blue.b, max(green.a, max(red.a, blue.a)));
+  // Deep cards fade (the prototype's light haze). The melt inputs are blended by coverage at the
+  // cards' edges, as the scene's alpha is, so deep there is the stored value over the coverage.
+  float cover = coverAt(pos);
+  float deep = clamp(textureLod(uMeltInputs, pos, 0.0).a / max(cover, 1e-3), 0.0, 1.0);
+  c *= 1.0 - DEEP_FADE * deep;
   // Scanlines darken as it melts; tape noise comes up, then grey static, then it is gone.
   c.rgb *= 1.0 - 0.18 * m * step(0.5, fract(uv.y * uRes.y / 3.0));
   float nz = hash12(uv * uRes + uTime);
@@ -207,9 +209,10 @@ void main() {
   c *= 1.0 - smoothstep(0.85, 1.0, m);
   // A crisp outline where the shifted picture's card ends (the prototype mixes towards the
   // background by coverage there): alpha follows smoothstep(coverage), keeping the depth fade.
-  float cover = coverAt(pos);
   c *= smoothstep(0.35, 0.65, cover) / max(cover, 0.35);
   c.a = min(c.a, 1.0);
+  // Premultiplied: the noise may not push a channel past alpha.
+  c.rgb = clamp(c.rgb, 0.0, c.a);
   if (uShowreelOn > 0.5) {
     vec4 r;
     if (uMelt <= 0.0) {
