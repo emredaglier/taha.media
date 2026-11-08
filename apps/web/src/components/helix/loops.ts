@@ -1,28 +1,34 @@
-import { cropToCard } from '../../lib/helix-geometry'
+import { cropToCard, type PictureCrop } from '../../lib/helix-geometry'
 import type { HelixWork } from '../FeaturedWorks'
 import { colourTexture, uploadPicture } from './gl'
 
 /**
  * The Featured Works' Preview loops on the Helix (#55): one `<video>` per Work, not per card, so
- * repeated cards cost nothing extra. A Work's loop loads the first time it is wanted, plays while
- * the motion model says it plays (`playingWorks`), and is paused otherwise. Its frames go into a
- * texture only while it plays; a card that doesn't show its loop shows its poster.
+ * repeated cards cost nothing extra. What plays and what is kept comes from the motion model
+ * (`previewLoops`):
+ * - A playing Work's loop loads the first time it is wanted, plays, and its new frames go into a
+ *   texture.
+ * - A held Work that stopped playing is paused, and its texture keeps the last frame: its cards
+ *   freeze on it.
+ * - Any other Work is paused and its texture freed: its cards show the poster again.
  */
 export type PreviewLoops = {
-  /** Plays the loops of the Works in `playing`, pauses the others, and uploads new frames. */
-  update(playing: ReadonlySet<number>): void
-  /** What a card of Work `work` shows of its loop now: a frame and its crop; null for the poster. */
+  /** Plays the loops of `playing`, pauses the others, and keeps only the frames of `held`. */
+  update(playing: ReadonlySet<number>, held: ReadonlySet<number>): void
+  /** Pauses every loop (the tab is hidden), keeping every frame; the next `update` plays again. */
+  pause(): void
+  /** The frame a card of Work `work` shows of its loop (moving or frozen); null for the poster. */
   frame(work: number): LoopFrame | null
   destroy(): void
 }
 
-export type LoopFrame = { texture: WebGLTexture; crop: ReturnType<typeof cropToCard> }
+export type LoopFrame = { texture: WebGLTexture; crop: PictureCrop }
 
 type Loop = {
   video: HTMLVideoElement | null
-  /** Holds the loop's latest frame while it plays (freed once it stops). */
+  /** Holds the loop's latest frame while the Work is held. */
   texture: WebGLTexture | null
-  crop: ReturnType<typeof cropToCard>
+  crop: PictureCrop
   /** The moment of the frame in the texture: a frame is uploaded only once. */
   uploadedAt: number
   /** It can't play here (missing, unreadable without CORS, or refused): the poster stays. */
@@ -35,14 +41,14 @@ const hasFrame = (video: HTMLVideoElement) =>
 
 export function createPreviewLoops(
   gl: WebGL2RenderingContext,
-  works: readonly Pick<HelixWork, 'loop' | 'poster'>[],
+  works: readonly Pick<HelixWork, 'previewLoop' | 'poster'>[],
   /** Where the hidden `<video>`s live in the page (iOS decodes a loop only when it is in the page). */
   host: Element,
 ): PreviewLoops {
-  const loops: Loop[] = works.map((work) => ({
+  const loops: Loop[] = works.map(({ previewLoop, poster }) => ({
     video: null,
     texture: null,
-    crop: cropToCard(work.loop.width, work.loop.height, work.poster.focalPoint),
+    crop: cropToCard(previewLoop.width, previewLoop.height, poster.focalPoint),
     uploadedAt: Number.NaN,
     failed: false,
   }))
@@ -61,19 +67,24 @@ export function createPreviewLoops(
     video.tabIndex = -1
     video.style.cssText =
       'position:absolute;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none'
-    video.addEventListener('error', () => stop(loop, true))
+    video.addEventListener('error', () => fail(loop))
     video.src = src
     host.append(video)
     loop.video = video
     return video
   }
 
-  function stop(loop: Loop, failed = false) {
-    if (failed) loop.failed = true
-    loop.video?.pause()
+  /** Lets the frame go: the Work's cards show the poster again. */
+  function release(loop: Loop) {
     if (loop.texture) gl.deleteTexture(loop.texture)
     loop.texture = null
     loop.uploadedAt = Number.NaN
+  }
+
+  function fail(loop: Loop) {
+    loop.failed = true
+    loop.video?.pause()
+    release(loop)
   }
 
   function upload(loop: Loop, video: HTMLVideoElement, focalPoint: { x: number; y: number }) {
@@ -84,7 +95,7 @@ export function createPreviewLoops(
       uploadPicture(gl, loop.texture, video)
     } catch {
       // Unreadable after all (no CORS): the poster it is.
-      stop(loop, true)
+      fail(loop)
       return
     }
     loop.uploadedAt = video.currentTime
@@ -94,23 +105,29 @@ export function createPreviewLoops(
   }
 
   return {
-    update(playing) {
+    update(playing, held) {
       for (const [work, loop] of loops.entries()) {
         if (loop.failed) continue
         if (!playing.has(work)) {
-          if (loop.video && !loop.video.paused) stop(loop)
+          // Paused whoever paused it; the frame stays only while the Work is held.
+          loop.video?.pause()
+          if (!held.has(work)) release(loop)
           continue
         }
-        const { loop: media, poster } = works[work]!
-        const video = videoOf(loop, media.src)
+        const { previewLoop, poster } = works[work]!
+        const video = videoOf(loop, previewLoop.src)
         if (video.paused) {
           video.play().catch((error: unknown) => {
-            // A pause before it started (the card turned away) is no failure.
-            if (!(error instanceof DOMException && error.name === 'AbortError')) stop(loop, true)
+            // A pause before it started (the card turned away, the tab hid) is no failure.
+            if (!(error instanceof DOMException && error.name === 'AbortError')) fail(loop)
           })
         }
         upload(loop, video, poster.focalPoint)
       }
+    },
+
+    pause() {
+      for (const loop of loops) loop.video?.pause()
     },
 
     frame(work) {
@@ -120,7 +137,8 @@ export function createPreviewLoops(
 
     destroy() {
       for (const loop of loops) {
-        stop(loop)
+        loop.video?.pause()
+        release(loop)
         if (!loop.video) continue
         loop.video.removeAttribute('src')
         loop.video.load()

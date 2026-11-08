@@ -79,6 +79,10 @@ export function vertexArray(gl: WebGL2RenderingContext, vertices: Float32Array) 
   }
 }
 
+/** The unit square as two triangles, for a full-screen pass (`QUAD_VERTEX`). */
+export const screenQuad = (gl: WebGL2RenderingContext) =>
+  vertexArray(gl, new Float32Array([0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 1]))
+
 /** A texture holding a single colour (RGBA bytes), filtered linearly and clamped at the edges. */
 export function colourTexture(gl: WebGL2RenderingContext, colour: Uint8Array): WebGLTexture {
   const texture = gl.createTexture()
@@ -133,17 +137,18 @@ export function cssColour(element: Element, property: string): Uint8Array | null
 /**
  * A screen-sized texture a pass draws into, for a later pass to read. Drawn multisampled where the
  * device allows (the cards' edges stay smooth, as they were on the canvas itself), then resolved
- * into the texture. Colour is premultiplied by alpha, as the canvas is. With `meta`, the pass
- * draws a second picture alongside (its second output), resolved into `meta` and read as it is;
- * with `mipmaps`, `texture` gets them on every resolve, so a later pass can read it blurred.
+ * into the texture. Colour is premultiplied by alpha, as the canvas is. With `meltInputs`, the pass
+ * also writes the liquid glass's melt inputs (its second output, laid out as `MELT_INPUTS_GLSL`
+ * has it), resolved into `meltInputs` and read as they are; with `mipmaps`, `texture` gets them on
+ * every resolve, so a later pass can read it blurred.
  */
 export type Target = {
   readonly texture: WebGLTexture
-  /** The second picture, when the target has one. */
-  readonly meta: WebGLTexture | null
+  /** The melt inputs, when the target has them. */
+  readonly meltInputs: WebGLTexture | null
   /** Draws into it from now on (the viewport is the caller's). */
   bind(): void
-  /** Makes what was drawn readable from `texture` (and `meta`). */
+  /** Makes what was drawn readable from `texture` (and `meltInputs`). */
   resolve(): void
   resize(width: number, height: number): void
   destroy(): void
@@ -167,12 +172,16 @@ function screenTexture(gl: WebGL2RenderingContext, mipmaps: boolean): WebGLTextu
 
 export function createTarget(
   gl: WebGL2RenderingContext,
-  { depth, meta = false, mipmaps = false }: { depth: boolean; meta?: boolean; mipmaps?: boolean },
+  {
+    depth,
+    meltInputs = false,
+    mipmaps = false,
+  }: { depth: boolean; meltInputs?: boolean; mipmaps?: boolean },
 ): Target {
   // Where the pass's pictures end up: textures, plus depth when drawn without multisampling.
   const texture = screenTexture(gl, mipmaps)
-  const metaTexture = meta ? screenTexture(gl, false) : null
-  const textures = metaTexture ? [texture, metaTexture] : [texture]
+  const inputsTexture = meltInputs ? screenTexture(gl, false) : null
+  const textures = inputsTexture ? [texture, inputsTexture] : [texture]
   const outputs = textures.map((_, index) => gl.COLOR_ATTACHMENT0 + index)
   const resolved = gl.createFramebuffer()
   const plainDepth = depth ? gl.createRenderbuffer() : null
@@ -200,7 +209,7 @@ export function createTarget(
 
   return {
     texture,
-    meta: metaTexture,
+    meltInputs: inputsTexture,
 
     bind() {
       gl.bindFramebuffer(gl.FRAMEBUFFER, samples > 1 ? multisampled : resolved)

@@ -3,16 +3,16 @@
 import { useRouter } from 'next/navigation'
 import { useEffectEvent, useLayoutEffect, useRef, useState } from 'react'
 
-import { cardAt, focalFor, HELIX_SHAPE } from '../../lib/helix-geometry'
+import { cardAt, HELIX_SHAPE, lensFor } from '../../lib/helix-geometry'
 import {
   cardPresence,
   counter,
   createHelix,
   frontWork,
-  liveCards,
   liveRegionAfter,
   openingOf,
-  playingWorks,
+  previewLoops,
+  showsLoop,
   slotOf,
   startHelix,
   stepHelix,
@@ -38,7 +38,7 @@ import {
   watchLinks,
   zoomScroll,
 } from './opening'
-import { createFocus, watchPointer } from './pointer'
+import { createHoverLevels, devicePoint, watchPointer } from './pointer'
 import { createHelixRenderer, HelixUnavailable } from './renderer'
 
 const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, value))
@@ -50,23 +50,8 @@ const shownCards = (state: HelixState) =>
 /** What the overlays name: the front Work and the counter. */
 const frontOf = (state: HelixState) => ({ work: frontWork(state), counter: counter(state) })
 
-/** Where a pointer event is on the canvas, in normalized device coordinates (y up). */
-function pointOn(canvas: HTMLCanvasElement, event: PointerEvent) {
-  const box = canvas.getBoundingClientRect()
-  return {
-    point: {
-      x: ((event.clientX - box.left) / box.width) * 2 - 1,
-      y: 1 - ((event.clientY - box.top) / box.height) * 2,
-    },
-    aspect: box.width / Math.max(1, box.height),
-  }
-}
-
-/** The canvas's shape (width / height), and the focal length the Helix has on it. */
-function lensOf(canvas: HTMLCanvasElement) {
-  const aspect = canvas.clientWidth / Math.max(1, canvas.clientHeight)
-  return { aspect, focal: focalFor(aspect) }
-}
+/** The canvas's shape (width / height) and the focal length the Helix has on it. */
+const lensOf = (canvas: HTMLCanvasElement) => lensFor(canvas.clientWidth, canvas.clientHeight)
 
 /**
  * The Helix of Featured Works (#45), loaded only on a device that passed the capability check.
@@ -80,14 +65,15 @@ function lensOf(canvas: HTMLCanvasElement) {
  * click on another card turns it to the front. On Home the logo replays the opening.
  *
  * Everything is seen through the liquid glass (#55): the top and bottom melt away, and so do far
- * cards and, while the pointer rests on a card, the others; the cursor drops ripples and turning
- * stirs the picture. The cards in the sharp middle band, and the one pointed at, play their
- * Preview loops; every other card shows its poster.
+ * cards and, while the pointer rests on a card (the hovered card), the others; the cursor drops
+ * ripples and turning stirs the picture. The cards in the sharp middle band, and the hovered one,
+ * play their Preview loops; a card whose loop stopped freezes on its last frame until its Work is
+ * off screen, and every other card shows its poster.
  *
- * Where the Helix is and where it goes, and which loops play, live in the motion model
- * (`lib/helix-motion`); this component feeds it input, draws it (the bend of fast turning and the
- * focus easing in and out are its own, a look) and names the front Work. `onFail` runs when WebGL2
- * can't start or the context is lost: the static Home comes back.
+ * Where the Helix is and where it goes, and which loops play or hold a frame, live in the motion
+ * model (`lib/helix-motion`); this component feeds it input, draws it (the bend of fast turning
+ * and the hover easing in and out are its own, a look) and names the front Work. `onFail` runs
+ * when WebGL2 can't start or the context is lost: the static Home comes back.
  */
 export function Helix({
   works,
@@ -166,10 +152,12 @@ export function Helix({
       void renderer.handOver(shown).then(() => (ready = true))
     }
 
-    // --- pointing: the card under a resting pointer is in focus, and the others melt a little
+    // --- hovering: the card under a resting pointer is hovered, and the others melt a little
     const pointer = watchPointer(canvas)
-    const focus = createFocus(state.cards)
-    let pointed: number | null = null
+    const hoverLevels = createHoverLevels(state.cards)
+    let hovered: number | null = null
+    // The Works whose loop frame is held (none at first): their cards freeze on it once they stop.
+    let held: ReadonlySet<number> = new Set()
     // A press on the Helix (a drag, or a click when it doesn't travel).
     let press: { id: number; x: number; y: number; lastY: number; travel: number } | null = null
 
@@ -194,26 +182,27 @@ export function Helix({
       const target = clamp(state.speed / 60, -bendMax, bendMax)
       bend += (target - bend) * (1 - (1 - bendEase) ** (dt * 60))
 
-      // The card pointed at changes only while the pointer rests, never during a drag, and there
-      // is none while the zoom runs or without a pointer over the Helix.
+      // The hovered card changes only while the pointer rests, and there is none during a press
+      // (cleared when it starts), while the zoom runs, or without a pointer over the Helix.
       const { aspect, focal } = lensOf(canvas)
       const sample = pointer.sample(dt)
-      if (state.phase.kind === 'hero' || !sample.point) pointed = null
+      if (state.phase.kind === 'hero' || !sample.point) hovered = null
       else if (sample.resting && !press) {
         const card = cardAt(sample.point, shownCards(state), focal, aspect)
-        pointed = card >= 0 ? card : null
+        hovered = card >= 0 ? card : null
       }
-      focus.step(pointed, dt)
-      const live = liveCards(state, focal, pointed)
+      hoverLevels.step(hovered, dt)
+      const loops = previewLoops(state, focal, hovered, held)
+      held = loops.held
 
       renderer.draw({
         cards: visibleCards(state).map((card) => ({
           slot: slotOf(state, card),
           work: workOfCard(state, card),
           presence: cardPresence(state, card),
-          live: live.includes(card),
-          hover: focus.hover(card),
-          dim: focus.dim(card),
+          showsLoop: showsLoop(state, loops, card),
+          hovered: hoverLevels.hovered(card),
+          dimmed: hoverLevels.dimmed(card),
         })),
         band: visibleSlots(state),
         bend,
@@ -221,7 +210,8 @@ export function Helix({
         zoom: opening.zoom,
         showreel:
           opening.showreelSlot === null ? null : { slot: opening.showreelSlot, melt: opening.melt },
-        playing: playingWorks(state, focal, pointed),
+        playing: loops.playing,
+        held: loops.held,
         cursor: sample.cursor,
         dt,
       })
@@ -251,7 +241,12 @@ export function Helix({
       cancelAnimationFrame(frameId)
       frameId = 0
     }
-    const onVisibility = () => (document.hidden ? stop() : start())
+    // While the tab is hidden nothing is drawn and no video plays (held frames stay).
+    const onVisibility = () => {
+      if (!document.hidden) return start()
+      stop()
+      renderer.pause()
+    }
 
     renderer.resize()
     const resized = new ResizeObserver(() => renderer.resize())
@@ -284,6 +279,9 @@ export function Helix({
       canvas.setPointerCapture(event.pointerId)
       const { clientX: x, clientY: y } = event
       press = { id: event.pointerId, x, y, lastY: y, travel: 0 }
+      // A pressed pointer isn't resting: no card is hovered until it rests again after the press,
+      // so a hovered card dragged away stops playing and the others stop dimming.
+      hovered = null
       apply({ kind: 'dragStart' })
     }
     const onPointerMove = (event: PointerEvent) => {
@@ -302,8 +300,9 @@ export function Helix({
       press = null
       apply({ kind: 'dragEnd' })
       if (!click) return
-      const { point, aspect } = pointOn(canvas, event)
-      const card = cardAt(point, shownCards(state), focalFor(aspect), aspect)
+      const { aspect, focal } = lensOf(canvas)
+      const point = devicePoint(canvas, event.clientX, event.clientY)
+      const card = cardAt(point, shownCards(state), focal, aspect)
       if (card >= 0) apply({ kind: 'card', card })
     }
 

@@ -1,5 +1,5 @@
 import { HELIX_TUNING } from '../../lib/helix-tuning'
-import { colourTexture, float, link, QUAD_VERTEX, uniforms, vertexArray } from './gl'
+import { colourTexture, float, link, QUAD_VERTEX, screenQuad, uniforms } from './gl'
 
 /**
  * The water under the liquid glass (#45 "pass 3", #55): a ripple simulation over the screen. The
@@ -25,13 +25,13 @@ export type Ripples = {
 /** A point on the screen, 0 to 1 across (left to right) and up (bottom to top). */
 export type ScreenPoint = { x: number; y: number }
 
+/** Where the pointer went since the last frame, and how fast it moved (CSS px per second). */
+export type PointerPath = { from: ScreenPoint; to: ScreenPoint; speed: number }
+
 export type RippleInput = {
   dt: number
-  /**
-   * Where the cursor went since the last step and how fast it moved (CSS px per second); null
-   * while there is no pointer over the Helix.
-   */
-  cursor: { from: ScreenPoint; to: ScreenPoint; speed: number } | null
+  /** The pointer's path since the last step; null while there is no pointer over the Helix. */
+  cursor: PointerPath | null
   /** Where the Showreel starts to melt, on the frame it does; otherwise null. */
   meltAt: ScreenPoint | null
   /** How fast the Helix turns, 0 to 1. */
@@ -81,7 +81,9 @@ void main() {
   outColor = vec4(clamp(next, -${float(MAX_HEIGHT)}, ${float(MAX_HEIGHT)}), s.r, 0.0, 1.0);
 }`
 
-/** A half-float texture and the framebuffer that draws into it. */
+/** One state of the water: a half-float texture and the framebuffer that draws into it. */
+type Water = ReturnType<typeof waterTarget>
+
 function waterTarget(gl: WebGL2RenderingContext, width: number, height: number) {
   const texture = gl.createTexture()
   gl.bindTexture(gl.TEXTURE_2D, texture)
@@ -97,6 +99,8 @@ function waterTarget(gl: WebGL2RenderingContext, width: number, height: number) 
   gl.clearColor(0, 0, 0, 0)
   gl.clear(gl.COLOR_BUFFER_BIT)
   gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+  // Unbound again, so no later pass draws into it while it is still bound for reading.
+  gl.bindTexture(gl.TEXTURE_2D, null)
   return {
     texture,
     framebuffer,
@@ -123,13 +127,13 @@ export function createRipples(gl: WebGL2RenderingContext): Ripples {
     'uDropStrength',
     'uAspect',
   ])
-  const quad = vertexArray(gl, new Float32Array([0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 1]))
+  const quad = screenQuad(gl)
   const still = colourTexture(gl, new Uint8Array([0, 0, 0, 0]))
-  let targets: ReturnType<typeof waterTarget>[] = []
+  let targets: Water[] = []
   let size = { width: 1, height: 1 }
   let owed = 0
   // What the cursor did since the last step, kept until a step runs (a frame may run none).
-  let cursor: RippleInput['cursor'] = null
+  let cursor: PointerPath | null = null
   let meltAt: ScreenPoint | null = null
 
   const free = () => {
@@ -140,11 +144,11 @@ export function createRipples(gl: WebGL2RenderingContext): Ripples {
   /** One step: from the current water into the other target, then they swap. */
   function advance(
     aspect: number,
-    line: RippleInput['cursor'],
+    line: PointerPath | null,
     drop: ScreenPoint | null,
     speed: number,
   ) {
-    const [from, to] = targets as [ReturnType<typeof waterTarget>, ReturnType<typeof waterTarget>]
+    const [from, to] = targets as [Water, Water]
     // The Showreel's drop, or now and then one stirred up by turning, near the top or bottom.
     let dropAt: ScreenPoint = { x: NOWHERE, y: NOWHERE }
     let dropStrength = 0

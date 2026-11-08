@@ -2,13 +2,13 @@ import {
   cardOnScreen,
   coverScale,
   cropToCard,
-  focalFor,
   HELIX_SHAPE,
-  SLOT_PITCH,
+  lensFor,
+  turnOnScreen,
 } from '../../lib/helix-geometry'
 import type { HelixWork } from '../FeaturedWorks'
 import type { HelixShowreel } from '../Hero'
-import { createComposite } from './composite'
+import { createComposite, MELT_INPUTS_GLSL } from './composite'
 import { CYLINDER_GLSL } from './cylinder'
 import {
   colourTexture,
@@ -21,35 +21,36 @@ import {
   vertexArray,
 } from './gl'
 import { createPreviewLoops } from './loops'
-import { createRipples, type RippleInput, type ScreenPoint } from './ripples'
+import { createRipples, type PointerPath, type ScreenPoint } from './ripples'
 import { createShowreelLayer } from './showreel'
 
 export { HelixUnavailable } from './gl'
-export type { ScreenPoint } from './ripples'
 
 /** What the Helix needs of a Featured Work to draw its cards: the Preview loop and its poster. */
-type HelixMedia = Pick<HelixWork, 'loop' | 'poster'>
+type HelixMedia = Pick<HelixWork, 'previewLoop' | 'poster'>
 
 /**
  * A card to draw: where it sits (`slot`), the Work on it, how present it is (cards appear during
- * the zoom), whether it plays its Preview loop (`live`: in the sharp band or pointed at), and how
- * far it is pointed at (`hover`) or not (`dim`), each 0 to 1 as the focus eases in and out.
+ * the zoom), whether it shows its Work's Preview loop, playing or frozen on its last frame
+ * (`showsLoop`; otherwise its poster), and how far it is hovered (`hovered`) or dimmed for not
+ * being hovered (`dimmed`), each 0 to 1 as the hover eases in and out.
  */
 export type HelixCard = {
   slot: number
   work: number
   presence: number
-  live: boolean
-  hover: number
-  dim: number
+  showsLoop: boolean
+  hovered: number
+  dimmed: number
 }
 
 /**
  * One frame to draw: the cards in the visible band, the band's reach (cards melt towards it), how
  * far the turning speed bends them, where the Helix is (`progress`, cards), the opening (the
  * camera's pull-back, 0 the Showreel full-bleed to 1 the Helix in place, and the Showreel, where
- * it sits and how far it has melted, until it is gone), the Works whose loops play, the pointer's
- * path since the last frame (it drops ripples), and the seconds since the last frame.
+ * it sits and how far it has melted, until it is gone), the Works whose loops play and whose
+ * frames are held (`previewLoops`), the pointer's path since the last frame (it drops ripples),
+ * and the seconds since the last frame.
  */
 export type HelixFrame = {
   cards: readonly HelixCard[]
@@ -59,7 +60,8 @@ export type HelixFrame = {
   zoom: number
   showreel: { slot: number; melt: number } | null
   playing: ReadonlySet<number>
-  cursor: RippleInput['cursor']
+  held: ReadonlySet<number>
+  cursor: PointerPath | null
   dt: number
 }
 
@@ -72,6 +74,11 @@ export type HelixRenderer = {
    * screen, if one plays), so the Helix can take over under a matching picture.
    */
   handOver(shown: HTMLVideoElement | null): Promise<void>
+  /**
+   * Pauses every video while the tab is hidden: the Preview loops (their frames stay) and the
+   * Showreel. The next draw plays again what should play.
+   */
+  pause(): void
   destroy(): void
 }
 
@@ -100,11 +107,11 @@ void main() {
                      ((FAR + NEAR) * vz + 2.0 * FAR * NEAR) / (NEAR - FAR), -vz);
 }`
 
-// The cards as they are, and what the liquid glass needs to melt them (see `composite`): how far
-// a card is not there (it hasn't appeared yet in the opening, or it is in the last slot before the
+// The cards as they are, and the melt inputs the liquid glass needs (see `composite`): how far a
+// card is not there (it hasn't appeared yet in the opening, or it is in the last slot before the
 // edge of the visible band, so a card beyond it, which may repeat a Work on screen, is never
-// seen), pointed at or not, and how deep in the Helix (the prototype's light haze, which the card
-// pointed at doesn't get). The page colour shows through wherever a card fades (alpha), so the
+// seen), dimmed or hovered, and how deep in the Helix (the prototype's light haze, which the
+// hovered card doesn't get). The page colour shows through wherever a card fades (alpha), so the
 // canvas never reads a CSS colour (playbook: canvas-colours).
 const FRAGMENT = `#version 300 es
 precision highp float;
@@ -112,18 +119,19 @@ in vec2 vUv;
 in float vDepth;
 uniform sampler2D uMap;
 uniform vec4 uCrop;
-uniform float uSlot, uBand, uPresence, uHover, uDim;
+uniform float uSlot, uBand, uPresence, uHovered, uDimmed;
 layout(location = 0) out vec4 outColor;
-layout(location = 1) out vec4 outMeta;
+layout(location = 1) out vec4 outMeltInputs;
+${MELT_INPUTS_GLSL}
 void main() {
   vec2 uv = vUv;
   if (!gl_FrontFacing) uv.x = 1.0 - uv.x;   // past the side of the cylinder: never mirrored
   vec4 c = texture(uMap, uv * uCrop.xy + uCrop.zw);
-  float deep = smoothstep(8.0, 20.6, vDepth) * (1.0 - uHover);
+  float deep = smoothstep(8.0, 20.6, vDepth) * (1.0 - uHovered);
   float alpha = c.a * (1.0 - deep * 0.35);
   outColor = vec4(c.rgb * alpha, alpha);
   float gone = max(1.0 - uPresence, smoothstep(uBand - 1.0, uBand, abs(uSlot)));
-  outMeta = vec4(gone, uDim, uHover, deep);
+  outMeltInputs = packMeltInputs(MeltInputs(gone, uDimmed, uHovered, deep));
 }`
 
 /** A grid of triangles over the unit square, one card's mesh. */
@@ -176,8 +184,8 @@ export function createHelixRenderer(
     'uCrop',
     'uBand',
     'uPresence',
-    'uHover',
-    'uDim',
+    'uHovered',
+    'uDimmed',
   ])
   const mesh = vertexArray(gl, cardMesh())
   const composite = createComposite(gl)
@@ -231,6 +239,11 @@ export function createHelixRenderer(
   return {
     handOver: (shown) => showreel.handOver(shown),
 
+    pause() {
+      loops.pause()
+      showreel.play(false)
+    },
+
     resize() {
       const ratio = Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO)
       canvas.width = Math.max(1, Math.round(canvas.clientWidth * ratio))
@@ -244,15 +257,14 @@ export function createHelixRenderer(
       ripples.resize(canvas.clientWidth, canvas.clientHeight)
     },
 
-    draw({ cards, band, bend, progress, zoom, showreel: reel, playing, cursor, dt }) {
+    draw({ cards, band, bend, progress, zoom, showreel: reel, playing, held, cursor, dt }) {
       if (gl.isContextLost()) return
-      const aspect = canvas.clientWidth / Math.max(1, canvas.clientHeight)
-      const focal = focalFor(aspect)
+      const { aspect, focal } = lensFor(canvas.clientWidth, canvas.clientHeight)
       // The opening's camera: from the front card covering the screen down to 1, at a constant rate.
       const scale = coverScale(focal, aspect) ** (1 - zoom)
-      loops.update(playing)
+      loops.update(playing, held)
 
-      // --- pass 1: the cards, and what the glass needs to melt them
+      // --- pass 1: the cards, and the melt inputs for the glass
       composite.scene.bind()
       gl.viewport(0, 0, canvas.width, canvas.height)
       gl.clearColor(0, 0, 0, 0)
@@ -268,17 +280,17 @@ export function createHelixRenderer(
       gl.uniform1f(at.uBand, band)
       gl.uniform1i(at.uMap, 0)
       gl.activeTexture(gl.TEXTURE0)
-      for (const { slot, work, presence, live, hover, dim } of cards) {
+      for (const { slot, work, presence, showsLoop, hovered, dimmed } of cards) {
         const still = stills[work]
         if (!still || presence <= 0) continue
-        // A card in the sharp band, or pointed at, shows its loop once it has a frame.
-        const { texture, crop } = (live ? loops.frame(work) : null) ?? still
+        // Its loop, playing or frozen, once it has a frame; otherwise its poster.
+        const { texture, crop } = (showsLoop ? loops.frame(work) : null) ?? still
         gl.bindTexture(gl.TEXTURE_2D, texture)
         gl.uniform4f(at.uCrop, crop.scale.x, crop.scale.y, crop.offset.x, crop.offset.y)
         gl.uniform1f(at.uSlot, slot)
         gl.uniform1f(at.uPresence, presence)
-        gl.uniform1f(at.uHover, hover)
-        gl.uniform1f(at.uDim, dim)
+        gl.uniform1f(at.uHovered, hovered)
+        gl.uniform1f(at.uDimmed, dimmed)
         gl.drawArrays(gl.TRIANGLES, 0, mesh.count)
       }
       gl.disable(gl.DEPTH_TEST)
@@ -314,8 +326,7 @@ export function createHelixRenderer(
         aspect,
         time: (performance.now() / 1000) % 1000,
         speed,
-        // A slot's height at the front, in screen heights: the haze rides with the cards.
-        shift: (progress * SLOT_PITCH * focal) / (HELIX_SHAPE.cameraZ - HELIX_SHAPE.radius) / 2,
+        shift: turnOnScreen(progress, focal),
         ripples: { texture: ripples.texture, texel: ripples.texel },
       })
     },

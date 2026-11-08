@@ -1,5 +1,5 @@
 import { HELIX_TUNING } from '../../lib/helix-tuning'
-import { createTarget, float, link, QUAD_VERTEX, uniforms, vertexArray, type Target } from './gl'
+import { createTarget, float, link, QUAD_VERTEX, screenQuad, uniforms, type Target } from './gl'
 
 /**
  * The composite (#45 "pass 4"): the cards (`scene`) and the Showreel layer (`showreel`), each
@@ -8,18 +8,16 @@ import { createTarget, float, link, QUAD_VERTEX, uniforms, vertexArray, type Tar
  * - The picture stays whole but warps, as through water and heat haze, with a colour split. The
  *   ripples (`Ripples`) bend it, and turning stirs the haze.
  * - How melted each pixel is comes from one measure: the top and bottom of the screen beyond the
- *   sharp band, cards deep in the Helix, cards you aren't pointing at, and cards that haven't
- *   appeared yet (or are leaving the visible band). The more melted, the more it warps and blurs,
- *   until it is gone and the page shows through. The card you point at doesn't melt at the edges
- *   or for depth.
+ *   sharp band, cards deep in the Helix, cards not hovered, and cards that haven't appeared yet
+ *   (or are leaving the visible band). The more melted, the more it warps and blurs, until it is
+ *   gone and the page shows through. The hovered card doesn't melt at the edges or for depth.
  * - The Showreel melts away in a ring from its centre, the ring bending the picture like the rim
  *   of a lens.
- * The card pass writes what the measure needs for each pixel into the scene's second picture
- * (`meta`): red, how far the card is not there; green, not pointed at; blue, pointed at; alpha,
- * how deep in the Helix it is.
+ * The card pass writes what the measure needs for each pixel as the scene's melt inputs
+ * (`MELT_INPUTS_GLSL`).
  */
 export type Composite = {
-  /** What the card pass draws into (with depth, and the measure's picture as a second output). */
+  /** What the card pass draws into (with depth, and the melt inputs as a second output). */
   readonly scene: Target
   /** What the Showreel pass draws into. */
   readonly showreel: Target
@@ -28,6 +26,17 @@ export type Composite = {
   draw(frame: CompositeFrame): void
   destroy(): void
 }
+
+/**
+ * The melt inputs, as GLSL for both the card pass, which writes them as its second output, and the
+ * composite, which reads them: for each pixel, how far the card there is not there yet (or is
+ * leaving the visible band), not hovered, hovered, and deep in the Helix, each 0 to 1. One packing,
+ * so the two passes can't disagree about which channel holds what.
+ */
+export const MELT_INPUTS_GLSL = `
+struct MeltInputs { float gone; float dimmed; float hovered; float deep; };
+vec4 packMeltInputs(MeltInputs m) { return vec4(m.gone, m.dimmed, m.hovered, m.deep); }
+MeltInputs unpackMeltInputs(vec4 v) { return MeltInputs(v.r, v.g, v.b, v.a); }`
 
 export type CompositeFrame = {
   /** Whether the Showreel layer was drawn this frame. */
@@ -43,7 +52,7 @@ export type CompositeFrame = {
   time: number
   /** How fast the Helix turns, 0 to 1: it stirs the haze. */
   speed: number
-  /** How far the Helix has turned, in screen heights, so the haze rides with the cards. */
+  /** How far the Helix has turned, in screen heights (`turnOnScreen`): the haze rides with it. */
   shift: number
   /** The water's height (red), and one step across it in texture coordinates. */
   ripples: { texture: WebGLTexture; texel: { x: number; y: number } }
@@ -77,13 +86,13 @@ const GLASS = HELIX_TUNING.glass
 const FRAGMENT = `#version 300 es
 precision highp float;
 in vec2 vUv;
-uniform sampler2D uScene, uMeta, uShowreel, uRipples;
+uniform sampler2D uScene, uMeltInputs, uShowreel, uRipples;
 uniform vec2 uRippleTexel, uCentre;
 uniform float uShowreelOn, uMelt, uReach, uAspect, uTime, uSpeed, uShift;
 out vec4 outColor;
 const float SHARP_BAND = ${float(HELIX_TUNING.sharpBand)};
 const float FAR_CARDS = ${float(HELIX_TUNING.farCards)};
-const float NOT_POINTED_AT = ${float(HELIX_TUNING.notPointedAt)};
+const float NOT_HOVERED = ${float(HELIX_TUNING.notHovered)};
 const float RIPPLE_STRENGTH = ${float(GLASS.rippleStrength)};
 const float HAZE_SPEED = ${float(GLASS.hazeSpeed)};
 const float COLOUR_SPLIT = ${float(GLASS.colourSplit)};
@@ -93,14 +102,15 @@ const float RING_RIM = ${float(RING.rim)};
 const float RING_WOBBLE = ${float(RING.wobble)};
 const float RING_REACH_MARGIN = ${float(RING.reachMargin)};
 ${NOISE}
+${MELT_INPUTS_GLSL}
 // How melted the picture is at uv: 0 sharp, 1 gone.
 float meltAt(vec2 uv) {
-  vec4 m = texture(uMeta, uv);
-  float keep = 1.0 - m.b;   // the card pointed at keeps its edges and its depth
+  MeltInputs m = unpackMeltInputs(texture(uMeltInputs, uv));
+  float keep = 1.0 - m.hovered;   // the hovered card keeps its edges and its depth
   float edge = pow(smoothstep(SHARP_BAND, 1.0, abs(uv.y - 0.5) * 2.0), 1.65);
-  float v = max(edge * keep, m.a * FAR_CARDS * keep);
-  v = max(v, m.g * NOT_POINTED_AT);
-  v = max(v, m.r);
+  float v = max(edge * keep, m.deep * FAR_CARDS * keep);
+  v = max(v, m.dimmed * NOT_HOVERED);
+  v = max(v, m.gone);
   return clamp(v, 0.0, 1.0);
 }
 vec4 sceneAt(vec2 uv, float lod) { return textureLod(uScene, clamp(uv, 0.001, 0.999), lod); }
@@ -155,13 +165,13 @@ void main() {
 }`
 
 /** The texture units the composite reads from. */
-const UNITS = { scene: 0, meta: 1, showreel: 2, ripples: 3 }
+const UNITS = { scene: 0, meltInputs: 1, showreel: 2, ripples: 3 }
 
 export function createComposite(gl: WebGL2RenderingContext): Composite {
   const program = link(gl, QUAD_VERTEX, FRAGMENT)
   const at = uniforms(gl, program, [
     'uScene',
-    'uMeta',
+    'uMeltInputs',
     'uShowreel',
     'uRipples',
     'uRippleTexel',
@@ -174,9 +184,9 @@ export function createComposite(gl: WebGL2RenderingContext): Composite {
     'uShift',
     'uCentre',
   ])
-  const quad = vertexArray(gl, new Float32Array([0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 1]))
+  const quad = screenQuad(gl)
   // Both are read blurred where the picture melts, so they keep mipmaps.
-  const scene = createTarget(gl, { depth: true, meta: true, mipmaps: true })
+  const scene = createTarget(gl, { depth: true, meltInputs: true, mipmaps: true })
   const showreel = createTarget(gl, { depth: false, mipmaps: true })
 
   const bind = (unit: number, texture: WebGLTexture | null) => {
@@ -199,11 +209,11 @@ export function createComposite(gl: WebGL2RenderingContext): Composite {
       gl.useProgram(program)
       gl.bindVertexArray(quad.array)
       bind(UNITS.scene, scene.texture)
-      bind(UNITS.meta, scene.meta)
+      bind(UNITS.meltInputs, scene.meltInputs)
       bind(UNITS.showreel, showreel.texture)
       bind(UNITS.ripples, ripples.texture)
       gl.uniform1i(at.uScene, UNITS.scene)
-      gl.uniform1i(at.uMeta, UNITS.meta)
+      gl.uniform1i(at.uMeltInputs, UNITS.meltInputs)
       gl.uniform1i(at.uShowreel, UNITS.showreel)
       gl.uniform1i(at.uRipples, UNITS.ripples)
       gl.uniform2f(at.uRippleTexel, ripples.texel.x, ripples.texel.y)
@@ -217,7 +227,8 @@ export function createComposite(gl: WebGL2RenderingContext): Composite {
       gl.uniform2f(at.uCentre, centre.x, centre.y)
       gl.drawArrays(gl.TRIANGLES, 0, quad.count)
       // Unbound again, so no later pass draws into a texture it is also reading.
-      for (const unit of [UNITS.ripples, UNITS.showreel, UNITS.meta, UNITS.scene]) bind(unit, null)
+      for (const unit of [UNITS.ripples, UNITS.showreel, UNITS.meltInputs, UNITS.scene])
+        bind(unit, null)
     },
 
     destroy() {

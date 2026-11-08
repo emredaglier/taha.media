@@ -62,10 +62,10 @@ export const HELIX_TUNING = {
   },
   /** How far the cards deep in the Helix melt (0 not at all, 1 fully at the far end). */
   farCards: 0.7,
-  /** How far the cards you aren't pointing at melt while the pointer rests on a card (0 to 1). */
-  notPointedAt: 0.55,
+  /** How far the cards not hovered melt while the pointer rests on a card (0 to 1). */
+  notHovered: 0.55,
   /**
-   * Pointing at a card: the pointer counts as resting once it moves slower than `restSpeed` (CSS
+   * Hovering a card: the pointer counts as resting once it moves slower than `restSpeed` (CSS
    * px per second; its measured speed falls away at `speedFade` per second once it stops); a card
    * then comes into focus at `inRate` and leaves it at `outRate` (per second, time-based easing).
    */
