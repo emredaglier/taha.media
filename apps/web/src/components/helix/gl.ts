@@ -133,13 +133,17 @@ export function cssColour(element: Element, property: string): Uint8Array | null
 /**
  * A screen-sized texture a pass draws into, for a later pass to read. Drawn multisampled where the
  * device allows (the cards' edges stay smooth, as they were on the canvas itself), then resolved
- * into the texture. Colour is premultiplied by alpha, as the canvas is.
+ * into the texture. Colour is premultiplied by alpha, as the canvas is. With `meta`, the pass
+ * draws a second picture alongside (its second output), resolved into `meta` and read as it is;
+ * with `mipmaps`, `texture` gets them on every resolve, so a later pass can read it blurred.
  */
 export type Target = {
   readonly texture: WebGLTexture
+  /** The second picture, when the target has one. */
+  readonly meta: WebGLTexture | null
   /** Draws into it from now on (the viewport is the caller's). */
   bind(): void
-  /** Makes what was drawn readable from `texture`. */
+  /** Makes what was drawn readable from `texture` (and `meta`). */
   resolve(): void
   resize(width: number, height: number): void
   destroy(): void
@@ -147,20 +151,35 @@ export type Target = {
 
 const MAX_SAMPLES = 4
 
-export function createTarget(gl: WebGL2RenderingContext, { depth }: { depth: boolean }): Target {
-  // Where the pass's picture ends up: a texture, plus depth when drawn without multisampling.
+function screenTexture(gl: WebGL2RenderingContext, mipmaps: boolean): WebGLTexture {
   const texture = gl.createTexture()
   gl.bindTexture(gl.TEXTURE_2D, texture)
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+  gl.texParameteri(
+    gl.TEXTURE_2D,
+    gl.TEXTURE_MIN_FILTER,
+    mipmaps ? gl.LINEAR_MIPMAP_LINEAR : gl.LINEAR,
+  )
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+  return texture
+}
+
+export function createTarget(
+  gl: WebGL2RenderingContext,
+  { depth, meta = false, mipmaps = false }: { depth: boolean; meta?: boolean; mipmaps?: boolean },
+): Target {
+  // Where the pass's pictures end up: textures, plus depth when drawn without multisampling.
+  const texture = screenTexture(gl, mipmaps)
+  const metaTexture = meta ? screenTexture(gl, false) : null
+  const textures = metaTexture ? [texture, metaTexture] : [texture]
+  const outputs = textures.map((_, index) => gl.COLOR_ATTACHMENT0 + index)
   const resolved = gl.createFramebuffer()
   const plainDepth = depth ? gl.createRenderbuffer() : null
   // Where the pass draws when multisampling: colour and depth renderbuffers, resolved by a blit.
   let samples = Math.min(MAX_SAMPLES, gl.getParameter(gl.MAX_SAMPLES) as number)
   const multisampled = gl.createFramebuffer()
-  const sampledColour = gl.createRenderbuffer()
+  const sampledColours = textures.map(() => gl.createRenderbuffer())
   const sampledDepth = depth ? gl.createRenderbuffer() : null
   let width = 0
   let height = 0
@@ -181,37 +200,63 @@ export function createTarget(gl: WebGL2RenderingContext, { depth }: { depth: boo
 
   return {
     texture,
+    meta: metaTexture,
 
     bind() {
       gl.bindFramebuffer(gl.FRAMEBUFFER, samples > 1 ? multisampled : resolved)
     },
 
     resolve() {
-      if (samples <= 1) return
-      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, multisampled)
-      gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, resolved)
-      gl.blitFramebuffer(0, 0, width, height, 0, 0, width, height, gl.COLOR_BUFFER_BIT, gl.NEAREST)
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+      if (samples > 1) {
+        gl.bindFramebuffer(gl.READ_FRAMEBUFFER, multisampled)
+        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, resolved)
+        // One blit per picture: each reads one output and writes only its own.
+        for (const [index, output] of outputs.entries()) {
+          gl.readBuffer(output)
+          gl.drawBuffers(outputs.map((each, other) => (other === index ? each : gl.NONE)))
+          gl.blitFramebuffer(
+            0,
+            0,
+            width,
+            height,
+            0,
+            0,
+            width,
+            height,
+            gl.COLOR_BUFFER_BIT,
+            gl.NEAREST,
+          )
+        }
+        gl.drawBuffers(outputs)
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+      }
+      if (!mipmaps) return
+      gl.bindTexture(gl.TEXTURE_2D, texture)
+      gl.generateMipmap(gl.TEXTURE_2D)
+      gl.bindTexture(gl.TEXTURE_2D, null)
     },
 
     resize(nextWidth, nextHeight) {
       width = nextWidth
       height = nextHeight
-      gl.bindTexture(gl.TEXTURE_2D, texture)
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null)
       gl.bindFramebuffer(gl.FRAMEBUFFER, resolved)
-      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0)
+      for (const [index, each] of textures.entries()) {
+        gl.bindTexture(gl.TEXTURE_2D, each)
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null)
+        // Complete from the start, even before anything is drawn into it (a target a frame skips).
+        if (mipmaps && each === texture) gl.generateMipmap(gl.TEXTURE_2D)
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, outputs[index]!, gl.TEXTURE_2D, each, 0)
+      }
+      gl.drawBuffers(outputs)
       gl.bindFramebuffer(gl.FRAMEBUFFER, null)
 
       if (samples > 1) {
-        storage(sampledColour, gl.RGBA8, samples)
         gl.bindFramebuffer(gl.FRAMEBUFFER, multisampled)
-        gl.framebufferRenderbuffer(
-          gl.FRAMEBUFFER,
-          gl.COLOR_ATTACHMENT0,
-          gl.RENDERBUFFER,
-          sampledColour,
-        )
+        for (const [index, each] of sampledColours.entries()) {
+          storage(each, gl.RGBA8, samples)
+          gl.framebufferRenderbuffer(gl.FRAMEBUFFER, outputs[index]!, gl.RENDERBUFFER, each)
+        }
+        gl.drawBuffers(outputs)
         if (sampledDepth) {
           storage(sampledDepth, gl.DEPTH_COMPONENT24, samples)
           gl.framebufferRenderbuffer(
@@ -234,10 +279,10 @@ export function createTarget(gl: WebGL2RenderingContext, { depth }: { depth: boo
     },
 
     destroy() {
-      gl.deleteTexture(texture)
+      for (const each of textures) gl.deleteTexture(each)
       gl.deleteFramebuffer(resolved)
       gl.deleteFramebuffer(multisampled)
-      gl.deleteRenderbuffer(sampledColour)
+      for (const each of sampledColours) gl.deleteRenderbuffer(each)
       if (plainDepth) gl.deleteRenderbuffer(plainDepth)
       if (sampledDepth) gl.deleteRenderbuffer(sampledDepth)
     },

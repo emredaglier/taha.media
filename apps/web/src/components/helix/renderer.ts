@@ -4,8 +4,8 @@ import {
   cropToCard,
   focalFor,
   HELIX_SHAPE,
+  SLOT_PITCH,
 } from '../../lib/helix-geometry'
-import { HELIX_TUNING } from '../../lib/helix-tuning'
 import type { HelixWork } from '../FeaturedWorks'
 import type { HelixShowreel } from '../Hero'
 import { createComposite } from './composite'
@@ -20,33 +20,53 @@ import {
   uniforms,
   vertexArray,
 } from './gl'
+import { createPreviewLoops } from './loops'
+import { createRipples, type RippleInput, type ScreenPoint } from './ripples'
 import { createShowreelLayer } from './showreel'
 
 export { HelixUnavailable } from './gl'
+export type { ScreenPoint } from './ripples'
 
-/** A card's still frame: its Preview loop's poster. */
-type HelixPoster = HelixWork['poster']
+/** What the Helix needs of a Featured Work to draw its cards: the Preview loop and its poster. */
+type HelixMedia = Pick<HelixWork, 'loop' | 'poster'>
 
 /**
- * One frame to draw: the cards in the visible band with their slot, Work and presence (they appear
- * during the zoom), the band's reach (cards fade out towards it), how far the turning speed bends
- * them, and the opening: the camera's pull-back (0 the Showreel full-bleed, 1 the Helix in place)
- * and the Showreel, where it sits and how far it has melted, until it is gone.
+ * A card to draw: where it sits (`slot`), the Work on it, how present it is (cards appear during
+ * the zoom), whether it plays its Preview loop (`live`: in the sharp band or pointed at), and how
+ * far it is pointed at (`hover`) or not (`dim`), each 0 to 1 as the focus eases in and out.
+ */
+export type HelixCard = {
+  slot: number
+  work: number
+  presence: number
+  live: boolean
+  hover: number
+  dim: number
+}
+
+/**
+ * One frame to draw: the cards in the visible band, the band's reach (cards melt towards it), how
+ * far the turning speed bends them, where the Helix is (`progress`, cards), the opening (the
+ * camera's pull-back, 0 the Showreel full-bleed to 1 the Helix in place, and the Showreel, where
+ * it sits and how far it has melted, until it is gone), the Works whose loops play, the pointer's
+ * path since the last frame (it drops ripples), and the seconds since the last frame.
  */
 export type HelixFrame = {
-  cards: readonly { slot: number; work: number; presence: number }[]
+  cards: readonly HelixCard[]
   band: number
   bend: number
+  progress: number
   zoom: number
   showreel: { slot: number; melt: number } | null
+  playing: ReadonlySet<number>
+  cursor: RippleInput['cursor']
+  dt: number
 }
 
 export type HelixRenderer = {
   draw(frame: HelixFrame): void
   /** Matches the drawing buffer to the canvas's size on screen (device pixel ratio capped at 2). */
   resize(): void
-  /** Whether a poster arrived since the last draw, so a resting Helix still needs a frame. */
-  readonly stale: boolean
   /**
    * Resolves once the Showreel layer shows what the static hero shows (`shown`: its loop on
    * screen, if one plays), so the Helix can take over under a matching picture.
@@ -80,30 +100,30 @@ void main() {
                      ((FAR + NEAR) * vz + 2.0 * FAR * NEAR) / (NEAR - FAR), -vz);
 }`
 
-// The page colour shows through wherever a card fades (alpha), so the canvas never has to read a
-// CSS colour (playbook: canvas-colours). A plain fade stands in for the melt material until #55:
-// the top and bottom of the screen, the last slot before the edge of the visible band (so a card
-// beyond it, which may repeat a Work on screen, is never seen), and a card that hasn't appeared
-// yet in the opening (uPresence). Far cards get the prototype's light haze.
+// The cards as they are, and what the liquid glass needs to melt them (see `composite`): how far
+// a card is not there (it hasn't appeared yet in the opening, or it is in the last slot before the
+// edge of the visible band, so a card beyond it, which may repeat a Work on screen, is never
+// seen), pointed at or not, and how deep in the Helix (the prototype's light haze, which the card
+// pointed at doesn't get). The page colour shows through wherever a card fades (alpha), so the
+// canvas never reads a CSS colour (playbook: canvas-colours).
 const FRAGMENT = `#version 300 es
 precision highp float;
 in vec2 vUv;
 in float vDepth;
 uniform sampler2D uMap;
 uniform vec4 uCrop;
-uniform vec2 uResolution;
-uniform float uSlot, uBand, uSharpBand, uPresence;
-out vec4 outColor;
+uniform float uSlot, uBand, uPresence, uHover, uDim;
+layout(location = 0) out vec4 outColor;
+layout(location = 1) out vec4 outMeta;
 void main() {
   vec2 uv = vUv;
   if (!gl_FrontFacing) uv.x = 1.0 - uv.x;   // past the side of the cylinder: never mirrored
   vec4 c = texture(uMap, uv * uCrop.xy + uCrop.zw);
-  float haze = smoothstep(8.0, 20.6, vDepth) * 0.35;
-  float edge = pow(smoothstep(uSharpBand, 1.0, abs(gl_FragCoord.y / uResolution.y - 0.5) * 2.0), 1.65);
-  float band = smoothstep(uBand - 1.0, uBand, abs(uSlot));
-  float alpha = c.a * (1.0 - haze) * (1.0 - smoothstep(0.55, 1.0, edge)) * (1.0 - band) * uPresence;
-  if (alpha < 0.004) discard;
+  float deep = smoothstep(8.0, 20.6, vDepth) * (1.0 - uHover);
+  float alpha = c.a * (1.0 - deep * 0.35);
   outColor = vec4(c.rgb * alpha, alpha);
+  float gone = max(1.0 - uPresence, smoothstep(uBand - 1.0, uBand, abs(uSlot)));
+  outMeta = vec4(gone, uDim, uHover, deep);
 }`
 
 /** A grid of triangles over the unit square, one card's mesh. */
@@ -119,16 +139,20 @@ function cardMesh(): Float32Array {
   return new Float32Array(vertices)
 }
 
+/** A screen point (0 to 1, y up) from normalized device coordinates. */
+const toScreen = (x: number, y: number): ScreenPoint => ({ x: x / 2 + 0.5, y: y / 2 + 0.5 })
+
 /**
- * Draws the Helix on `canvas` with hand-written WebGL2 (no 3D library), in three passes: the 16:9
- * cards on the helix, each showing its Work's poster, the top and bottom fading into the page; the
- * Showreel layer of the opening; and the composite that puts them on the canvas and melts the
- * Showreel away. Throws `HelixUnavailable` when WebGL2 or a shader fails; `onLost` runs if the
- * context is lost later.
+ * Draws the Helix on `canvas` with hand-written WebGL2 (no 3D library), in four passes: the 16:9
+ * cards on the helix, each showing its Work's Preview loop (in the sharp band, or pointed at) or
+ * its poster; the Showreel layer of the opening; the water under the liquid glass; and the
+ * composite that puts them on the canvas through the glass, melting the top and bottom away, far
+ * cards and cards not pointed at, and the Showreel. Throws `HelixUnavailable` when WebGL2 or a
+ * shader fails; `onLost` runs if the context is lost later.
  */
 export function createHelixRenderer(
   canvas: HTMLCanvasElement,
-  posters: readonly HelixPoster[],
+  works: readonly HelixMedia[],
   showreelMedia: HelixShowreel,
   onLost: () => void,
 ): HelixRenderer {
@@ -150,24 +174,26 @@ export function createHelixRenderer(
     'uScale',
     'uMap',
     'uCrop',
-    'uResolution',
     'uBand',
-    'uSharpBand',
     'uPresence',
+    'uHover',
+    'uDim',
   ])
   const mesh = vertexArray(gl, cardMesh())
   const composite = createComposite(gl)
+  const ripples = createRipples(gl)
+  const host = canvas.parentElement!
   // The plain block stands in for a Showreel with neither loop nor poster: the colour the static
   // hero has then, so the hand-over matches.
   const block = cssColour(canvas, '--color-background-raised') ?? new Uint8Array([0, 0, 0, 0])
-  const showreel = createShowreelLayer(gl, showreelMedia, mesh, block, canvas.parentElement!)
+  const showreel = createShowreelLayer(gl, showreelMedia, mesh, block, host)
+  const loops = createPreviewLoops(gl, works, host)
 
-  // One still per Work (repeated cards share it). Until its poster arrives it shows the
-  // placeholder colour, or nothing if that can't be read.
+  // One still per Work (repeated cards share it): the Preview loop's poster. Until it arrives it
+  // shows the placeholder colour, or nothing if that can't be read.
   const placeholder = cssColour(canvas, '--color-placeholder') ?? new Uint8Array([0, 0, 0, 0])
-  let stale = true
   let destroyed = false
-  const stills = posters.map((poster) => {
+  const stills = works.map(({ poster }) => {
     const texture = colourTexture(gl, placeholder)
     const still = { texture, crop: cropToCard(poster.width, poster.height, poster.focalPoint) }
 
@@ -187,12 +213,14 @@ export function createHelixRenderer(
         gl.generateMipmap(gl.TEXTURE_2D)
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
         still.crop = cropToCard(image.naturalWidth, image.naturalHeight, poster.focalPoint)
-        stale = true
       })
       // Unreadable (no CORS) or missing: the still keeps its placeholder.
       .catch(() => undefined)
     return still
   })
+
+  // The Showreel's melt starts with a drop in the water at its centre.
+  let melting = false
 
   const lost = (event: Event) => {
     event.preventDefault()
@@ -201,10 +229,6 @@ export function createHelixRenderer(
   canvas.addEventListener('webglcontextlost', lost)
 
   return {
-    get stale() {
-      return stale
-    },
-
     handOver: (shown) => showreel.handOver(shown),
 
     resize() {
@@ -217,18 +241,18 @@ export function createHelixRenderer(
         if (!(error instanceof HelixUnavailable)) throw error
         onLost()
       }
-      stale = true
+      ripples.resize(canvas.clientWidth, canvas.clientHeight)
     },
 
-    draw({ cards, band, bend, zoom, showreel: reel }) {
+    draw({ cards, band, bend, progress, zoom, showreel: reel, playing, cursor, dt }) {
       if (gl.isContextLost()) return
-      stale = false
       const aspect = canvas.clientWidth / Math.max(1, canvas.clientHeight)
       const focal = focalFor(aspect)
       // The opening's camera: from the front card covering the screen down to 1, at a constant rate.
       const scale = coverScale(focal, aspect) ** (1 - zoom)
+      loops.update(playing)
 
-      // --- pass 1: the cards
+      // --- pass 1: the cards, and what the glass needs to melt them
       composite.scene.bind()
       gl.viewport(0, 0, canvas.width, canvas.height)
       gl.clearColor(0, 0, 0, 0)
@@ -241,19 +265,20 @@ export function createHelixRenderer(
       gl.uniform1f(at.uAspect, aspect)
       gl.uniform1f(at.uBend, bend)
       gl.uniform1f(at.uScale, scale)
-      gl.uniform2f(at.uResolution, canvas.width, canvas.height)
       gl.uniform1f(at.uBand, band)
-      gl.uniform1f(at.uSharpBand, HELIX_TUNING.sharpBand)
       gl.uniform1i(at.uMap, 0)
       gl.activeTexture(gl.TEXTURE0)
-      for (const { slot, work, presence } of cards) {
+      for (const { slot, work, presence, live, hover, dim } of cards) {
         const still = stills[work]
         if (!still || presence <= 0) continue
-        const { scale: crop, offset } = still.crop
-        gl.bindTexture(gl.TEXTURE_2D, still.texture)
-        gl.uniform4f(at.uCrop, crop.x, crop.y, offset.x, offset.y)
+        // A card in the sharp band, or pointed at, shows its loop once it has a frame.
+        const { texture, crop } = (live ? loops.frame(work) : null) ?? still
+        gl.bindTexture(gl.TEXTURE_2D, texture)
+        gl.uniform4f(at.uCrop, crop.scale.x, crop.scale.y, crop.offset.x, crop.offset.y)
         gl.uniform1f(at.uSlot, slot)
         gl.uniform1f(at.uPresence, presence)
+        gl.uniform1f(at.uHover, hover)
+        gl.uniform1f(at.uDim, dim)
         gl.drawArrays(gl.TRIANGLES, 0, mesh.count)
       }
       gl.disable(gl.DEPTH_TEST)
@@ -270,17 +295,28 @@ export function createHelixRenderer(
         composite.showreel.resolve()
       }
 
-      // --- pass 3: the composite, onto the canvas. The Showreel melts from the centre of its card.
+      // --- pass 3: the water. The cursor drags ripples, turning stirs it, the melt drops in it.
+      const box = reel ? cardOnScreen(reel.slot, focal, aspect) : null
+      const centre = box ? toScreen(box.x, box.y) : { x: 0.5, y: 0.5 }
+      const meltStarts = reel !== null && reel.melt > 0 && !melting
+      melting = reel !== null && reel.melt > 0
+      const speed = Math.min(1, Math.abs(bend) / HELIX_SHAPE.bendMax)
+      ripples.step({ dt, cursor, meltAt: meltStarts ? centre : null, speed, aspect })
+
+      // --- pass 4: the composite, onto the canvas, through the liquid glass
       gl.bindFramebuffer(gl.FRAMEBUFFER, null)
       gl.viewport(0, 0, canvas.width, canvas.height)
-      const box = reel ? cardOnScreen(reel.slot, focal, aspect) : null
       composite.draw({
         showreelOn: reel !== null,
         melt: reel?.melt ?? 0,
-        centre: box ? { x: box.x / 2 + 0.5, y: box.y / 2 + 0.5 } : { x: 0.5, y: 0.5 },
+        centre,
         reach: box ? Math.hypot(box.halfWidth * aspect, box.halfHeight) / 2 : 0,
         aspect,
         time: (performance.now() / 1000) % 1000,
+        speed,
+        // A slot's height at the front, in screen heights: the haze rides with the cards.
+        shift: (progress * SLOT_PITCH * focal) / (HELIX_SHAPE.cameraZ - HELIX_SHAPE.radius) / 2,
+        ripples: { texture: ripples.texture, texel: ripples.texel },
       })
     },
 
@@ -289,7 +325,9 @@ export function createHelixRenderer(
       canvas.removeEventListener('webglcontextlost', lost)
       // The context itself stays: React may mount again on the same canvas.
       for (const still of stills) gl.deleteTexture(still.texture)
+      loops.destroy()
       showreel.destroy()
+      ripples.destroy()
       composite.destroy()
       mesh.destroy()
       gl.deleteProgram(program)

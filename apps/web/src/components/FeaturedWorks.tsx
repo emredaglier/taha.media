@@ -26,6 +26,8 @@ export type HelixWork = {
   /** The Disciplines as one line. */
   disciplines: string
   client: string | null
+  /** The Preview loop, which the card plays in the Helix's sharp middle band or while pointed at. */
+  loop: { src: string; width: number; height: number }
   /** The Preview loop's poster, the card's still frame. */
   poster: { src: string; width: number; height: number; focalPoint: { x: number; y: number } }
 }
@@ -37,6 +39,11 @@ export const toHelixWork = (work: FeaturedWork): HelixWork => {
     title: work.title,
     disciplines: disciplineLine(work),
     client: work.client,
+    loop: {
+      src: work.previewLoop.src,
+      width: work.previewLoop.width,
+      height: work.previewLoop.height,
+    },
     poster: { src, width, height, focalPoint },
   }
 }
