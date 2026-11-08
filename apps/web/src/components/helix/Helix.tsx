@@ -1,15 +1,18 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useEffect, useEffectEvent, useRef, useState } from 'react'
+import { useEffectEvent, useLayoutEffect, useRef, useState } from 'react'
 
 import { cardAt, focalFor, HELIX_SHAPE } from '../../lib/helix-geometry'
 import {
+  cardPresence,
   counter,
   createHelix,
   frontWork,
   isResting,
+  openingOf,
   slotOf,
+  startHelix,
   stepHelix,
   visibleCards,
   visibleSlots,
@@ -20,24 +23,29 @@ import {
 import { HELIX_TUNING } from '../../lib/helix-tuning'
 import { isMenuOpen } from '../../lib/menu-a11y'
 import type { HelixWork } from '../FeaturedWorks'
+import type { HelixShowreel } from '../Hero'
 import { FrontWork, watchWorkLinks } from './FrontWork'
+import {
+  forgetWork,
+  heroLoop,
+  pageMarks,
+  rememberedWork,
+  rememberWork,
+  SPACER_HEIGHT,
+  watchLinks,
+  zoomScroll,
+} from './opening'
 import { createHelixRenderer, HelixUnavailable } from './renderer'
-
-/**
- * Set on `<html>` while the Helix runs. The CSS keyed to it hides the static Home (visually only:
- * its links stay for screen readers and keyboards), shows the Helix and locks the page. Nothing
- * is hidden before JavaScript has set it (ADR-0101).
- */
-const MARK = 'helix'
 
 const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, value))
 
-/** The cards the Helix shows now: each with its slot and the Work on it. */
+/** The cards the Helix shows now: each with its slot, the Work on it and how present it is. */
 const shownCards = (state: HelixState) =>
   visibleCards(state).map((card) => ({
     card,
     slot: slotOf(state, card),
     work: workOfCard(state, card),
+    presence: cardPresence(state, card),
   }))
 
 /** What the overlays name: the front Work and the counter. */
@@ -57,17 +65,34 @@ function pointOn(canvas: HTMLCanvasElement, event: PointerEvent) {
 
 /**
  * The Helix of Featured Works (#45), loaded only on a device that passed the capability check.
- * Home locks to the screen; the wheel, a vertical drag and the arrow keys turn the Helix, which
- * settles on a card when the input ends. Enter, or a click on the front card, opens its Work; a
- * click on another card turns it to the front. Where the Helix is and where it goes lives in the
- * motion model (`lib/helix-motion`); this component feeds it input, draws it (only the bend of fast
- * turning is its own, a look) and names the front Work. `onFail` runs when WebGL2 can't start or
- * the context is lost: the static Home comes back.
+ *
+ * It opens on the Showreel (#54): the static hero stays until the Helix's Showreel layer shows the
+ * same picture, then the Helix takes over under it. Scrolling the page zooms the Showreel out into
+ * the Helix (scrolling up reverses it); at the end of the scroll it melts away by itself, and from
+ * then on Home locks to the screen. The wheel, a vertical drag and the arrow keys turn the Helix,
+ * which settles on a card when the input ends. Enter, or a click on the front card, opens its Work
+ * (remembered on the history entry, so coming back starts with it in front, past the Showreel); a
+ * click on another card turns it to the front. On Home the logo replays the opening.
+ *
+ * Where the Helix is and where it goes lives in the motion model (`lib/helix-motion`); this
+ * component feeds it input, draws it (only the bend of fast turning is its own, a look) and names
+ * the front Work. `onFail` runs when WebGL2 can't start or the context is lost: the static Home
+ * comes back.
  */
-export function Helix({ works, onFail }: { works: HelixWork[]; onFail: () => void }) {
+export function Helix({
+  works,
+  showreel,
+  onFail,
+}: {
+  works: HelixWork[]
+  showreel: HelixShowreel
+  onFail: () => void
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const router = useRouter()
   const [front, setFront] = useState(() => frontOf(createHelix(works.length)))
+  // The front Work's overlay comes in once the Helix is in place.
+  const [frontShown, setFrontShown] = useState(false)
 
   // The Work whose static link has focus, and what the live region last said.
   const [focusedWork, setFocusedWork] = useState<number | null>(null)
@@ -76,7 +101,9 @@ export function Helix({ works, onFail }: { works: HelixWork[]; onFail: () => voi
   const fail = useEffectEvent(onFail)
   const open = useEffectEvent((work: number) => {
     const target = works[work]
-    if (target) router.push(`/isler/${target.slug}`)
+    if (!target) return
+    rememberWork(target.slug)
+    router.push(`/isler/${target.slug}`)
   })
 
   const announce = useEffectEvent((work: number) => {
@@ -84,13 +111,16 @@ export function Helix({ works, onFail }: { works: HelixWork[]; onFail: () => voi
     if (target) setAnnouncement(`${target.title}, ${work + 1} / ${works.length}`)
   })
 
-  useEffect(() => {
+  // A layout effect: coming back to a remembered Work, the Helix is on screen from the first paint,
+  // with no frame of the static Home before it.
+  useLayoutEffect(() => {
     const canvas = canvasRef.current!
     let renderer: ReturnType<typeof createHelixRenderer>
     try {
       renderer = createHelixRenderer(
         canvas,
         works.map((work) => work.poster),
+        showreel,
         () => fail(),
       )
     } catch (error) {
@@ -100,20 +130,32 @@ export function Helix({ works, onFail }: { works: HelixWork[]; onFail: () => voi
     }
 
     const root = document.documentElement
-    root.dataset.home = MARK
-    window.scrollTo(0, 0)
+    const marks = pageMarks(root)
+    // The opening starts at the top of the page, after a reload too.
+    const restoration = window.history.scrollRestoration
+    window.history.scrollRestoration = 'manual'
 
-    let state: HelixState = createHelix(works.length)
+    let state: HelixState = startHelix(works.length, rememberedWork(works))
     const apply = (input: HelixInput) => {
       state = stepHelix(state, input, performance.now())
       if (state.open !== null) open(state.open)
       if (state.arrived !== null) announce(state.arrived)
+    }
+    const locked = () => openingOf(state).locked
+
+    // The hand-over: the static hero stays on screen until the Showreel layer matches it. Coming
+    // back to a remembered Work there is nothing to match.
+    let ready = false
+    let handedOver = false
+    if (state.phase.kind === 'hero') {
+      void renderer.handOver(heroLoop()).then(() => (ready = true))
     }
 
     // --- drawing: every frame while the tab is visible, skipped while nothing moves
     const { bendEase, bendMax } = HELIX_SHAPE
     let bend = 0
     let shown = -1
+    let frontIn = false
     let frameId = 0
     let lastFrame = 0
     const frame = () => {
@@ -123,15 +165,42 @@ export function Helix({ works, onFail }: { works: HelixWork[]; onFail: () => voi
       lastFrame = now
       state = stepHelix(state, { kind: 'frame' }, now)
       if (state.arrived !== null) announce(state.arrived)
+      if (!handedOver && state.phase.kind === 'hero' && !ready) return
+      const opening = openingOf(state)
       // Fast turning bends the cards; the bend follows the speed with time-based easing.
       const target = clamp(state.speed / 60, -bendMax, bendMax)
       bend += (target - bend) * (1 - (1 - bendEase) ** (dt * 60))
-      if (!isResting(state) || Math.abs(bend) > 1e-4 || renderer.stale) {
-        renderer.draw({ cards: shownCards(state), band: visibleSlots(state), bend })
+      if (
+        !handedOver ||
+        !isResting(state) ||
+        Math.abs(bend) > 1e-4 ||
+        renderer.stale ||
+        opening.showreelSlot !== null
+      ) {
+        renderer.draw({
+          cards: shownCards(state),
+          band: visibleSlots(state),
+          bend,
+          zoom: opening.zoom,
+          showreel:
+            opening.showreelSlot === null
+              ? null
+              : { slot: opening.showreelSlot, melt: opening.melt },
+        })
       }
+      // The first frame drawn takes over from the static Home, in the same paint.
+      if (!handedOver) {
+        handedOver = true
+        window.scrollTo(0, 0)
+      }
+      marks.show(state.phase.kind, opening)
       if (frontWork(state) !== shown) {
         shown = frontWork(state)
         setFront(frontOf(state))
+      }
+      if (opening.frontShown !== frontIn) {
+        frontIn = opening.frontShown
+        setFrontShown(frontIn)
       }
     }
     const start = () => {
@@ -149,16 +218,31 @@ export function Helix({ works, onFail }: { works: HelixWork[]; onFail: () => voi
     const resized = new ResizeObserver(() => renderer.resize())
     resized.observe(canvas)
 
-    // --- input. While the menu is open the Helix ignores it (and the menu may scroll).
+    // --- the opening: the page's scroll drives the zoom (finger scroll too); the logo replays it
+    const onScroll = () => {
+      if (handedOver) apply({ kind: 'scroll', fraction: zoomScroll() })
+    }
+    const unwatchPageLinks = watchLinks({
+      onHome: () => {
+        forgetWork()
+        apply({ kind: 'reset' })
+        window.scrollTo(0, 0)
+      },
+      onWork: rememberWork,
+    })
+
+    // --- input. While the menu is open the Helix ignores it (and the menu may scroll). Until the
+    // melt the page scrolls: the wheel, touch and the arrow keys are the browser's.
     const onWheel = (event: WheelEvent) => {
       if (event.ctrlKey || isMenuOpen(document)) return // ctrl + wheel is the browser's zoom
+      if (!locked()) return
       event.preventDefault()
       apply({ kind: 'wheel', deltaY: event.deltaY, deltaMode: event.deltaMode })
     }
 
     let press: { id: number; x: number; y: number; lastY: number; travel: number } | null = null
     const onPointerDown = (event: PointerEvent) => {
-      if (!event.isPrimary || event.button !== 0 || isMenuOpen(document)) return
+      if (!event.isPrimary || event.button !== 0 || isMenuOpen(document) || !locked()) return
       canvas.setPointerCapture(event.pointerId)
       const { clientX: x, clientY: y } = event
       press = { id: event.pointerId, x, y, lastY: y, travel: 0 }
@@ -187,7 +271,7 @@ export function Helix({ works, onFail }: { works: HelixWork[]; onFail: () => voi
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return
-      if (isMenuOpen(document)) return
+      if (isMenuOpen(document) || !locked()) return
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
         event.preventDefault()
         apply({ kind: 'arrow', step: event.key === 'ArrowDown' ? 1 : -1 })
@@ -206,6 +290,8 @@ export function Helix({ works, onFail }: { works: HelixWork[]; onFail: () => voi
 
     window.addEventListener('wheel', onWheel, { passive: false })
     window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('scroll', onScroll, { passive: true })
+    window.addEventListener('resize', onScroll)
     canvas.addEventListener('pointerdown', onPointerDown)
     canvas.addEventListener('pointermove', onPointerMove)
     canvas.addEventListener('pointerup', onPointerEnd)
@@ -216,37 +302,50 @@ export function Helix({ works, onFail }: { works: HelixWork[]; onFail: () => voi
     return () => {
       stop()
       unwatchLinks()
+      unwatchPageLinks()
       resized.disconnect()
       window.removeEventListener('wheel', onWheel)
       window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('scroll', onScroll)
+      window.removeEventListener('resize', onScroll)
       canvas.removeEventListener('pointerdown', onPointerDown)
       canvas.removeEventListener('pointermove', onPointerMove)
       canvas.removeEventListener('pointerup', onPointerEnd)
       canvas.removeEventListener('pointercancel', onPointerEnd)
       document.removeEventListener('visibilitychange', onVisibility)
       renderer.destroy()
-      delete root.dataset.home
+      marks.clear()
+      window.history.scrollRestoration = restoration
     }
-  }, [works])
+  }, [works, showreel])
 
   return (
-    <div
-      role="region"
-      aria-label="Öne çıkan işler"
-      className="helix:visible invisible fixed inset-0 z-0"
-    >
-      <canvas
-        ref={canvasRef}
-        aria-hidden="true"
-        className="absolute inset-0 size-full cursor-grab touch-none select-none active:cursor-grabbing"
-      />
-      <FrontWork
-        work={works[front.work]}
-        position={front.counter.current}
-        total={front.counter.total}
-        focused={focusedWork === front.work}
-        announcement={announcement}
-      />
-    </div>
+    <>
+      {/* The page's height while the Helix runs: one screen plus the zoom's scroll length. */}
+      <div aria-hidden="true" className="hidden helix:block" style={{ height: SPACER_HEIGHT }} />
+      <div
+        role="region"
+        aria-label="Öne çıkan işler"
+        className="helix:visible invisible fixed inset-0 z-0"
+      >
+        <canvas
+          ref={canvasRef}
+          aria-hidden="true"
+          className="absolute inset-0 size-full cursor-grab touch-none select-none active:cursor-grabbing helix-hero:cursor-auto helix-hero:touch-pan-y"
+        />
+        <div
+          className="transition-opacity duration-[600ms]"
+          style={{ opacity: frontShown ? 1 : 0 }}
+        >
+          <FrontWork
+            work={works[front.work]}
+            position={front.counter.current}
+            total={front.counter.total}
+            focused={focusedWork === front.work}
+            announcement={announcement}
+          />
+        </div>
+      </div>
+    </>
   )
 }

@@ -19,9 +19,19 @@
 
 /*
  * `helix:` applies while the Helix runs on Home. JavaScript sets the mark only once the Helix has
- * started, so nothing is hidden waiting for it (ADR-0101).
+ * started, so nothing is hidden waiting for it (ADR-0101). Within it, the opening (#54) marks its
+ * phase: `helix-hero:` while the scroll zooms the Showreel out (the page still scrolls), and
+ * `helix-locked:` from the melt on, when Home holds the screen.
  */
 @custom-variant helix (html[data-home='helix'] &);
+@custom-variant helix-hero (html[data-home='helix'][data-helix-phase='hero'] &);
+@custom-variant helix-locked (html[data-home='helix']:not([data-helix-phase='hero']) &);
+
+/*
+ * `over-hero:` applies on the static Home: its hero is full-bleed, so the header sits over it
+ * rather than above it, as it sits over the Helix's Showreel (`helix:`), and the two match.
+ */
+@custom-variant over-hero (html:not([data-home='helix']) body:has([data-home-hero]) &);
 
 @layer base {
   html {
@@ -29,8 +39,8 @@
     background-color: var(--color-background);
   }
 
-  /* While the Helix runs, Home holds the screen: no page scroll (ADR-0103). */
-  html[data-home='helix'] {
+  /* From the melt on, Home holds the screen: no page scroll (ADR-0103). */
+  html[data-home='helix']:not([data-helix-phase='hero']) {
     overflow: hidden;
     overscroll-behavior: none;
   }

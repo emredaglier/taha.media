@@ -1,18 +1,43 @@
-import { cropToCard, focalFor, HELIX_SHAPE, SLOT_PITCH } from '../../lib/helix-geometry'
+import {
+  cardOnScreen,
+  coverScale,
+  cropToCard,
+  focalFor,
+  HELIX_SHAPE,
+  SLOT_PITCH,
+} from '../../lib/helix-geometry'
 import { HELIX_TUNING } from '../../lib/helix-tuning'
 import type { HelixWork } from '../FeaturedWorks'
+import type { HelixShowreel } from '../Hero'
+import { createComposite } from './composite'
+import {
+  colourTexture,
+  cssColour,
+  float,
+  HelixUnavailable,
+  link,
+  uniforms,
+  vertexArray,
+} from './gl'
+import { createShowreelLayer } from './showreel'
+
+export { HelixUnavailable } from './gl'
 
 /** A card's still frame: its Preview loop's poster. */
 type HelixPoster = HelixWork['poster']
 
 /**
- * One frame to draw: the cards in the visible band with their slot and Work, the band's reach
- * (cards fade out towards it), and how far the turning speed bends them.
+ * One frame to draw: the cards in the visible band with their slot, Work and presence (they appear
+ * during the zoom), the band's reach (cards fade out towards it), how far the turning speed bends
+ * them, and the opening: the camera's pull-back (0 the Showreel full-bleed, 1 the Helix in place)
+ * and the Showreel, where it sits and how far it has melted, until it is gone.
  */
 export type HelixFrame = {
-  cards: readonly { slot: number; work: number }[]
+  cards: readonly { slot: number; work: number; presence: number }[]
   band: number
   bend: number
+  zoom: number
+  showreel: { slot: number; melt: number } | null
 }
 
 export type HelixRenderer = {
@@ -21,22 +46,22 @@ export type HelixRenderer = {
   resize(): void
   /** Whether a poster arrived since the last draw, so a resting Helix still needs a frame. */
   readonly stale: boolean
+  /**
+   * Resolves once the Showreel layer shows what the static hero shows (`shown`: its loop on
+   * screen, if one plays), so the Helix can take over under a matching picture.
+   */
+  handOver(shown: HTMLVideoElement | null): Promise<void>
   destroy(): void
 }
-
-/** WebGL2 isn't there, a shader didn't compile, or the context was lost: show the static Home. */
-export class HelixUnavailable extends Error {}
 
 const MAX_PIXEL_RATIO = 2
 /** The card mesh: enough columns to curve around the cylinder, rows to bend with the speed. */
 const COLUMNS = 40
 const ROWS = 8
 
-const float = (value: number) => value.toFixed(4)
-
 const VERTEX = `#version 300 es
 in vec2 aPos;
-uniform float uSlot, uFocal, uAspect, uBend;
+uniform float uSlot, uFocal, uAspect, uBend, uScale;
 out vec2 vUv;
 out float vDepth;
 const vec2 CARD = vec2(${float(HELIX_SHAPE.cardHeight * HELIX_SHAPE.cardRatio)}, ${float(HELIX_SHAPE.cardHeight)});
@@ -58,15 +83,16 @@ void main() {
   vec3 p = vec3(sin(theta) * r, local.y - uSlot * PITCH, cos(theta) * r);
   float vz = p.z - CAMERA_Z;
   vDepth = -vz;
-  gl_Position = vec4(p.x * uFocal / uAspect, p.y * uFocal,
+  // uScale: the opening's camera, pulled in until the front card covers the screen, then back.
+  gl_Position = vec4(p.x * uFocal / uAspect * uScale, p.y * uFocal * uScale,
                      ((FAR + NEAR) * vz + 2.0 * FAR * NEAR) / (NEAR - FAR), -vz);
 }`
 
 // The page colour shows through wherever a card fades (alpha), so the canvas never has to read a
 // CSS colour (playbook: canvas-colours). A plain fade stands in for the melt material until #55:
-// the top and bottom of the screen, and the last slot before the edge of the visible band (so a
-// card beyond it, which may repeat a Work on screen, is never seen). Far cards get the prototype's
-// light haze.
+// the top and bottom of the screen, the last slot before the edge of the visible band (so a card
+// beyond it, which may repeat a Work on screen, is never seen), and a card that hasn't appeared
+// yet in the opening (uPresence). Far cards get the prototype's light haze.
 const FRAGMENT = `#version 300 es
 precision highp float;
 in vec2 vUv;
@@ -74,7 +100,7 @@ in float vDepth;
 uniform sampler2D uMap;
 uniform vec4 uCrop;
 uniform vec2 uResolution;
-uniform float uSlot, uBand, uSharpBand;
+uniform float uSlot, uBand, uSharpBand, uPresence;
 out vec4 outColor;
 void main() {
   vec2 uv = vUv;
@@ -83,37 +109,10 @@ void main() {
   float haze = smoothstep(8.0, 20.6, vDepth) * 0.35;
   float edge = pow(smoothstep(uSharpBand, 1.0, abs(gl_FragCoord.y / uResolution.y - 0.5) * 2.0), 1.65);
   float band = smoothstep(uBand - 1.0, uBand, abs(uSlot));
-  float alpha = c.a * (1.0 - haze) * (1.0 - smoothstep(0.55, 1.0, edge)) * (1.0 - band);
+  float alpha = c.a * (1.0 - haze) * (1.0 - smoothstep(0.55, 1.0, edge)) * (1.0 - band) * uPresence;
   if (alpha < 0.004) discard;
   outColor = vec4(c.rgb * alpha, alpha);
 }`
-
-function compile(gl: WebGL2RenderingContext, type: number, source: string): WebGLShader {
-  const shader = gl.createShader(type)
-  if (!shader) throw new HelixUnavailable('No shader')
-  gl.shaderSource(shader, source)
-  gl.compileShader(shader)
-  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS) && !gl.isContextLost()) {
-    throw new HelixUnavailable(`Shader: ${gl.getShaderInfoLog(shader) ?? ''}`)
-  }
-  return shader
-}
-
-function link(gl: WebGL2RenderingContext): WebGLProgram {
-  const program = gl.createProgram()
-  const vertex = compile(gl, gl.VERTEX_SHADER, VERTEX)
-  const fragment = compile(gl, gl.FRAGMENT_SHADER, FRAGMENT)
-  gl.attachShader(program, vertex)
-  gl.attachShader(program, fragment)
-  gl.bindAttribLocation(program, 0, 'aPos')
-  gl.linkProgram(program)
-  gl.deleteShader(vertex)
-  gl.deleteShader(fragment)
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS) && !gl.isContextLost()) {
-    throw new HelixUnavailable(`Program: ${gl.getProgramInfoLog(program) ?? ''}`)
-  }
-  return program
-}
 
 /** A grid of triangles over the unit square, one card's mesh. */
 function cardMesh(): Float32Array {
@@ -129,58 +128,47 @@ function cardMesh(): Float32Array {
 }
 
 /**
- * The colour of a CSS custom property as RGBA bytes, resolved by the browser itself (a 2D canvas
- * converts any colour syntax), or null when it can't: never a silent black.
- */
-function cssColour(element: Element, property: string): Uint8Array | null {
-  const value = getComputedStyle(element).getPropertyValue(property).trim()
-  const context = document.createElement('canvas').getContext('2d', { willReadFrequently: true })
-  if (!value || !context) return null
-  const sentinel = 'rgba(1, 2, 3, 0.5)'
-  context.fillStyle = sentinel
-  const before = context.fillStyle
-  context.fillStyle = value
-  if (context.fillStyle === before) return null
-  context.fillRect(0, 0, 1, 1)
-  return new Uint8Array(context.getImageData(0, 0, 1, 1).data)
-}
-
-/**
- * Draws the Helix on `canvas` with hand-written WebGL2 (no 3D library): 16:9 cards on the helix,
- * each showing its Work's poster, the top and bottom fading into the page. Throws
- * `HelixUnavailable` when WebGL2 or a shader fails; `onLost` runs if the context is lost later.
+ * Draws the Helix on `canvas` with hand-written WebGL2 (no 3D library), in three passes: the 16:9
+ * cards on the helix, each showing its Work's poster, the top and bottom fading into the page; the
+ * Showreel layer of the opening; and the composite that puts them on the canvas and melts the
+ * Showreel away. Throws `HelixUnavailable` when WebGL2 or a shader fails; `onLost` runs if the
+ * context is lost later.
  */
 export function createHelixRenderer(
   canvas: HTMLCanvasElement,
   posters: readonly HelixPoster[],
+  showreelMedia: HelixShowreel,
   onLost: () => void,
 ): HelixRenderer {
-  const gl = canvas.getContext('webgl2', { alpha: true, premultipliedAlpha: true, antialias: true })
+  // The passes draw into their own multisampled targets; the canvas only takes the composite.
+  const gl = canvas.getContext('webgl2', {
+    alpha: true,
+    premultipliedAlpha: true,
+    antialias: false,
+    depth: false,
+  })
   if (!gl || gl.isContextLost()) throw new HelixUnavailable('No WebGL2 context')
 
-  const program = link(gl)
-  const uniform = (name: string) => gl.getUniformLocation(program, name)
-  const at = {
-    slot: uniform('uSlot'),
-    focal: uniform('uFocal'),
-    aspect: uniform('uAspect'),
-    bend: uniform('uBend'),
-    map: uniform('uMap'),
-    crop: uniform('uCrop'),
-    resolution: uniform('uResolution'),
-    band: uniform('uBand'),
-    sharpBand: uniform('uSharpBand'),
-  }
-
-  const mesh = cardMesh()
-  const vertexArray = gl.createVertexArray()
-  const buffer = gl.createBuffer()
-  gl.bindVertexArray(vertexArray)
-  gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
-  gl.bufferData(gl.ARRAY_BUFFER, mesh, gl.STATIC_DRAW)
-  gl.enableVertexAttribArray(0)
-  gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0)
-  const vertexCount = mesh.length / 2
+  const program = link(gl, VERTEX, FRAGMENT)
+  const at = uniforms(gl, program, [
+    'uSlot',
+    'uFocal',
+    'uAspect',
+    'uBend',
+    'uScale',
+    'uMap',
+    'uCrop',
+    'uResolution',
+    'uBand',
+    'uSharpBand',
+    'uPresence',
+  ])
+  const mesh = vertexArray(gl, cardMesh())
+  const composite = createComposite(gl)
+  // The plain block stands in for a Showreel with neither loop nor poster: the colour the static
+  // hero has then, so the hand-over matches.
+  const block = cssColour(canvas, '--color-background-raised') ?? new Uint8Array([0, 0, 0, 0])
+  const showreel = createShowreelLayer(gl, showreelMedia, mesh, block, canvas.parentElement!)
 
   // One still per Work (repeated cards share it). Until its poster arrives it shows the
   // placeholder colour, or nothing if that can't be read.
@@ -188,13 +176,7 @@ export function createHelixRenderer(
   let stale = true
   let destroyed = false
   const stills = posters.map((poster) => {
-    const texture = gl.createTexture()
-    gl.bindTexture(gl.TEXTURE_2D, texture)
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, placeholder)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+    const texture = colourTexture(gl, placeholder)
     const still = { texture, crop: cropToCard(poster.width, poster.height, poster.focalPoint) }
 
     // WebGL can only read media served with CORS (production: the bucket rule, #50).
@@ -231,40 +213,83 @@ export function createHelixRenderer(
       return stale
     },
 
+    handOver: (shown) => showreel.handOver(shown),
+
     resize() {
       const ratio = Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO)
       canvas.width = Math.max(1, Math.round(canvas.clientWidth * ratio))
       canvas.height = Math.max(1, Math.round(canvas.clientHeight * ratio))
+      try {
+        composite.resize(canvas.width, canvas.height)
+      } catch (error) {
+        if (!(error instanceof HelixUnavailable)) throw error
+        onLost()
+      }
       stale = true
     },
 
-    draw({ cards, band, bend }) {
+    draw({ cards, band, bend, zoom, showreel: reel }) {
       if (gl.isContextLost()) return
       stale = false
       const aspect = canvas.clientWidth / Math.max(1, canvas.clientHeight)
+      const focal = focalFor(aspect)
+      // The opening's camera: from the front card covering the screen down to 1, at a constant rate.
+      const scale = coverScale(focal, aspect) ** (1 - zoom)
+
+      // --- pass 1: the cards
+      composite.scene.bind()
       gl.viewport(0, 0, canvas.width, canvas.height)
       gl.clearColor(0, 0, 0, 0)
       gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
       gl.enable(gl.DEPTH_TEST)
+      gl.disable(gl.BLEND)
       gl.useProgram(program)
-      gl.bindVertexArray(vertexArray)
-      gl.uniform1f(at.focal, focalFor(aspect))
-      gl.uniform1f(at.aspect, aspect)
-      gl.uniform1f(at.bend, bend)
-      gl.uniform2f(at.resolution, canvas.width, canvas.height)
-      gl.uniform1f(at.band, band)
-      gl.uniform1f(at.sharpBand, HELIX_TUNING.sharpBand)
-      gl.uniform1i(at.map, 0)
+      gl.bindVertexArray(mesh.array)
+      gl.uniform1f(at.uFocal, focal)
+      gl.uniform1f(at.uAspect, aspect)
+      gl.uniform1f(at.uBend, bend)
+      gl.uniform1f(at.uScale, scale)
+      gl.uniform2f(at.uResolution, canvas.width, canvas.height)
+      gl.uniform1f(at.uBand, band)
+      gl.uniform1f(at.uSharpBand, HELIX_TUNING.sharpBand)
+      gl.uniform1i(at.uMap, 0)
       gl.activeTexture(gl.TEXTURE0)
-      for (const { slot, work } of cards) {
+      for (const { slot, work, presence } of cards) {
         const still = stills[work]
-        if (!still) continue
-        const { scale, offset } = still.crop
+        if (!still || presence <= 0) continue
+        const { scale: crop, offset } = still.crop
         gl.bindTexture(gl.TEXTURE_2D, still.texture)
-        gl.uniform4f(at.crop, scale.x, scale.y, offset.x, offset.y)
-        gl.uniform1f(at.slot, slot)
-        gl.drawArrays(gl.TRIANGLES, 0, vertexCount)
+        gl.uniform4f(at.uCrop, crop.x, crop.y, offset.x, offset.y)
+        gl.uniform1f(at.uSlot, slot)
+        gl.uniform1f(at.uPresence, presence)
+        gl.drawArrays(gl.TRIANGLES, 0, mesh.count)
       }
+      gl.disable(gl.DEPTH_TEST)
+      composite.scene.resolve()
+
+      // --- pass 2: the Showreel layer, while the opening has it
+      showreel.play(reel !== null)
+      if (reel) {
+        composite.showreel.bind()
+        gl.viewport(0, 0, canvas.width, canvas.height)
+        gl.clearColor(0, 0, 0, 0)
+        gl.clear(gl.COLOR_BUFFER_BIT)
+        showreel.draw({ zoom, slot: reel.slot, scale, focal, aspect })
+        composite.showreel.resolve()
+      }
+
+      // --- pass 3: the composite, onto the canvas. The Showreel melts from the centre of its card.
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+      gl.viewport(0, 0, canvas.width, canvas.height)
+      const box = reel ? cardOnScreen(reel.slot, focal, aspect) : null
+      composite.draw({
+        showreelOn: reel !== null,
+        melt: reel?.melt ?? 0,
+        centre: box ? { x: box.x / 2 + 0.5, y: box.y / 2 + 0.5 } : { x: 0.5, y: 0.5 },
+        reach: box ? Math.hypot(box.halfWidth * aspect, box.halfHeight) / 2 : 0,
+        aspect,
+        time: (performance.now() / 1000) % 1000,
+      })
     },
 
     destroy() {
@@ -272,8 +297,9 @@ export function createHelixRenderer(
       canvas.removeEventListener('webglcontextlost', lost)
       // The context itself stays: React may mount again on the same canvas.
       for (const still of stills) gl.deleteTexture(still.texture)
-      gl.deleteBuffer(buffer)
-      gl.deleteVertexArray(vertexArray)
+      showreel.destroy()
+      composite.destroy()
+      mesh.destroy()
       gl.deleteProgram(program)
     },
   }
