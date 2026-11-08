@@ -25,6 +25,19 @@ type Motion =
   /** The settle spring, carrying the current speed into a whole card. */
   | { kind: 'settle'; to: number }
 
+/**
+ * The opening (#54): the Showreel full-bleed zooms out into the Helix, then melts away.
+ * - `hero`: the page scrolls, and the zoom follows the scroll (`scroll`, 0 to 1 of the zoom's
+ *   scroll length) with time-based easing (`zoom`, 0 the Showreel full-bleed, 1 on the front card).
+ * - `melt`: the Showreel melts away by itself from `startedAt` (ms). The point of no return: no
+ *   input brings `hero` back, only a reset. Turning works from here on.
+ * - `helix`: the Showreel is gone.
+ */
+export type HelixPhase =
+  | { kind: 'hero'; scroll: number; zoom: number }
+  | { kind: 'melt'; startedAt: number }
+  | { kind: 'helix' }
+
 export type HelixState = {
   /** Real Featured Works (n ≥ 1). */
   works: number
@@ -48,6 +61,8 @@ export type HelixState = {
    * last announced); otherwise null. The front Work's live region speaks when this is set.
    */
   arrived: number | null
+  /** Where the opening is. While it is in `hero`, the zoom sets `progress` (the spin). */
+  phase: HelixPhase
 }
 
 export type HelixInput =
@@ -69,6 +84,13 @@ export type HelixInput =
   | { kind: 'enter' }
   /** Keyboard or screen-reader focus reached the link of Work `work`: turn it to the front. */
   | { kind: 'focus'; work: number }
+  /**
+   * The page scrolled: `fraction` of the zoom's scroll length (0 at the top, 1 at its end). Only
+   * the opening's `hero` follows it.
+   */
+  | { kind: 'scroll'; fraction: number }
+  /** Back to the start of the opening, the Showreel full-bleed (the logo on Home). */
+  | { kind: 'reset' }
 
 /** The visible band reaches at least this many slots either side of the front. */
 const MIN_VISIBLE_SLOTS = 3
@@ -86,10 +108,33 @@ const REST_SPEED = 2e-2
 /** Wheel deltas in lines or pages, in pixels (the usual line and page heights for wheel input). */
 const WHEEL_LINE_PX = 40
 const WHEEL_PAGE_PX = 800
+/**
+ * The melt starts once the page has scrolled to the end of the zoom (this close) and the eased
+ * zoom is nearly done: then the zoom lands on the front card and the Showreel melts.
+ */
+const MELT_SCROLL = 0.995
+const MELT_ZOOM = 0.95
+/** The hero's overlays have left by this much of the zoom. */
+const HERO_LEAVES_BY = 0.35
+/**
+ * The cards appear during the zoom: the first (the Showreel's own) as the zoom begins, the others
+ * from this much of the zoom, spread over the next part of it in a scattered order, each taking a
+ * span of the zoom to fade in.
+ */
+const APPEAR_FROM = 0.08
+const APPEAR_SPREAD = 0.55
+const APPEAR_SPAN = 0.35
+/** The front Work's overlay comes in halfway through the melt. */
+const FRONT_SHOWS_AT = 0.5
 
 const mod = (value: number, by: number) => ((value % by) + by) % by
 const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, value))
 const inOutCubic = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2)
+const smoothstep = (t: number) => t * t * (3 - 2 * t)
+const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b))
+
+/** Where the Helix is during the zoom: it spins forward into place as the camera pulls back. */
+const spunAt = (zoom: number) => -HELIX_TUNING.zoomSpinCards * (1 - smoothstep(zoom))
 
 /** A Helix of `works` Featured Works, at rest with `frontWork` in front. */
 export function createHelix(works: number, frontWork = 0): HelixState {
@@ -105,7 +150,33 @@ export function createHelix(works: number, frontWork = 0): HelixState {
     open: null,
     announced: frontWork,
     arrived: null,
+    phase: { kind: 'helix' },
   }
+}
+
+/**
+ * A Helix of `works` Featured Works at the start of the opening: the Showreel full-bleed, the
+ * zoom at 0. The opening lands with the first Work in front.
+ */
+export function createOpening(works: number): HelixState {
+  return {
+    ...createHelix(works, 0),
+    progress: spunAt(0),
+    phase: { kind: 'hero', scroll: 0, zoom: 0 },
+  }
+}
+
+/**
+ * How Home starts: in `helix` with the remembered Work in front when coming back to a history entry
+ * that opened one (`remembered`, its place among the Works), otherwise with the opening.
+ */
+export function startHelix(works: number, remembered: number | null): HelixState {
+  return remembered !== null &&
+    Number.isInteger(remembered) &&
+    remembered >= 0 &&
+    remembered < works
+    ? createHelix(works, remembered)
+    : createOpening(works)
 }
 
 /** Turns to whole card `to`, easing in and out. */
@@ -209,6 +280,39 @@ function integrate(state: HelixState, dt: number, at: number): HelixState {
   }
 }
 
+/**
+ * One sub-step of the opening, `dt` seconds ending at wall-clock time `at` (ms). In `hero` the
+ * zoom eases towards the scroll (exact at any step length), and the Helix spins with it; once the
+ * page has scrolled to the end and the zoom is nearly done, the zoom lands and the melt starts.
+ * The melt ends by the clock.
+ */
+function unfold(state: HelixState, dt: number, at: number): HelixState {
+  const { phase } = state
+  switch (phase.kind) {
+    case 'helix':
+      return state
+    case 'melt':
+      return at - phase.startedAt < HELIX_TUNING.meltSeconds * 1000
+        ? state
+        : { ...state, phase: { kind: 'helix' } }
+    case 'hero': {
+      const zoom =
+        phase.zoom + (phase.scroll - phase.zoom) * (1 - Math.exp(-dt * HELIX_TUNING.zoomRate))
+      if (phase.scroll >= MELT_SCROLL && zoom > MELT_ZOOM) {
+        // The point of no return: the Showreel sits on the first card in front, and melts.
+        return { ...state, progress: 0, speed: 0, phase: { kind: 'melt', startedAt: at } }
+      }
+      const progress = spunAt(zoom)
+      return {
+        ...state,
+        progress,
+        speed: (progress - state.progress) / dt,
+        phase: { ...phase, zoom },
+      }
+    }
+  }
+}
+
 /** Advances the physics to `now` in short sub-steps. A `now` already passed leaves it as it is. */
 function advance(state: HelixState, now: number): HelixState {
   if (state.time === null) return { ...state, time: now }
@@ -218,9 +322,27 @@ function advance(state: HelixState, now: number): HelixState {
   const dt = elapsed / steps
   let next = state
   for (let step = 1; step <= steps; step++) {
-    next = integrate(next, dt, state.time + step * dt * 1000)
+    const at = state.time + step * dt * 1000
+    next = integrate(unfold(next, dt, at), dt, at)
   }
   return { ...next, time: now }
+}
+
+/**
+ * An input during the opening's `hero`: the scroll moves the zoom, and focus on a Work's link
+ * skips the opening (a keyboard user is never stuck behind the zoom), as coming back to a
+ * remembered Work does. Turning input waits for the melt.
+ */
+function duringHero(state: HelixState, input: HelixInput): HelixState {
+  if (state.phase.kind !== 'hero') return state
+  switch (input.kind) {
+    case 'scroll':
+      return { ...state, phase: { ...state.phase, scroll: clamp(input.fraction, 0, 1) } }
+    case 'focus':
+      return { ...createHelix(state.works, mod(input.work, state.works)), time: state.time }
+    default:
+      return state
+  }
 }
 
 /**
@@ -237,8 +359,13 @@ export function stepHelix(state: HelixState, input: HelixInput, now: number): He
     arrived,
     announced: arrived ?? state.announced,
   }
+  if (input.kind === 'reset') return { ...createOpening(current.works), time: current.time }
+  if (current.phase.kind === 'hero') return duringHero(current, input)
   switch (input.kind) {
     case 'frame':
+      return current
+    case 'scroll':
+      // From the melt on the page no longer scrolls the zoom: there is no way back to `hero`.
       return current
     case 'arrow':
       // From where it is heading, so presses in quick succession each count.
@@ -315,3 +442,79 @@ export const visibleCards = (state: HelixState): number[] =>
   Array.from({ length: state.cards }, (_, card) => card).filter(
     (card) => Math.abs(slotOf(state, card)) < visibleSlots(state),
   )
+
+/** What the opening looks like now: what the renderer, the overlays and the page read. */
+export type Opening = {
+  /** The camera's pull-back, eased: 0 the Showreel full-bleed, 1 the Helix in place. */
+  zoom: number
+  /** How far the Showreel has melted away, 0 to 1. */
+  melt: number
+  /**
+   * Where the Showreel is drawn, in slots: the front slot while it zooms, then on its card (the
+   * first, which it landed on) while it melts, so it rides the card as the Helix turns. Null once
+   * it has melted away.
+   */
+  showreelSlot: number | null
+  /** How far the hero's overlays (name, ©, Statement, "Sesli izle") have left: 0 to 1. */
+  heroGone: number
+  /** Whether the front Work's overlay shows: once the Helix is in place. */
+  frontShown: boolean
+  /** Whether the page is locked and the Helix takes the wheel, drags and arrow keys: from the melt on. */
+  locked: boolean
+}
+
+export function openingOf(state: HelixState): Opening {
+  const { phase } = state
+  switch (phase.kind) {
+    case 'hero':
+      return {
+        zoom: smoothstep(phase.zoom),
+        melt: 0,
+        showreelSlot: 0,
+        heroGone: smoothstep(clamp(phase.zoom / HERO_LEAVES_BY, 0, 1)),
+        frontShown: false,
+        locked: false,
+      }
+    case 'melt': {
+      const melt = clamp(
+        ((state.time ?? phase.startedAt) - phase.startedAt) / (HELIX_TUNING.meltSeconds * 1000),
+        0,
+        1,
+      )
+      return {
+        zoom: 1,
+        melt,
+        showreelSlot: slotOf(state, 0),
+        heroGone: 1,
+        frontShown: melt > FRONT_SHOWS_AT,
+        locked: true,
+      }
+    }
+    case 'helix':
+      return { zoom: 1, melt: 1, showreelSlot: null, heroGone: 1, frontShown: true, locked: true }
+  }
+}
+
+/**
+ * Where card `card` comes in during the zoom (0 to 1 of it): the first card, which the Showreel
+ * lands on, at once, the others in a scattered order that is the same on every visit (a stride
+ * through them that shares no factor with their count).
+ */
+function appearsAt(state: HelixState, card: number): number {
+  const index = mod(card, state.cards)
+  const others = state.cards - 1
+  if (index === 0 || others < 1) return 0
+  let stride = Math.max(1, Math.round(others * 0.618))
+  while (gcd(stride, others) !== 1) stride++
+  const rank = ((index - 1) * stride) % others
+  return APPEAR_FROM + (rank / state.cards) * APPEAR_SPREAD
+}
+
+/**
+ * How present card `card` is: 0 not there yet, 1 fully there. During the zoom the cards appear
+ * around the shrinking Showreel with staggered delays; from the melt on they are all there.
+ */
+export function cardPresence(state: HelixState, card: number): number {
+  if (state.phase.kind !== 'hero') return 1
+  return clamp((state.phase.zoom - appearsAt(state, card)) / APPEAR_SPAN, 0, 1)
+}

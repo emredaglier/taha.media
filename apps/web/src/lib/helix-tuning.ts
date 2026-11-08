@@ -36,4 +36,15 @@ export const HELIX_TUNING = {
    * about 0.29). Where that would be too wide (phones), the card fits the width instead.
    */
   frontCardHeight: 0.45,
+  /**
+   * The opening (#54): the page scrolls this far (vh) to zoom the Showreel out into the Helix. The
+   * page is one screen plus this tall while the zoom runs.
+   */
+  zoomScrollVh: 140,
+  /** How fast the zoom follows the scroll, per second (time-based easing). */
+  zoomRate: 7,
+  /** The Helix spins this many cards while it zooms. */
+  zoomSpinCards: 2.5,
+  /** The Showreel melts away in this many seconds once the zoom has landed. */
+  meltSeconds: 1.3,
 }

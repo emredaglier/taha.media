@@ -2,12 +2,16 @@ import { describe, expect, it } from 'vitest'
 
 import { HELIX_TUNING } from './helix-tuning'
 import {
+  cardPresence,
   counter,
   createHelix,
+  createOpening,
   frontCard,
   frontWork,
   isResting,
+  openingOf,
   slotOf,
+  startHelix,
   stepHelix,
   visibleCards,
   workOfCard,
@@ -433,5 +437,338 @@ describe('the rest signal', () => {
     // Two Works: card 2 shows Work 0 again; turning two cards lands on the same Work.
     expect(announcements(createHelix(2), presses(2, 1), LATER)).toEqual([])
     expect(announcements(createHelix(2), presses(1, 1), LATER)).toEqual([1])
+  })
+
+  it('does not fire through the opening: the zoom, the melt and the hand-over to turning', () => {
+    const toTheEnd: Timed[] = [{ at: 0, input: { kind: 'scroll', fraction: 1 } }]
+    expect(announcements(createOpening(6), toTheEnd, LATER + 2000)).toEqual([])
+  })
+
+  it('does not fire for a reset, and speaks again for the next new stop after it', () => {
+    const timeline: Timed[] = [
+      ...presses(2, 1),
+      { at: LATER, input: { kind: 'reset' } },
+      { at: LATER + 10, input: { kind: 'scroll', fraction: 1 } },
+      // After the opening the first Work is in front again, unannounced: turning to Work 2 speaks.
+      ...presses(2, 1, 2 * LATER + 2000),
+    ]
+    expect(announcements(createHelix(6), timeline, 3 * LATER + 2000)).toEqual([2, 2])
+  })
+
+  it('does not fire when focus skips the opening: the focused link speaks for itself', () => {
+    const focus: Timed[] = [{ at: 0, input: { kind: 'focus', work: 3 } }]
+    expect(announcements(createOpening(6), focus, LATER)).toEqual([])
+  })
+})
+
+describe('the opening', () => {
+  /** The page scrolled to `fraction` of the zoom's scroll length at `at` ms. */
+  const scroll = (fraction: number, at: number): Timed => ({
+    at,
+    input: { kind: 'scroll', fraction },
+  })
+
+  /** A steady scroll from `from` to `to` over `ms`, starting at `start` ms, as twenty events. */
+  const scrolling = (from: number, to: number, start: number, ms: number): Timed[] =>
+    range(21).map((index) => scroll(from + ((to - from) * index) / 20, start + (ms * index) / 20))
+
+  /** The zoom as the scroll left it (1 once the zoom has landed). */
+  const zoomOf = (state: HelixState) => (state.phase.kind === 'hero' ? state.phase.zoom : 1)
+
+  /** Long enough for the zoom to catch up with a scroll that has stopped (to within e^-10). */
+  const CAUGHT_UP = 10_000 / HELIX_TUNING.zoomRate
+  const MELT_MS = HELIX_TUNING.meltSeconds * 1000
+
+  /** Every frame of a run, 60 a second, as a browser steps it. */
+  function frames(start: HelixState, timeline: Timed[], until: number): HelixState[] {
+    const events = [...timeline].sort((a, b) => a.at - b.at)
+    const seen: HelixState[] = []
+    let state = stepHelix(start, { kind: 'frame' }, 0)
+    for (let frame = 1; frame * (1000 / 60) <= until; frame++) {
+      const now = frame * (1000 / 60)
+      while (events.length > 0 && events[0]!.at <= now) {
+        const { at, input } = events.shift()!
+        state = stepHelix(state, input, at)
+        seen.push(state)
+      }
+      state = stepHelix(state, { kind: 'frame' }, now)
+      seen.push(state)
+    }
+    return seen
+  }
+
+  /** Scrolls to the end of the zoom and runs on until the melt has started. */
+  function melting(n: number): HelixState {
+    const run = frames(createOpening(n), [scroll(1, 0)], CAUGHT_UP)
+    const state = run.find((each) => each.phase.kind === 'melt')
+    expect(state).toBeDefined()
+    return state!
+  }
+
+  /** When the melt started (ms). */
+  const meltStart = (state: HelixState) =>
+    state.phase.kind === 'melt' ? state.phase.startedAt : NaN
+
+  it.each(WORK_COUNTS)(
+    'with %i Works: starts with the Showreel full-bleed and the page free',
+    (n) => {
+      for (const start of [createOpening(n), startHelix(n, null)]) {
+        expect(start.phase).toEqual({ kind: 'hero', scroll: 0, zoom: 0 })
+        expect(openingOf(start)).toEqual({
+          zoom: 0,
+          melt: 0,
+          showreelSlot: 0,
+          heroGone: 0,
+          frontShown: false,
+          locked: false,
+        })
+        expect(frontWork(start)).toBe(0)
+      }
+    },
+  )
+
+  it('the zoom follows the scroll down, then back up, and settles where the scroll stopped', () => {
+    const upAt = 600 + CAUGHT_UP
+    const run = frames(
+      createOpening(6),
+      [...scrolling(0, 0.6, 0, 600), ...scrolling(0.55, 0.2, upAt, 600)],
+      upAt + 600 + CAUGHT_UP,
+    )
+    const down = run.filter((state) => state.time! < upAt)
+    const up = run.filter((state) => state.time! > upAt)
+    for (const [earlier, later] of down.slice(1).map((state, index) => [down[index]!, state])) {
+      expect(zoomOf(later!)).toBeGreaterThanOrEqual(zoomOf(earlier!))
+    }
+    for (const [earlier, later] of up.slice(1).map((state, index) => [up[index]!, state])) {
+      expect(zoomOf(later!)).toBeLessThanOrEqual(zoomOf(earlier!))
+    }
+    expect(zoomOf(down.at(-1)!)).toBeCloseTo(0.6, 3)
+    expect(zoomOf(up.at(-1)!)).toBeCloseTo(0.2, 3)
+    expect(run.every((state) => state.phase.kind === 'hero')).toBe(true)
+  })
+
+  it('spins the Helix forward into place while zooming, landing on the first Work', () => {
+    const run = frames(createOpening(6), scrolling(0, 1, 0, 800), CAUGHT_UP)
+    const hero = run.filter((state) => state.phase.kind === 'hero')
+    for (const [earlier, later] of hero.slice(1).map((state, index) => [hero[index]!, state])) {
+      expect(later!.progress).toBeGreaterThanOrEqual(earlier!.progress)
+    }
+    expect(hero[0]!.progress).toBeCloseTo(-HELIX_TUNING.zoomSpinCards, 2)
+    const landed = run.find((state) => state.phase.kind === 'melt')!
+    expect(landed.progress).toBe(0)
+    expect(frontWork(landed)).toBe(0)
+  })
+
+  it('melts only at the end of the scroll, then hands over to turning after the melt time', () => {
+    const short = frames(createOpening(6), [scroll(0.97, 0)], CAUGHT_UP * 2)
+    expect(short.every((state) => state.phase.kind === 'hero')).toBe(true)
+
+    const start = melting(6)
+    expect(openingOf(start)).toMatchObject({ zoom: 1, locked: true, heroGone: 1 })
+    const at = meltStart(start)
+    const during = stepHelix(start, { kind: 'frame' }, at + MELT_MS - 20)
+    expect(during.phase.kind).toBe('melt')
+    expect(openingOf(during).melt).toBeGreaterThan(0.9)
+    expect(openingOf(during).frontShown).toBe(true)
+    const after = stepHelix(during, { kind: 'frame' }, at + MELT_MS + 20)
+    expect(after.phase.kind).toBe('helix')
+    expect(openingOf(after)).toMatchObject({ melt: 1, showreelSlot: null, frontShown: true })
+  })
+
+  it('lets the hero overlays leave with the zoom, before the melt', () => {
+    const run = frames(createOpening(6), scrolling(0, 1, 0, 800), CAUGHT_UP)
+    const gone = run.map((state) => openingOf(state).heroGone)
+    for (const [earlier, later] of gone.slice(1).map((value, index) => [gone[index]!, value])) {
+      expect(later).toBeGreaterThanOrEqual(earlier!)
+    }
+    const lastHero = run.filter((state) => state.phase.kind === 'hero').at(-1)!
+    expect(openingOf(lastHero).heroGone).toBe(1)
+    expect(openingOf(lastHero).frontShown).toBe(false)
+  })
+
+  it.each(WORK_COUNTS)(
+    'with %i Works: the cards appear during the zoom, the first one leading, staggered',
+    (n) => {
+      const helix = createOpening(n)
+      const at = (zoom: number): HelixState => ({
+        ...helix,
+        phase: { kind: 'hero', scroll: zoom, zoom },
+      })
+      const zooms = range(101).map((step) => step / 100)
+      const cards = range(helix.cards)
+      for (const card of cards) {
+        const presence = zooms.map((zoom) => cardPresence(at(zoom), card))
+        expect(presence[0]).toBe(0)
+        for (const [earlier, later] of presence.slice(1).map((v, i) => [presence[i]!, v])) {
+          expect(later).toBeGreaterThanOrEqual(earlier!)
+        }
+        for (const zoom of zooms) {
+          expect(cardPresence(at(zoom), 0)).toBeGreaterThanOrEqual(cardPresence(at(zoom), card))
+        }
+        expect(cardPresence(createHelix(n), card)).toBe(1)
+      }
+      // Staggered: the cards come in at different points of the zoom.
+      const comeIn = cards.map((card) => zooms.find((zoom) => cardPresence(at(zoom), card) > 0))
+      expect(new Set(comeIn).size).toBeGreaterThan(Math.min(2, helix.cards - 1))
+    },
+  )
+
+  it('ignores turning input while the zoom runs: the page scroll has it', () => {
+    const start = frames(createOpening(6), [scroll(0.4, 0)], 500).at(-1)!
+    const inputs: HelixInput[] = [
+      { kind: 'arrow', step: 1 },
+      { kind: 'wheel', deltaY: 100, deltaMode: 0 },
+      { kind: 'dragStart' },
+      { kind: 'dragMove', up: 300 },
+      { kind: 'dragEnd' },
+      { kind: 'card', card: 3 },
+      { kind: 'enter' },
+    ]
+    let state = start
+    inputs.forEach((input, index) => (state = stepHelix(state, input, 510 + index)))
+    const untouched = stepHelix(start, { kind: 'frame' }, 510 + inputs.length - 1)
+    expect(state.phase.kind).toBe('hero')
+    expect(zoomOf(state)).toBeCloseTo(zoomOf(untouched), 12)
+    expect(state.progress).toBeCloseTo(untouched.progress, 12)
+    expect(state.goal).toBe(untouched.goal)
+    expect(state.motion).toEqual({ kind: 'rest' })
+    expect(state.open).toBeNull()
+  })
+
+  it.each(WORK_COUNTS)(
+    'with %i Works: once the melt starts, no input brings back hero, only a reset',
+    (n) => {
+      const start = melting(n)
+      const at = meltStart(start)
+      const barrage: Timed[] = [
+        scroll(0, at + 10),
+        scroll(0.3, at + 20),
+        { at: at + 30, input: { kind: 'wheel', deltaY: -300, deltaMode: 0 } },
+        { at: at + 40, input: { kind: 'arrow', step: -1 } },
+        { at: at + 50, input: { kind: 'dragStart' } },
+        { at: at + 60, input: { kind: 'dragMove', up: -200 } },
+        { at: at + 70, input: { kind: 'dragEnd' } },
+        { at: at + 80, input: { kind: 'card', card: 1 } },
+        { at: at + 90, input: { kind: 'focus', work: n - 1 } },
+        { at: at + 100, input: { kind: 'enter' } },
+        scroll(0, at + MELT_MS + 100),
+      ]
+      let state = start
+      for (const { at: time, input } of barrage) {
+        state = stepHelix(state, input, time)
+        expect(state.phase.kind).not.toBe('hero')
+        state = stepHelix(state, { kind: 'frame' }, time + 5)
+        expect(state.phase.kind).not.toBe('hero')
+      }
+      expect(state.phase.kind).toBe('helix')
+      const reset = stepHelix(state, { kind: 'reset' }, at + MELT_MS + 200)
+      expect(reset.phase).toEqual({ kind: 'hero', scroll: 0, zoom: 0 })
+    },
+  )
+
+  it('accepts turning from the moment the melt starts, the Showreel riding its card', () => {
+    const start = melting(6)
+    const at = meltStart(start)
+    const turned = simulate(start, [{ at: at + 20, input: { kind: 'arrow', step: 1 } }], {
+      until: at + 20 + LATER,
+    })
+    expect(turned.progress).toBe(1)
+    expect(frontWork(turned)).toBe(1)
+
+    const midMelt = stepHelix(
+      stepHelix(start, { kind: 'wheel', deltaY: 100, deltaMode: 0 }, at + 20),
+      { kind: 'frame' },
+      at + MELT_MS / 2,
+    )
+    expect(midMelt.phase.kind).toBe('melt')
+    expect(midMelt.progress).toBeGreaterThan(0)
+    // The Showreel stays on the first card, which is turning away from the front.
+    expect(openingOf(midMelt).showreelSlot).toBe(slotOf(midMelt, 0))
+    expect(openingOf(midMelt).showreelSlot).toBeLessThan(0)
+  })
+
+  it('gives the same zoom for the same wall-clock scroll at 30, 60 and 120 frames a second', () => {
+    const timeline = [
+      ...scrolling(0, 0.7, 0, 700),
+      ...scrolling(0.7, 0.3, 900, 400),
+      scroll(1, 1500),
+    ]
+    /** The state at exactly `time`: the frames before it, then every input up to it. */
+    const at = (time: number, fps: number) => {
+      let state = simulate(createOpening(6), timeline, { until: time, fps })
+      for (const { at: when, input } of timeline.filter((each) => each.at > state.time!)) {
+        if (when <= time) state = stepHelix(state, input, when)
+      }
+      return stepHelix(state, { kind: 'frame' }, time)
+    }
+    for (const time of [350, 700, 1000, 1400, 1520]) {
+      const zooms = [30, 60, 120].map((fps) => zoomOf(at(time, fps)))
+      for (const zoom of zooms) expect(zoom).toBeCloseTo(zooms[0]!, 9)
+    }
+    // The melt starts at the same moment, give or take one sub-step of the physics.
+    const starts = [30, 60, 120].map((fps) =>
+      meltStart(simulate(createOpening(6), timeline, { until: 1500 + CAUGHT_UP / 2, fps })),
+    )
+    for (const at of starts)
+      expect(Math.abs(at - starts[0]!)).toBeLessThanOrEqual(1000 / 240 + 1e-6)
+  })
+
+  it.each(WORK_COUNTS)(
+    'with %i Works: starting with a remembered Work begins in helix with that Work in front',
+    (n) => {
+      for (const work of range(n)) {
+        const start = startHelix(n, work)
+        expect(start.phase.kind).toBe('helix')
+        expect(frontWork(start)).toBe(work)
+        expect(isResting(start)).toBe(true)
+        expect(openingOf(start)).toMatchObject({
+          showreelSlot: null,
+          locked: true,
+          frontShown: true,
+        })
+        // It turns at once.
+        const turned = simulate(start, presses(1, 1), { until: LATER })
+        expect(frontWork(turned)).toBe((work + 1) % n)
+      }
+      // A Work that is no longer there gives the opening.
+      for (const gone of [n, -1, 0.5]) expect(startHelix(n, gone).phase.kind).toBe('hero')
+    },
+  )
+
+  it('focusing a Work during the zoom skips the opening, with that Work in front', () => {
+    for (const work of range(6)) {
+      const zooming = frames(createOpening(6), [scroll(0.5, 0)], 300).at(-1)!
+      const focused = stepHelix(zooming, { kind: 'focus', work }, 310)
+      expect(focused.phase.kind).toBe('helix')
+      expect(frontWork(focused)).toBe(work)
+      expect(isResting(focused)).toBe(true)
+    }
+  })
+
+  it('a reset returns to hero at zoom 0, from the zoom, the melt or after turning', () => {
+    const zooming = frames(createOpening(6), [scroll(0.5, 0)], 300).at(-1)!
+    const start = melting(6)
+    const turned = simulate(start, presses(3, 1, meltStart(start) + 10), {
+      until: meltStart(start) + LATER,
+    })
+    for (const state of [zooming, start, turned]) {
+      const reset = stepHelix(state, { kind: 'reset' }, (state.time ?? 0) + 10)
+      expect(reset.phase).toEqual({ kind: 'hero', scroll: 0, zoom: 0 })
+      expect(openingOf(reset)).toMatchObject({
+        zoom: 0,
+        showreelSlot: 0,
+        heroGone: 0,
+        locked: false,
+      })
+      // A scroll the reset came after doesn't count: the zoom stays at 0 until the page scrolls.
+      const later = stepHelix(reset, { kind: 'frame' }, (state.time ?? 0) + 500)
+      expect(zoomOf(later)).toBe(0)
+      // The opening runs again and lands on the first Work.
+      const again = simulate(later, [scroll(1, (state.time ?? 0) + 510)], {
+        until: (state.time ?? 0) + 510 + CAUGHT_UP + MELT_MS,
+      })
+      expect(again.phase.kind).toBe('helix')
+      expect(frontWork(again)).toBe(0)
+    }
   })
 })
