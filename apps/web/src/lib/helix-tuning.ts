@@ -31,4 +31,9 @@ export const HELIX_TUNING = {
   weakDevice: { minMemoryGb: 4, minCores: 4 },
   /** Distance from the middle (0 to 1 of the half-height) where the top and bottom fade begins. */
   sharpBand: 0.25,
+  /**
+   * The Helix's size: the share of the screen height the front card takes (the prototype had
+   * about 0.29). Where that would be too wide (phones), the card fits the width instead.
+   */
+  frontCardHeight: 0.45,
 }

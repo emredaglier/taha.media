@@ -1,3 +1,5 @@
+import { HELIX_TUNING } from './helix-tuning'
+
 /**
  * The Helix's shape (#45, "The Helix: rendering"): the 21st.dev dither helix carousel's geometry
  * as the prototype tuned it, flipped so that the next card comes up from below. World units; the
@@ -12,7 +14,6 @@ export const HELIX_SHAPE = {
   /** Each slot further down sits this much further out (and further up, further in). */
   radiusStep: 0.055,
   cameraZ: 10,
-  fovDegrees: 48,
   near: 0.1,
   far: 60,
   /** Radians around the cylinder per slot. */
@@ -30,18 +31,18 @@ export const HELIX_SHAPE = {
 /** Vertical distance between neighbouring cards. */
 export const SLOT_PITCH = HELIX_SHAPE.rise * HELIX_SHAPE.cardHeight
 
-const BASE_FOCAL = 1 / Math.tan((HELIX_SHAPE.fovDegrees * Math.PI) / 360)
-
 /**
- * The focal length for a screen of this aspect (width / height): the field of view the prototype
- * used, narrowed on narrow screens until the front card's curved edges fit within the width.
+ * The focal length for a screen of this aspect (width / height): the front card takes the tuned
+ * share of the screen height, unless its curved edges would then pass the maximum width (narrow
+ * screens); there it fits the width.
  */
 export function focalFor(aspect: number): number {
   const { cardHeight, cardRatio, radius, cameraZ, frontMaxWidth } = HELIX_SHAPE
+  const byHeight = (HELIX_TUNING.frontCardHeight * (cameraZ - radius)) / (cardHeight / 2)
   const edge = (cardHeight * cardRatio) / 2 / radius
-  const halfWidth =
-    (Math.sin(edge) * radius * BASE_FOCAL) / aspect / (cameraZ - Math.cos(edge) * radius)
-  return BASE_FOCAL * Math.min(1, frontMaxWidth / halfWidth)
+  const byWidth =
+    (frontMaxWidth * aspect * (cameraZ - Math.cos(edge) * radius)) / (Math.sin(edge) * radius)
+  return Math.min(byHeight, byWidth)
 }
 
 /** Where the card at `slot` shows, as a box around its centre; null when behind the camera. */

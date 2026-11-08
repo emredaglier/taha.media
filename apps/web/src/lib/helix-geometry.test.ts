@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { cardAt, cardOnScreen, cropToCard, focalFor, HELIX_SHAPE } from './helix-geometry'
+import { HELIX_TUNING } from './helix-tuning'
 
 /** Screen shapes (width / height) from tall phones to ultrawide monitors. */
 const ASPECTS = [0.4, 0.46, 0.56, 0.75, 1, 1.33, 1.6, 1.78, 2.4, 3.2]
@@ -33,6 +34,14 @@ describe('focalFor', () => {
     expect(narrowed.length).toBeLessThan(ASPECTS.length)
     for (const aspect of narrowed) {
       expect(frontCardWidth(aspect)).toBeCloseTo(HELIX_SHAPE.frontMaxWidth, 9)
+    }
+  })
+
+  it('gives the front card the tuned share of the screen height wherever it fits the width', () => {
+    const wide = focalFor(100)
+    for (const aspect of ASPECTS.filter((each) => focalFor(each) === wide)) {
+      const front = cardOnScreen(0, focalFor(aspect), aspect)!
+      expect(front.halfHeight).toBeCloseTo(HELIX_TUNING.frontCardHeight, 9)
     }
   })
 
