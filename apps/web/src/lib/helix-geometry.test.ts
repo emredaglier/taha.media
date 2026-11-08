@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
-import { cardAt, cardOnScreen, cropToCard, focalFor, HELIX_SHAPE } from './helix-geometry'
+import {
+  cardAt,
+  cardOnScreen,
+  coverScale,
+  cropToCard,
+  cropToFill,
+  focalFor,
+  HELIX_SHAPE,
+} from './helix-geometry'
 import { HELIX_TUNING } from './helix-tuning'
 
 /** Screen shapes (width / height) from tall phones to ultrawide monitors. */
@@ -133,4 +141,44 @@ describe('cropToCard', () => {
     expect(top.offset.y + top.scale.y).toBeCloseTo(1, 12)
     expect(cropToCard(1080, 1920, { x: 50, y: 100 }).offset.y).toBe(0)
   })
+})
+
+describe('cropToFill', () => {
+  it.each(ASPECTS)(
+    'fills a screen of aspect %f with a 16:9 Showreel, never stretched',
+    (aspect) => {
+      const { scale, offset } = cropToFill(1920, 1080, aspect, { x: 50, y: 50 })
+      expect((scale.x * 1920) / (scale.y * 1080)).toBeCloseTo(aspect, 9)
+      expect(Math.max(scale.x, scale.y)).toBe(1)
+      // Centred, as `object-position: 50% 50%` is.
+      expect(offset.x + scale.x / 2).toBeCloseTo(0.5, 12)
+      expect(offset.y + scale.y / 2).toBeCloseTo(0.5, 12)
+    },
+  )
+})
+
+describe('coverScale', () => {
+  it.each(ASPECTS)(
+    'at aspect %f, scales the front card up until it covers the screen',
+    (aspect) => {
+      const focal = focalFor(aspect)
+      const scale = coverScale(focal, aspect)
+      expect(scale).toBeGreaterThan(1)
+      // Brute force over the card's curved face: its narrowest point across and its shortest point
+      // down reach past the screen's edges once scaled...
+      const { cardHeight, cardRatio, radius, cameraZ } = HELIX_SHAPE
+      let narrowest = Infinity
+      let shortest = Infinity
+      for (let sample = 0; sample <= 200; sample++) {
+        const theta = ((sample / 200 - 0.5) * cardHeight * cardRatio) / radius
+        const depth = cameraZ - Math.cos(theta) * radius
+        if (sample === 0) narrowest = (Math.abs(Math.sin(theta)) * radius * focal) / aspect / depth
+        shortest = Math.min(shortest, ((cardHeight / 2) * focal) / depth)
+      }
+      expect(narrowest * scale).toBeGreaterThanOrEqual(1)
+      expect(shortest * scale).toBeGreaterThanOrEqual(1)
+      // ...and not much further than needed on the tighter side.
+      expect(Math.min(narrowest, shortest) * scale).toBeLessThan(1.1)
+    },
+  )
 })

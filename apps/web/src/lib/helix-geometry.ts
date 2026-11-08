@@ -45,6 +45,24 @@ export function focalFor(aspect: number): number {
   return Math.min(byHeight, byWidth)
 }
 
+/** How much more than just covering the screen the opening's zoom starts from. */
+const COVER_SPARE = 1.02
+
+/**
+ * Where the opening's camera starts (#54): how much the Helix is scaled up so that the front card
+ * covers the whole screen, with a little to spare. The zoom pulls back from here to 1.
+ */
+export function coverScale(focal: number, aspect: number): number {
+  const { cardHeight, cardRatio, radius, cameraZ } = HELIX_SHAPE
+  const edge = (cardHeight * cardRatio) / 2 / radius
+  // The curved card bulges towards the camera, so its side edges are the farthest from it, and
+  // the card is shortest on screen there.
+  const sideDepth = cameraZ - Math.cos(edge) * radius
+  const halfWidth = (Math.sin(edge) * radius * focal) / aspect / sideDepth
+  const halfHeight = ((cardHeight / 2) * focal) / sideDepth
+  return Math.max(1 / halfWidth, 1 / halfHeight) * COVER_SPARE
+}
+
 /** Where the card at `slot` shows, as a box around its centre; null when behind the camera. */
 export function cardOnScreen(slot: number, focal: number, aspect: number) {
   const { cardHeight, cardRatio, radius, radiusStep, cameraZ, near, twist } = HELIX_SHAPE
@@ -67,9 +85,21 @@ export function cardOnScreen(slot: number, focal: number, aspect: number) {
  * Media that isn't quite 16:9 is cropped, never stretched. In texture coordinates, which run up:
  * `scale` is the fraction of the picture shown on each axis, `offset` where it starts.
  */
-export function cropToCard(width: number, height: number, focalPoint: { x: number; y: number }) {
+export const cropToCard = (width: number, height: number, focalPoint: { x: number; y: number }) =>
+  cropToFill(width, height, HELIX_SHAPE.cardRatio, focalPoint)
+
+/**
+ * The part of a picture a box of aspect `ratio` (width / height) shows when the picture fills it,
+ * as CSS `object-fit: cover` with `object-position` at the focal point does. Same shape as
+ * `cropToCard`.
+ */
+export function cropToFill(
+  width: number,
+  height: number,
+  ratio: number,
+  focalPoint: { x: number; y: number },
+) {
   const aspect = width / height
-  const ratio = HELIX_SHAPE.cardRatio
   const scale = aspect > ratio ? { x: ratio / aspect, y: 1 } : { x: 1, y: aspect / ratio }
   return {
     scale,
