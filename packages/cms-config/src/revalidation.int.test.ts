@@ -246,7 +246,7 @@ describe('a single-entry page', () => {
     const saveStatement = (status: 'draft' | 'published', text: string) =>
       site.cms.updateGlobal({
         slug: 'site',
-        data: { statementBefore: text, statementAfter: text, _status: status },
+        data: { statement: text, _status: status },
         draft: status === 'draft',
         user: as.user(),
         overrideAccess: as.overrideAccess,

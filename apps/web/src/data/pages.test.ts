@@ -97,8 +97,7 @@ describe('Site', () => {
         showreelPhone: phone.id,
         showreelPoster: poster.id,
         showreelLink: { url: 'https://vimeo.com/123456789' },
-        statementBefore: 'Kurgu, hareket ve grafik.',
-        statementAfter: 'Hikayeyi hareketle anlatıyorum.',
+        statement: 'Kurgu, hareket ve grafik ile hikayeyi hareketle anlatıyorum.',
         email: 'taha@example.com',
         socials: [
           { platform: 'Instagram', url: 'https://instagram.com/taha' },
@@ -113,7 +112,7 @@ describe('Site', () => {
       showreelPhone: { id: phone.id },
       showreelPoster: { alt: 'Showreel kapağı' },
       showreelLink: { provider: 'vimeo', id: '123456789', url: 'https://vimeo.com/123456789' },
-      statement: { before: 'Kurgu, hareket ve grafik.', after: 'Hikayeyi hareketle anlatıyorum.' },
+      statement: 'Kurgu, hareket ve grafik ile hikayeyi hareketle anlatıyorum.',
       email: 'taha@example.com',
     })
     expect(result?.socials.map((s) => s.platform)).toEqual(['Instagram', 'Vimeo'])
@@ -141,7 +140,7 @@ describe('Site', () => {
     const result = await getSite()
     expect(result?.seo).toMatchObject({
       title: 'taha.media',
-      description: 'Kurgu, hareket ve grafik. Hikayeyi hareketle anlatıyorum.',
+      description: 'Kurgu, hareket ve grafik ile hikayeyi hareketle anlatıyorum.',
       image: { alt: 'Showreel kapağı' },
     })
     const share = await site.uploadImage(editor, { alt: 'Paylaşım' })
@@ -159,49 +158,31 @@ describe('Site', () => {
 })
 
 describe('the Statement', () => {
-  // Each case writes both sides and clears the SEO override, so the cases do not depend on order.
-  const saveStatement = (before: string | null, after: string | null) =>
-    write(
-      'site',
-      {
-        statementBefore: before,
-        statementAfter: after,
-        seo: { title: '', description: '', image: null },
-      },
-      'published',
-    )
+  // Each case clears the SEO override, so the cases do not depend on order.
+  const saveStatement = (statement: string | null) =>
+    write('site', { statement, seo: { title: '', description: '', image: null } }, 'published')
 
-  it('trims both sides', async () => {
-    await saveStatement('  Kurgu ve motion.  ', '\n Hikayeyi anlatıyorum. ')
-    expect((await getSite())?.statement).toEqual({
-      before: 'Kurgu ve motion.',
-      after: 'Hikayeyi anlatıyorum.',
-    })
+  it('trims the text', async () => {
+    await saveStatement('  Kurgu ve motion.  \n')
+    expect((await getSite())?.statement).toBe('Kurgu ve motion.')
   })
 
-  it('reads a blank or whitespace-only side as null, and keeps the other', async () => {
-    await saveStatement('Yalnız başlangıç.', '   ')
-    expect((await getSite())?.statement).toEqual({ before: 'Yalnız başlangıç.', after: null })
-    await saveStatement('', 'Yalnız son.')
-    expect((await getSite())?.statement).toEqual({ before: null, after: 'Yalnız son.' })
+  it('reads blank, whitespace-only or unset text as null', async () => {
+    await saveStatement('   ')
+    expect((await getSite())?.statement).toBeNull()
+    await saveStatement('')
+    expect((await getSite())?.statement).toBeNull()
+    await saveStatement(null)
+    expect((await getSite())?.statement).toBeNull()
   })
 
-  it('reads two nulls when neither side is set', async () => {
-    await saveStatement(null, null)
-    expect((await getSite())?.statement).toEqual({ before: null, after: null })
-  })
-
-  it('gives the SEO description from whichever side exists, or both joined by one space', async () => {
-    await saveStatement('Yalnız başlangıç.', null)
-    expect((await getSite())?.seo.description).toBe('Yalnız başlangıç.')
-    await saveStatement(null, 'Yalnız son.')
-    expect((await getSite())?.seo.description).toBe('Yalnız son.')
-    await saveStatement('Önce.', 'Sonra.')
-    expect((await getSite())?.seo.description).toBe('Önce. Sonra.')
+  it('gives the SEO description from the Statement', async () => {
+    await saveStatement('Kurgu ve motion.')
+    expect((await getSite())?.seo.description).toBe('Kurgu ve motion.')
   })
 
   it('lets an SEO description the Editor wrote win', async () => {
-    await saveStatement('Önce.', 'Sonra.')
+    await saveStatement('Kurgu ve motion.')
     await write('site', { seo: { description: 'Özel açıklama' } }, 'published')
     expect((await getSite())?.seo.description).toBe('Özel açıklama')
   })

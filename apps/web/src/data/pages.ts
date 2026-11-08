@@ -35,8 +35,8 @@ export type Site = {
   showreelPoster: ImageRead | null
   /** The full-length Showreel on Vimeo or YouTube; null when not set. */
   showreelLink: { provider: 'vimeo' | 'youtube'; id: string; url: string } | null
-  /** The Statement: the text before and after the Showreel clip, each trimmed; null when blank. */
-  statement: { before: string | null; after: string | null }
+  /** The Statement: the sentence in the Home hero, trimmed; null when blank. */
+  statement: string | null
   email: string | null
   /** In the order the Editor set. */
   socials: { platform: string; url: string }[]
@@ -94,7 +94,7 @@ export async function getSite(): Promise<Site | null> {
   if (!doc) return null
   const showreelPoster = image(doc.showreelPoster)
   const link = doc.showreelLink
-  const statement = { before: text(doc.statementBefore), after: text(doc.statementAfter) }
+  const statement = text(doc.statement)
   return {
     showreel: video(doc.showreel),
     showreelPhone: video(doc.showreelPhone),
@@ -109,7 +109,7 @@ export async function getSite(): Promise<Site | null> {
     seo: resolveSeo({
       overrides: doc.seo,
       title: SITE_TITLE,
-      description: plainParagraph([statement.before, statement.after].filter(Boolean).join(' ')),
+      description: plainParagraph(statement ?? ''),
       fallbackImage: showreelPoster,
       toImage,
     }),
