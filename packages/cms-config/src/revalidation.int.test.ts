@@ -7,11 +7,16 @@ import { createTestSite, type TestSite } from './testing'
 let site: TestSite
 let editor: User
 let coverId: number
+/** A 16:9 Preview loop: publishing a featured Work needs one (#43). */
+let loopId: number
+const loopFor = (data: { featured?: boolean | null }) =>
+  data.featured ? { previewLoop: loopId } : {}
 
 beforeAll(async () => {
   site = await createTestSite()
   editor = await site.createEditor()
   coverId = (await site.uploadImage(editor)).id
+  loopId = (await site.uploadVideo(editor, { use: 'previewLoop' })).id
 }, 30_000)
 
 afterAll(async () => {
@@ -44,6 +49,7 @@ async function createWork(
       year: 2025,
       cover: coverId,
       mainMedia: { kind: 'image', image: coverId },
+      ...loopFor(extra),
       ...extra,
       _status: status,
     },
@@ -58,7 +64,7 @@ const publish = (id: number, data: Partial<Work> = {}) =>
   site.cms.update({
     collection: 'works',
     id,
-    data: { ...data, _status: 'published' },
+    data: { ...loopFor(data), ...data, _status: 'published' },
     user: as.user(),
     overrideAccess: as.overrideAccess,
   })
@@ -246,7 +252,7 @@ describe('a single-entry page', () => {
     const saveStatement = (status: 'draft' | 'published', text: string) =>
       site.cms.updateGlobal({
         slug: 'site',
-        data: { statementBefore: text, statementAfter: text, _status: status },
+        data: { statement: text, _status: status },
         draft: status === 'draft',
         user: as.user(),
         overrideAccess: as.overrideAccess,

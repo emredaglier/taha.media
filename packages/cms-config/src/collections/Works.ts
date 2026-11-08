@@ -7,6 +7,7 @@ import {
 
 import { editor, publishedOrEditor } from '../access'
 import { DISCIPLINE_LABELS, DISCIPLINES } from '../disciplines'
+import { requireFeaturedLoop } from '../featured-loop'
 import { mainMediaField, mainMediaHook } from '../main-media'
 import { videoField } from '../video-field'
 import { restrictedRichText } from '../rich-text'
@@ -138,7 +139,7 @@ export const Works: CollectionConfig = {
     seoField(),
   ],
   hooks: {
-    beforeValidate: [cleanSlug, requireDiscipline, mainMediaHook],
+    beforeValidate: [cleanSlug, requireDiscipline, mainMediaHook, requireFeaturedLoop],
     beforeChange: [recordPreviousSlugs],
   },
   versions: { drafts: true, maxPerDoc: 20 },

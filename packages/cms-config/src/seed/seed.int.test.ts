@@ -2,6 +2,7 @@ import { handleEndpoints } from 'payload'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { FEATURED_MAX, FEATURED_MIN } from '../featured'
+import { isSixteenByNine } from '../featured-loop'
 import { createTestSite, type TestSite } from '../testing'
 import { VIDEO_USES } from '../video-limits'
 import { lexical } from './lexical'
@@ -28,7 +29,7 @@ const counts = async () => ({
 })
 
 describe('the local seed', () => {
-  it('fills published Works of all three main-media kinds, Disciplines and 4-8 featured', async () => {
+  it('fills published Works of all three main-media kinds, Disciplines and 6-12 featured', async () => {
     await seedLocal(site.cms)
 
     const { docs: works } = await site.cms.find({ collection: 'works', limit: 100, depth: 1 })
@@ -43,6 +44,12 @@ describe('the local seed', () => {
     expect(featured.length).toBeLessThanOrEqual(FEATURED_MAX)
     expect(works.every((w) => typeof w.cover === 'object' && w.cover !== null)).toBe(true)
     expect(works.some((w) => w.previewLoop)).toBe(true)
+    for (const work of featured) {
+      const loop = work.previewLoop
+      expect(
+        typeof loop === 'object' && loop !== null && isSixteenByNine(loop.width!, loop.height!),
+      ).toBe(true)
+    }
   }, 60_000)
 
   it('uploads Videos of every use (the caps accepted them)', async () => {
@@ -54,8 +61,7 @@ describe('the local seed', () => {
   it('fills and publishes the single-entry pages', async () => {
     const siteDoc = await site.cms.findGlobal({ slug: 'site' })
     expect(siteDoc._status).toBe('published')
-    expect(siteDoc.statementBefore).toBeTruthy()
-    expect(siteDoc.statementAfter).toBeTruthy()
+    expect(siteDoc.statement).toBeTruthy()
     expect(siteDoc.email).toBeTruthy()
     expect(siteDoc.showreel).toBeTruthy()
     expect(siteDoc.socials?.length).toBeGreaterThan(0)
@@ -129,8 +135,7 @@ describe('the production seed', () => {
 
       const siteDoc = await prod.cms.findGlobal({ slug: 'site' })
       expect(siteDoc._status).toBe('published')
-      expect(siteDoc.statementBefore).toBeFalsy()
-      expect(siteDoc.statementAfter).toBeFalsy()
+      expect(siteDoc.statement).toBeFalsy()
       expect(siteDoc.showreel).toBeFalsy()
       expect(siteDoc.socials ?? []).toHaveLength(0)
       const about = await prod.cms.findGlobal({ slug: 'about' })

@@ -674,13 +674,9 @@ export interface Site {
     videoId?: string | null;
   };
   /**
-   * Ana sayfadaki cümlenin Showreel klibinden önceki kısmı. Klip bu metinle sonraki metin arasında yer alır.
+   * Ana sayfadaki hero bölümünde görünen cümle.
    */
-  statementBefore?: string | null;
-  /**
-   * Ana sayfadaki cümlenin Showreel klibinden sonraki kısmı. Klip önceki metinle bu metin arasında yer alır.
-   */
-  statementAfter?: string | null;
+  statement?: string | null;
   email?: string | null;
   socials?:
     | {
@@ -795,8 +791,7 @@ export interface SiteSelect<T extends boolean = true> {
         provider?: T;
         videoId?: T;
       };
-  statementBefore?: T;
-  statementAfter?: T;
+  statement?: T;
   email?: T;
   socials?:
     | T

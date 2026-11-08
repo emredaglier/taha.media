@@ -27,6 +27,7 @@ type DemoWork = {
   role?: string
   /** Position on Home; the Work is not featured when absent. */
   featuredOrder?: number
+  /** A 16:9 loop; every featured Work needs one (ADR-0008, issue #43). */
   previewLoop?: boolean
   main: MainMedia
   stills?: number
@@ -71,6 +72,7 @@ const DEMO_WORKS: DemoWork[] = [
     disciplines: ['kurgu'],
     client: 'Ege Turizm',
     featuredOrder: 3,
+    previewLoop: true,
     main: { kind: 'external', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
   },
   {
@@ -80,6 +82,7 @@ const DEMO_WORKS: DemoWork[] = [
     client: 'Çarşı Festivali',
     role: 'Afiş tasarımı',
     featuredOrder: 4,
+    previewLoop: true,
     main: { kind: 'image' },
     stills: 4,
   },
@@ -302,8 +305,7 @@ async function seedPages(seeder: Seeder): Promise<void> {
         showreelPhone: await uploadVideo(seeder, 'showreel', 'portrait.mp4', 'Showreel telefon'),
         showreelPoster: await uploadImage(seeder, 'Showreel görseli'),
         showreelLink: { url: 'https://vimeo.com/76979871' },
-        statementBefore: 'Kurgu, motion ve grafik tasarımla',
-        statementAfter: 'hikayeyi hareketle anlatıyorum.',
+        statement: 'Kurgu, motion ve grafik tasarımla hikayeyi hareketle anlatıyorum.',
         email: 'merhaba@example.com',
         socials: [
           { platform: 'Instagram', url: 'https://instagram.com/example' },
@@ -353,7 +355,7 @@ async function seedPages(seeder: Seeder): Promise<void> {
 
 /**
  * The local demo seed: Works of all three main-media kinds, several Disciplines, six featured
- * (Home needs 4 to 8), fixture images and videos within the caps, filled single-entry pages and a
+ * (Home needs 6 to 12), fixture images and videos within the caps, filled single-entry pages and a
  * demo Editor, so frontend work does not wait for content. Everything goes through the Local API
  * with validation on. Safe to run again: it only adds what is missing and never overwrites edits.
  *
