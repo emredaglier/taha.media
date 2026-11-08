@@ -1,5 +1,5 @@
+import type { PointerPath } from '../../lib/helix-heat'
 import { HELIX_TUNING } from '../../lib/helix-tuning'
-import type { PointerPath } from './ripples'
 
 const { restSpeed, speedFade, inRate, outRate } = HELIX_TUNING.pointer
 
@@ -18,7 +18,7 @@ export type PointerSample = {
   point: { x: number; y: number } | null
   /** Whether it has come to rest, so the card under it is the hovered card. */
   resting: boolean
-  /** Its path since the last frame, for ripples. */
+  /** Its path since the last frame, for the heat trail. */
   cursor: PointerPath | null
 }
 

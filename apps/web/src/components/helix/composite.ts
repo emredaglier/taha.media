@@ -3,16 +3,19 @@ import { createTarget, float, link, QUAD_VERTEX, screenQuad, uniforms, type Targ
 
 /**
  * The composite (#45 "pass 4"): the cards (`scene`) and the Showreel layer (`showreel`), each
- * drawn into its own screen-sized target, put together on the canvas through the liquid glass
- * (#55), the one melt material that does every job:
- * - The picture stays whole but warps, as through water and heat haze, with a colour split. The
- *   ripples (`Ripples`) bend it, and turning stirs the haze.
- * - How melted each pixel is comes from one measure: the top and bottom of the screen beyond the
- *   sharp band, cards deep in the Helix, cards not hovered, and cards that haven't appeared yet
- *   (or are leaving the visible band). The more melted, the more it warps and blurs, until it is
- *   gone and the page shows through. The hovered card doesn't melt at the edges or for depth.
- * - The Showreel melts away in a ring from its centre, the ring bending the picture like the rim
- *   of a lens.
+ * drawn into its own screen-sized target, put together on the canvas through the analogue signal
+ * (#64), the one melt material that does every job:
+ * - A signal failing: rows of the picture jump sideways, the colours bleed apart, a tracking band
+ *   rolls down the screen and tape noise comes up. Turning raises the jitter, and the cursor's
+ *   heat trail (`HeatTrail`) bumps the tracking where it passes.
+ * - How melted each pixel is comes from one measure (`meltAt`): the top and bottom of the screen
+ *   beyond the sharp band, cards deep in the Helix, cards not hovered, and cards that haven't
+ *   appeared yet (or are leaving the visible band). The more melted, the more it tears, until it
+ *   is gone and the page shows through. The hovered card doesn't melt at the edges or for depth.
+ * - Sharp cards (the hovered one, the ones in the sharp band) keep straight top and bottom edges;
+ *   their left and right edges shift row by row (Scanline edges). Everything else tears along
+ *   its outline too.
+ * - The Showreel drops out line by line behind a jittering ring that grows from its centre.
  * The card pass writes what the measure needs for each pixel as the scene's melt inputs
  * (`MELT_INPUTS_GLSL`).
  */
@@ -38,6 +41,12 @@ struct MeltInputs { float gone; float dimmed; float hovered; float deep; };
 vec4 packMeltInputs(MeltInputs m) { return vec4(m.gone, m.dimmed, m.hovered, m.deep); }
 MeltInputs unpackMeltInputs(vec4 v) { return MeltInputs(v.r, v.g, v.b, v.a); }`
 
+/**
+ * How much the card pass fades a card deep in the Helix (alpha × (1 - DEEP_FADE × deep), the
+ * prototype's light haze). The composite needs it too, to tell how much of a card covers a pixel.
+ */
+export const DEEP_FADE = 0.35
+
 export type CompositeFrame = {
   /** Whether the Showreel layer was drawn this frame. */
   showreelOn: boolean
@@ -48,17 +57,17 @@ export type CompositeFrame = {
   reach: number
   /** The screen's shape (width / height). */
   aspect: number
-  /** Seconds, for the haze and the ring's wobble. */
+  /** Seconds, for the jitter, the tracking band and the noise. */
   time: number
-  /** How fast the Helix turns, 0 to 1: it stirs the haze. */
+  /** How fast the Helix turns, 0 to 1: it raises the jitter. */
   speed: number
-  /** How far the Helix has turned, in screen heights (`turnOnScreen`): the haze rides with it. */
+  /** How far the Helix has turned, in screen heights (`turnOnScreen`): the outline follows it. */
   shift: number
-  /** The water's height (red), and one step across it in texture coordinates. */
-  ripples: { texture: WebGLTexture; texel: { x: number; y: number } }
+  /** The cursor's heat trail (`HeatTrail`; red). */
+  heat: WebGLTexture
 }
 
-// Value noise, as the prototype's liquid glass has it.
+// Value noise, as the prototype has it.
 const NOISE = `
 float hash12(vec2 p) {
   vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -77,29 +86,64 @@ float fbm(vec2 p) {
   return s;
 }`
 
-// The owner's values are in the tuning object; the rest is the prototype's liquid glass as it is.
+// The cards' outline, as the prototype's EDGE chunk has it (the parts the signal reads): the card
+// coverage around the pixel at 17 taps, two rings of 8 at about r and r/2 px. `mean` is the
+// blurred coverage (0 outside, 1 inside, 0.5 on the outline), `band` 1 on the outline and 0 well
+// inside or outside, `dir` the way into the card, and `jit` a small displacement, strongest on
+// the outline, anchored to the turning cards.
+const EDGE = `
+struct Edge { float band; float mean; vec2 dir; vec2 jit; };
+Edge edgeAt(vec2 uv) {
+  vec2 px = 1.0 / uRes;
+  float r = clamp(uRes.y / 150.0, 4.0, 12.0);
+  float acc = coverAt(uv);
+  float wsum = 1.0;
+  vec2 g = vec2(0.0);
+  for (int i = 0; i < 8; i++) {
+    float a = float(i) * 0.785398 + 0.3927;
+    vec2 d = vec2(cos(a), sin(a));
+    float c1 = coverAt(uv + d * px * r);
+    float c2 = coverAt(uv + d * px * r * 0.5);
+    acc += c1 + c2 * 1.5;
+    wsum += 2.5;
+    g += d * (c1 + c2 * 1.5);
+  }
+  Edge e;
+  e.mean = acc / wsum;
+  e.band = 1.0 - pow(abs(2.0 * e.mean - 1.0), 1.6);
+  e.dir = g / max(length(g), 1e-3);
+  vec2 p = (uv - vec2(0.0, uShift)) * uRes / 11.0;
+  vec2 n = vec2(fbm(p * 0.8) * 0.7 + vnoise(p * 4.0) * 0.3, fbm(p * 0.8 + 41.3));
+  e.jit = (n - 0.5) * 2.0 * e.band * px * r * 0.9;
+  return e;
+}`
+
+// The owner's values are in the tuning object; the rest is the prototype's signal as it is.
+const SIGNAL = HELIX_TUNING.signal
 const RING = HELIX_TUNING.meltRing
-const GLASS = HELIX_TUNING.glass
 
 // Everything is premultiplied: where the picture has melted away, or nothing is drawn, the page
-// colour shows through the canvas (playbook: canvas-colours), so it never reads a CSS colour.
+// colour shows through the canvas (playbook: canvas-colours), so it never reads a CSS colour. The
+// prototype's fades towards the background colour are fades of colour and alpha together here,
+// and its noise and grey are scaled by alpha, so none shows where no card is.
 const FRAGMENT = `#version 300 es
 precision highp float;
 in vec2 vUv;
-uniform sampler2D uScene, uMeltInputs, uShowreel, uRipples;
-uniform vec2 uRippleTexel, uCentre;
+uniform sampler2D uScene, uMeltInputs, uShowreel, uHeat;
+uniform vec2 uRes, uCentre;
 uniform float uShowreelOn, uMelt, uReach, uAspect, uTime, uSpeed, uShift;
 out vec4 outColor;
 const float SHARP_BAND = ${float(HELIX_TUNING.sharpBand)};
 const float FAR_CARDS = ${float(HELIX_TUNING.farCards)};
 const float NOT_HOVERED = ${float(HELIX_TUNING.notHovered)};
-const float RIPPLE_STRENGTH = ${float(GLASS.rippleStrength)};
-const float HAZE_SPEED = ${float(GLASS.hazeSpeed)};
-const float COLOUR_SPLIT = ${float(GLASS.colourSplit)};
+const float LINE_JITTER = ${float(SIGNAL.lineJitter)};
+const float CHROMA_BLEED = ${float(SIGNAL.chromaBleed)};
+const float TAPE_NOISE = ${float(SIGNAL.tapeNoise)};
+const float CURSOR_BUMP = ${float(SIGNAL.cursorBump)};
+const float SCANLINE_EDGE = ${float(SIGNAL.scanlineEdge)};
+const float DEEP_FADE = ${float(DEEP_FADE)};
 const float RING_WIDTH = ${float(RING.width)};
-const float RING_PUSH = ${float(RING.push)};
-const float RING_RIM = ${float(RING.rim)};
-const float RING_WOBBLE = ${float(RING.wobble)};
+const float RING_DEPTH = ${float(RING.depth)};
 const float RING_REACH_MARGIN = ${float(RING.reachMargin)};
 ${NOISE}
 ${MELT_INPUTS_GLSL}
@@ -113,6 +157,14 @@ float meltAt(vec2 uv) {
   v = max(v, m.gone);
   return clamp(v, 0.0, 1.0);
 }
+// How much of a card covers uv, 0 to 1: the scene's alpha before the card pass faded it for
+// depth. Alpha and deep are both scaled by coverage (and blended alike at the cards' edges), so
+// alpha + DEEP_FADE * deep is the coverage itself.
+float coverAt(vec2 uv) {
+  vec2 p = clamp(uv, 0.001, 0.999);
+  return textureLod(uScene, p, 0.0).a + DEEP_FADE * textureLod(uMeltInputs, p, 0.0).a;
+}
+${EDGE}
 vec4 sceneAt(vec2 uv, float lod) { return textureLod(uScene, clamp(uv, 0.001, 0.999), lod); }
 vec4 showreelAt(vec2 uv, float lod) {
   if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return vec4(0.0);
@@ -120,44 +172,67 @@ vec4 showreelAt(vec2 uv, float lod) {
 }
 void main() {
   vec2 uv = vUv;
-  // The water's slope bends the picture; the haze drifts up and rides with the cards.
-  vec2 t = uRippleTexel;
-  vec2 n = vec2(texture(uRipples, uv + vec2(t.x, 0.0)).r - texture(uRipples, uv - vec2(t.x, 0.0)).r,
-                texture(uRipples, uv + vec2(0.0, t.y)).r - texture(uRipples, uv - vec2(0.0, t.y)).r);
-  float m = meltAt(uv);
-  vec2 q = (uv - vec2(0.0, uShift)) * vec2(uAspect, 1.0);
-  float drift = uTime * HAZE_SPEED;
-  vec2 haze = vec2(fbm(q * vec2(2.0, 4.0) + vec2(0.0, -drift)),
-                   fbm(q * vec2(2.0, 4.0) + vec2(5.2, -drift * 1.2))) - 0.47;
-  vec2 off = n * RIPPLE_STRENGTH * 0.25 + haze * m * 0.07 * (1.0 + uSpeed * 2.0);
-  // The colours split where it bends, and it blurs as it melts.
-  float split = COLOUR_SPLIT * 0.006 * (m + length(n) * 6.0);
-  float lod = m * 2.5;
-  vec4 red = sceneAt(uv + off + vec2(split, 0.0), lod);
-  vec4 green = sceneAt(uv + off, lod);
-  vec4 blue = sceneAt(uv + off - vec2(split, 0.0), lod);
+  Edge e = edgeAt(uv);
+  float heat = texture(uHeat, uv).r;
+  float m0 = meltAt(uv);
+  float m = clamp(m0 + heat * CURSOR_BUMP * 0.25 * (1.0 - m0), 0.0, 1.0);
+  // Rows two pixels tall jump sideways, 14 new jumps a second; the tracking band rolls down.
+  float row = floor(uv.y * uRes.y / 2.0);
+  float rj = hash12(vec2(row, floor(uTime * 14.0))) - 0.5;
+  float tq = (fract(uv.y * 0.6 - uTime * 0.07) - 0.5) / 0.04;
+  float trk = exp(-tq * tq);
+  // Sharp cards (low melt of the card itself, read a little inside so the pixels just outside
+  // agree) get Scanline edges: no outline noise, only a sideways shift per row, about 2 px at rest.
+  float mc = max(m, meltAt(uv + e.dir * 10.0 / uRes));
+  float sharp = 1.0 - smoothstep(0.0, 0.3, mc);
+  float eb = e.band * (1.0 - sharp);
+  float scanAmp = sharp * (2.0 + uSpeed * 5.0 + heat * CURSOR_BUMP * 4.0) / uRes.x * SCANLINE_EDGE;
+  float amp = (m * 0.07 * (1.0 + uSpeed) + eb * 0.010 + trk * m * 0.04
+               + heat * CURSOR_BUMP * 0.015 * (1.0 - sharp)) * LINE_JITTER;
+  float j = rj * (amp + 2.0 * scanAmp * LINE_JITTER);
+  float ca = (m * 0.012 + eb * 0.002) * CHROMA_BLEED;
+  vec2 pos = uv + vec2(j, 0.0) + e.jit * 0.8 * (1.0 - sharp);
+  float lod = m * 1.2;
+  vec4 red = sceneAt(pos + vec2(ca, 0.0), lod);
+  vec4 green = sceneAt(pos, lod);
+  vec4 blue = sceneAt(pos - vec2(ca, 0.0), lod);
   vec4 c = vec4(red.r, green.g, blue.b, max(green.a, max(red.a, blue.a)));
-  // The light catches the ripples' slopes, on the cards.
-  vec3 normal = normalize(vec3(-n * RIPPLE_STRENGTH * 12.0, 1.0));
-  c.rgb += pow(clamp(dot(normal, normalize(vec3(0.4, 0.6, 1.0))), 0.0, 1.0), 60.0) * 0.35 * c.a;
-  // Melted far enough, it is gone.
-  c *= 1.0 - smoothstep(0.55, 1.0, m);
+  // Scanlines darken as it melts; tape noise comes up, then grey static, then it is gone.
+  c.rgb *= 1.0 - 0.18 * m * step(0.5, fract(uv.y * uRes.y / 3.0));
+  float nz = hash12(uv * uRes + uTime);
+  float pres = smoothstep(0.02, 0.35, e.mean);
+  c.rgb += (nz - 0.5) * 0.12 * TAPE_NOISE * (m + eb * 0.5) * pres * c.a;
+  float grey = smoothstep(0.55, 0.85, m) * min(TAPE_NOISE, 1.0) * pres;
+  c.rgb = mix(c.rgb, vec3(nz) * 0.85 * c.a, grey);
+  c *= 1.0 - smoothstep(0.85, 1.0, m);
+  // A crisp outline where the shifted picture's card ends (the prototype mixes towards the
+  // background by coverage there): alpha follows smoothstep(coverage), keeping the depth fade.
+  float cover = coverAt(pos);
+  c *= smoothstep(0.35, 0.65, cover) / max(cover, 0.35);
+  c.a = min(c.a, 1.0);
   if (uShowreelOn > 0.5) {
     vec4 r;
     if (uMelt <= 0.0) {
+      // Untouched until the melt starts, so the hand-over matches the static hero.
       r = texture(uShowreel, uv);
     } else {
-      // The ring grows from the centre past the corners; inside it the Showreel is gone.
+      // The ring grows from the centre past the corners; inside it the Showreel drops out line by
+      // line over RING_DEPTH, so by the end of the melt the last line is gone.
       vec2 rq = (uv - uCentre) * vec2(uAspect, 1.0);
       float dist = length(rq);
-      float radius = uMelt * (uReach + RING_REACH_MARGIN) - 0.06;
-      float wobble = (fbm(rq * 8.0 + uTime) - 0.47) * RING_WOBBLE;
-      float o = (dist - radius - wobble) / RING_WIDTH;   // (pow() is undefined below 0)
-      float ring = exp(-o * o);
-      vec2 outward = rq / max(dist, 1e-4);
-      r = showreelAt(uv - outward * ring * RING_PUSH + off * uMelt, ring * 2.0);
-      r *= smoothstep(radius - 0.01, radius + 0.03, dist + wobble);
-      r.rgb += ring * r.a * RING_RIM;   // the rim catches the light
+      float radius = uMelt * (uReach + RING_REACH_MARGIN + RING_DEPTH) - RING_WIDTH;
+      float rm = clamp((radius - dist) / RING_DEPTH, 0.0, 1.0);
+      float o = (dist - radius) / RING_WIDTH;
+      float ringJ = exp(-o * o);
+      float rjj = rj * (ringJ * 0.03 + rm * 0.05) * LINE_JITTER;
+      float rca = ca * 0.5 + ringJ * 0.004 * CHROMA_BLEED;
+      vec4 ra = showreelAt(uv + vec2(rjj + rca, 0.0), 0.0);
+      vec4 rg = showreelAt(uv + vec2(rjj, 0.0), 0.0);
+      vec4 rb = showreelAt(uv + vec2(rjj - rca, 0.0), 0.0);
+      r = vec4(ra.r, rg.g, rb.b, max(max(ra.a, rg.a), rb.a));
+      float snow = smoothstep(0.1, 0.5, rm) * 0.7 * min(TAPE_NOISE + 0.3, 1.0);
+      r.rgb = mix(r.rgb, vec3(nz) * r.a, snow);
+      r *= 1.0 - smoothstep(0.0, 0.35, rm - hash12(vec2(row, 7.0)) * 0.6);
     }
     c = r + c * (1.0 - r.a);
   }
@@ -165,7 +240,7 @@ void main() {
 }`
 
 /** The texture units the composite reads from. */
-const UNITS = { scene: 0, meltInputs: 1, showreel: 2, ripples: 3 }
+const UNITS = { scene: 0, meltInputs: 1, showreel: 2, heat: 3 }
 
 export function createComposite(gl: WebGL2RenderingContext): Composite {
   const program = link(gl, QUAD_VERTEX, FRAGMENT)
@@ -173,8 +248,8 @@ export function createComposite(gl: WebGL2RenderingContext): Composite {
     'uScene',
     'uMeltInputs',
     'uShowreel',
-    'uRipples',
-    'uRippleTexel',
+    'uHeat',
+    'uRes',
     'uShowreelOn',
     'uMelt',
     'uReach',
@@ -188,6 +263,8 @@ export function createComposite(gl: WebGL2RenderingContext): Composite {
   // Both are read blurred where the picture melts, so they keep mipmaps.
   const scene = createTarget(gl, { depth: true, meltInputs: true, mipmaps: true })
   const showreel = createTarget(gl, { depth: false, mipmaps: true })
+  // The drawing buffer's size in pixels: the signal's rows and shifts are counted in pixels.
+  let size = { width: 1, height: 1 }
 
   const bind = (unit: number, texture: WebGLTexture | null) => {
     gl.activeTexture(gl.TEXTURE0 + unit)
@@ -201,9 +278,10 @@ export function createComposite(gl: WebGL2RenderingContext): Composite {
     resize(width, height) {
       scene.resize(width, height)
       showreel.resize(width, height)
+      size = { width: Math.max(1, width), height: Math.max(1, height) }
     },
 
-    draw({ showreelOn, melt, centre, reach, aspect, time, speed, shift, ripples }) {
+    draw({ showreelOn, melt, centre, reach, aspect, time, speed, shift, heat }) {
       gl.disable(gl.DEPTH_TEST)
       gl.disable(gl.BLEND)
       gl.useProgram(program)
@@ -211,12 +289,12 @@ export function createComposite(gl: WebGL2RenderingContext): Composite {
       bind(UNITS.scene, scene.texture)
       bind(UNITS.meltInputs, scene.meltInputs)
       bind(UNITS.showreel, showreel.texture)
-      bind(UNITS.ripples, ripples.texture)
+      bind(UNITS.heat, heat)
       gl.uniform1i(at.uScene, UNITS.scene)
       gl.uniform1i(at.uMeltInputs, UNITS.meltInputs)
       gl.uniform1i(at.uShowreel, UNITS.showreel)
-      gl.uniform1i(at.uRipples, UNITS.ripples)
-      gl.uniform2f(at.uRippleTexel, ripples.texel.x, ripples.texel.y)
+      gl.uniform1i(at.uHeat, UNITS.heat)
+      gl.uniform2f(at.uRes, size.width, size.height)
       gl.uniform1f(at.uShowreelOn, showreelOn ? 1 : 0)
       gl.uniform1f(at.uMelt, melt)
       gl.uniform1f(at.uReach, reach)
@@ -227,7 +305,7 @@ export function createComposite(gl: WebGL2RenderingContext): Composite {
       gl.uniform2f(at.uCentre, centre.x, centre.y)
       gl.drawArrays(gl.TRIANGLES, 0, quad.count)
       // Unbound again, so no later pass draws into a texture it is also reading.
-      for (const unit of [UNITS.ripples, UNITS.showreel, UNITS.meltInputs, UNITS.scene])
+      for (const unit of [UNITS.heat, UNITS.showreel, UNITS.meltInputs, UNITS.scene])
         bind(unit, null)
     },
 

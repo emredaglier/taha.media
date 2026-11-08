@@ -8,7 +8,8 @@ import {
 } from '../../lib/helix-geometry'
 import type { HelixWork } from '../FeaturedWorks'
 import type { HelixShowreel } from '../Hero'
-import { createComposite, MELT_INPUTS_GLSL } from './composite'
+import type { PointerPath, ScreenPoint } from '../../lib/helix-heat'
+import { createComposite, DEEP_FADE, MELT_INPUTS_GLSL } from './composite'
 import { CYLINDER_GLSL } from './cylinder'
 import {
   colourTexture,
@@ -20,8 +21,8 @@ import {
   uniforms,
   vertexArray,
 } from './gl'
+import { createHeatTrail } from './heat'
 import { createPreviewLoops } from './loops'
-import { createRipples, type PointerPath, type ScreenPoint } from './ripples'
 import { createShowreelLayer } from './showreel'
 
 export { HelixUnavailable } from './gl'
@@ -49,7 +50,7 @@ export type HelixCard = {
  * far the turning speed bends them, where the Helix is (`progress`, cards), the opening (the
  * camera's pull-back, 0 the Showreel full-bleed to 1 the Helix in place, and the Showreel, where
  * it sits and how far it has melted, until it is gone), the Works whose loops play and whose
- * frames are held (`previewLoops`), the pointer's path since the last frame (it drops ripples),
+ * frames are held (`previewLoops`), the pointer's path since the last frame (it leaves heat),
  * and the seconds since the last frame.
  */
 export type HelixFrame = {
@@ -107,7 +108,7 @@ void main() {
                      ((FAR + NEAR) * vz + 2.0 * FAR * NEAR) / (NEAR - FAR), -vz);
 }`
 
-// The cards as they are, and the melt inputs the liquid glass needs (see `composite`): how far a
+// The cards as they are, and the melt inputs the analogue signal needs (see `composite`): how far a
 // card is not there (it hasn't appeared yet in the opening, or it is in the last slot before the
 // edge of the visible band, so a card beyond it, which may repeat a Work on screen, is never
 // seen), dimmed or hovered, and how deep in the Helix (the prototype's light haze, which the
@@ -120,6 +121,7 @@ in float vDepth;
 uniform sampler2D uMap;
 uniform vec4 uCrop;
 uniform float uSlot, uBand, uPresence, uHovered, uDimmed;
+const float DEEP_FADE = ${float(DEEP_FADE)};
 layout(location = 0) out vec4 outColor;
 layout(location = 1) out vec4 outMeltInputs;
 ${MELT_INPUTS_GLSL}
@@ -128,7 +130,7 @@ void main() {
   if (!gl_FrontFacing) uv.x = 1.0 - uv.x;   // past the side of the cylinder: never mirrored
   vec4 c = texture(uMap, uv * uCrop.xy + uCrop.zw);
   float deep = smoothstep(8.0, 20.6, vDepth) * (1.0 - uHovered);
-  float alpha = c.a * (1.0 - deep * 0.35);
+  float alpha = c.a * (1.0 - deep * DEEP_FADE);
   outColor = vec4(c.rgb * alpha, alpha);
   float gone = max(1.0 - uPresence, smoothstep(uBand - 1.0, uBand, abs(uSlot)));
   outMeltInputs = packMeltInputs(MeltInputs(gone, uDimmed, uHovered, deep));
@@ -153,8 +155,8 @@ const toScreen = (x: number, y: number): ScreenPoint => ({ x: x / 2 + 0.5, y: y 
 /**
  * Draws the Helix on `canvas` with hand-written WebGL2 (no 3D library), in four passes: the 16:9
  * cards on the helix, each showing its Work's Preview loop (in the sharp band, or pointed at) or
- * its poster; the Showreel layer of the opening; the water under the liquid glass; and the
- * composite that puts them on the canvas through the glass, melting the top and bottom away, far
+ * its poster; the Showreel layer of the opening; the cursor's heat trail; and the composite
+ * that puts them on the canvas through the analogue signal, melting the top and bottom away, far
  * cards and cards not pointed at, and the Showreel. Throws `HelixUnavailable` when WebGL2 or a
  * shader fails; `onLost` runs if the context is lost later.
  */
@@ -189,7 +191,7 @@ export function createHelixRenderer(
   ])
   const mesh = vertexArray(gl, cardMesh())
   const composite = createComposite(gl)
-  const ripples = createRipples(gl)
+  const heat = createHeatTrail(gl)
   const host = canvas.parentElement!
   // The plain block stands in for a Showreel with neither loop nor poster: the colour the static
   // hero has then, so the hand-over matches.
@@ -227,9 +229,6 @@ export function createHelixRenderer(
     return still
   })
 
-  // The Showreel's melt starts with a drop in the water at its centre.
-  let melting = false
-
   const lost = (event: Event) => {
     event.preventDefault()
     onLost()
@@ -254,7 +253,7 @@ export function createHelixRenderer(
         if (!(error instanceof HelixUnavailable)) throw error
         onLost()
       }
-      ripples.resize(canvas.clientWidth, canvas.clientHeight)
+      heat.resize(canvas.clientWidth / Math.max(1, canvas.clientHeight))
     },
 
     draw({ cards, band, bend, progress, zoom, showreel: reel, playing, held, cursor, dt }) {
@@ -264,7 +263,7 @@ export function createHelixRenderer(
       const scale = coverScale(focal, aspect) ** (1 - zoom)
       loops.update(playing, held)
 
-      // --- pass 1: the cards, and the melt inputs for the glass
+      // --- pass 1: the cards, and the melt inputs for the signal
       composite.scene.bind()
       gl.viewport(0, 0, canvas.width, canvas.height)
       gl.clearColor(0, 0, 0, 0)
@@ -307,15 +306,13 @@ export function createHelixRenderer(
         composite.showreel.resolve()
       }
 
-      // --- pass 3: the water. The cursor drags ripples, turning stirs it, the melt drops in it.
+      // --- pass 3: the heat trail. The cursor leaves heat along its path.
+      heat.step(dt, cursor, aspect)
+
+      // --- pass 4: the composite, onto the canvas, through the analogue signal
       const box = reel ? cardOnScreen(reel.slot, focal, aspect) : null
       const centre = box ? toScreen(box.x, box.y) : { x: 0.5, y: 0.5 }
-      const meltStarts = reel !== null && reel.melt > 0 && !melting
-      melting = reel !== null && reel.melt > 0
       const speed = Math.min(1, Math.abs(bend) / HELIX_SHAPE.bendMax)
-      ripples.step({ dt, cursor, meltAt: meltStarts ? centre : null, speed, aspect })
-
-      // --- pass 4: the composite, onto the canvas, through the liquid glass
       gl.bindFramebuffer(gl.FRAMEBUFFER, null)
       gl.viewport(0, 0, canvas.width, canvas.height)
       composite.draw({
@@ -327,7 +324,7 @@ export function createHelixRenderer(
         time: (performance.now() / 1000) % 1000,
         speed,
         shift: turnOnScreen(progress, focal),
-        ripples: { texture: ripples.texture, texel: ripples.texel },
+        heat: heat.texture,
       })
     },
 
@@ -338,7 +335,7 @@ export function createHelixRenderer(
       for (const still of stills) gl.deleteTexture(still.texture)
       loops.destroy()
       showreel.destroy()
-      ripples.destroy()
+      heat.destroy()
       composite.destroy()
       mesh.destroy()
       gl.deleteProgram(program)

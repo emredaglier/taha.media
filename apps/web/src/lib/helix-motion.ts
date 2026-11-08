@@ -460,7 +460,7 @@ const worksOf = (state: HelixState, cards: readonly number[]): Set<number> =>
 /**
  * The cards in the sharp middle band (#55): those whose picture reaches within `band` of the
  * middle of the screen, top to bottom (0 to 1 of the half-height; the tuned sharp band), where the
- * liquid glass doesn't melt it. `focal` is the screen's focal length: where cards are smaller on
+ * analogue signal doesn't melt it. `focal` is the screen's focal length: where cards are smaller on
  * screen (phones), more of them reach in. None while the zoom runs: the Showreel has the middle.
  */
 export function sharpCards(

@@ -36,30 +36,22 @@ export const HELIX_TUNING = {
    */
   sharpBand: 0.25,
   /**
-   * The liquid glass (#55), the material that melts the Helix: how strongly ripples bend the
-   * picture (`rippleStrength`), how fast the heat haze drifts (`hazeSpeed`), how much the cursor
-   * stirs up ripples as it moves (`cursorRipples`), and how far the colours split where the
-   * picture bends (`colourSplit`).
+   * The analogue signal (#64), the material that melts the Helix: a signal failing. How far rows
+   * of the picture jump sideways (`lineJitter`), how far its colours bleed apart (`chromaBleed`),
+   * how much tape noise shows as it melts (`tapeNoise`), and how strongly the cursor's heat trail
+   * bumps the tracking (`cursorBump`). The sharp cards keep straight top and bottom edges, while
+   * their left and right edges shift row by row (Scanline edges) by `scanlineEdge` (1: about 2
+   * px at rest, more as the Helix turns or the cursor passes, and with `lineJitter`).
    */
-  glass: { rippleStrength: 1, hazeSpeed: 0.6, cursorRipples: 0.35, colourSplit: 0.7 },
+  signal: { lineJitter: 1, chromaBleed: 1, tapeNoise: 1, cursorBump: 1, scanlineEdge: 1 },
   /**
-   * The water under the glass, where the ripples run: how wide a drop is (`dropRadius`, in screen
-   * heights), how much of a ripple is left after each of the `stepsPerSecond` steps (`damping`),
-   * how hard the moving cursor pushes it (`cursorPush`, before `glass.cursorRipples`, reached at
-   * `cursorFullSpeed` CSS px per second), the drop as the Showreel starts to melt (`meltDrop`),
-   * and, while the Helix turns at full speed, the chance per step of a drop near the top or bottom
-   * (`stirChance`) and how hard it is (`stirDrop`).
+   * The cursor's heat trail the signal reads (#64): the moving cursor (on phones, the finger)
+   * leaves heat along its path, which spreads and fades. How wide the path is (`radius`, in screen
+   * heights), how much heat is left after each of the `stepsPerSecond` steps (`decay`), and how
+   * much heat a move adds (`push`, reached at `fullSpeed` CSS px per second, less when slower). A
+   * frame runs at most `maxSteps` steps, so a stalled tab doesn't run the trail on for seconds.
    */
-  water: {
-    dropRadius: 0.018,
-    damping: 0.975,
-    stepsPerSecond: 120,
-    cursorPush: 0.12,
-    cursorFullSpeed: 1800,
-    meltDrop: 0.8,
-    stirChance: 0.6,
-    stirDrop: 0.08,
-  },
+  heat: { radius: 0.05, decay: 0.965, stepsPerSecond: 60, push: 0.6, fullSpeed: 1800, maxSteps: 4 },
   /** How far the cards deep in the Helix melt (0 not at all, 1 fully at the far end). */
   farCards: 0.7,
   /** How far the cards not hovered melt while the pointer rests on a card (0 to 1). */
@@ -117,9 +109,9 @@ export const HELIX_TUNING = {
   /** How much more than just covering the screen the zoom starts from (1 covers it exactly). */
   coverSpare: 1.02,
   /**
-   * The melt's ring, in screen heights: how wide it is (`width`), how far it pushes the picture
-   * outwards at its rim (`push`), how bright the rim is (`rim`), how far its edge wobbles
-   * (`wobble`), and how far past the Showreel's corners it grows (`reachMargin`).
+   * The Showreel's melt, in screen heights: a jittering ring grows from its centre, about `width`
+   * wide; inside it the Showreel drops out line by line over `depth`; and it grows this far past
+   * the Showreel's corners (`reachMargin`), so the last lines are gone as the melt ends.
    */
-  meltRing: { width: 0.035, push: 0.035, rim: 0.25, wobble: 0.08, reachMargin: 0.1 },
+  meltRing: { width: 0.06, depth: 0.14, reachMargin: 0.1 },
 }

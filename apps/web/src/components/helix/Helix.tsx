@@ -64,11 +64,11 @@ const lensOf = (canvas: HTMLCanvasElement) => lensFor(canvas.clientWidth, canvas
  * (remembered on the history entry, so coming back starts with it in front, past the Showreel); a
  * click on another card turns it to the front. On Home the logo replays the opening.
  *
- * Everything is seen through the liquid glass (#55): the top and bottom melt away, and so do far
- * cards and, while the pointer rests on a card (the hovered card), the others; the cursor drops
- * ripples and turning stirs the picture. The cards in the sharp middle band, and the hovered one,
- * play their Preview loops; a card whose loop stopped freezes on its last frame until its Work is
- * off screen, and every other card shows its poster.
+ * Everything is seen through the analogue signal (#64): the top and bottom melt away, and so do
+ * far cards and, while the pointer rests on a card (the hovered card), the others; the cursor
+ * bumps the tracking where it passes and turning raises the jitter. The cards in the sharp middle
+ * band, and the hovered one, play their Preview loops; a card whose loop stopped freezes on its
+ * last frame until its Work is off screen, and every other card shows its poster.
  *
  * Where the Helix is and where it goes, and which loops play or hold a frame, live in the motion
  * model (`lib/helix-motion`); this component feeds it input, draws it (the bend of fast turning
@@ -161,7 +161,7 @@ export function Helix({
     // A press on the Helix (a drag, or a click when it doesn't travel).
     let press: { id: number; x: number; y: number; lastY: number; travel: number } | null = null
 
-    // --- drawing: every frame while the tab is visible (the liquid glass never stands still)
+    // --- drawing: every frame while the tab is visible (the analogue signal never stands still)
     const { bendEase, bendMax } = HELIX_SHAPE
     let bend = 0
     let shown = -1

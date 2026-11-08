@@ -138,7 +138,7 @@ export function cssColour(element: Element, property: string): Uint8Array | null
  * A screen-sized texture a pass draws into, for a later pass to read. Drawn multisampled where the
  * device allows (the cards' edges stay smooth, as they were on the canvas itself), then resolved
  * into the texture. Colour is premultiplied by alpha, as the canvas is. With `meltInputs`, the pass
- * also writes the liquid glass's melt inputs (its second output, laid out as `MELT_INPUTS_GLSL`
+ * also writes the analogue signal's melt inputs (its second output, laid out as `MELT_INPUTS_GLSL`
  * has it), resolved into `meltInputs` and read as they are; with `mipmaps`, `texture` gets them on
  * every resolve, so a later pass can read it blurred.
  */
