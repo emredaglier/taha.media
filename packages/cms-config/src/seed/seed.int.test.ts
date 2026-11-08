@@ -28,7 +28,7 @@ const counts = async () => ({
 })
 
 describe('the local seed', () => {
-  it('fills published Works of all three main-media kinds, Disciplines and 4-8 featured', async () => {
+  it('fills published Works of all three main-media kinds, Disciplines and 6-12 featured', async () => {
     await seedLocal(site.cms)
 
     const { docs: works } = await site.cms.find({ collection: 'works', limit: 100, depth: 1 })

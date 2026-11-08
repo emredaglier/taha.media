@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
+import { FEATURED_MIN } from '../featured'
 import { createTestSite, type TestSite } from '../testing'
 import { seedLocal } from './local'
 import { applyLiveEdit, prepareSmokeContent, type SmokeManifest } from './smoke'
@@ -37,7 +38,7 @@ describe('prepareSmokeContent', () => {
     for (const work of manifest.works) {
       expect(docs.find((d) => d.slug === work.slug)?.title).toBe(work.title)
     }
-    expect(manifest.works.filter((w) => w.featured).length).toBeGreaterThanOrEqual(4)
+    expect(manifest.works.filter((w) => w.featured).length).toBeGreaterThanOrEqual(FEATURED_MIN)
   })
 
   it('adds a Work that was never published: not served publicly, but there for the preview', async () => {

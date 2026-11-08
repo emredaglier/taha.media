@@ -13,7 +13,7 @@ A craft a Work belongs to: Kurgu, Motion or Grafik. A Work has one or more.
 _Avoid_: Category, type, tag
 
 **Featured Work** (Öne çıkan iş):
-A Work the Editor has chosen, and put in order, to appear on the home page.
+A Work the Editor has chosen, and put in order, to appear on the home page. Home looks right with 6 to 12 of them; the Editor sees a warning outside that range, but saving is never blocked.
 _Avoid_: Highlight, selected, pinned
 
 **Showreel**:
