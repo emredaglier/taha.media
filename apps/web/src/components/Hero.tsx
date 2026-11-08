@@ -42,7 +42,7 @@ function HeroMedia({ site }: { site: Site }) {
 
 /**
  * The top of Home: the Showreel loop full-bleed (the phone variant on narrow screens, the poster
- * when there is no loop, a plain block when there is neither), with the name and the Site intro
+ * when there is no loop, a plain block when there is neither), with the name and the Site statement
  * over it, and "watch with sound" when the full-length Showreel link is set.
  */
 export function Hero({ site }: { site: Site | null }) {
@@ -53,7 +53,7 @@ export function Hero({ site }: { site: Site | null }) {
       {site ? <HeroMedia site={site} /> : null}
       <div className="relative bg-background/60 px-6 py-8">
         <h1 className="font-serif text-5xl">{OWNER_NAME}</h1>
-        {site?.intro ? <p className="mt-4 max-w-xl text-lg">{site.intro}</p> : null}
+        {site?.statement ? <p className="mt-4 max-w-xl text-lg">{site.statement}</p> : null}
         {link ? (
           <div className="mt-4">
             {poster ? (

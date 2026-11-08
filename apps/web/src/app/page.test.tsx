@@ -38,8 +38,8 @@ describe('with nothing published', () => {
 })
 
 describe('the hero', () => {
-  it('shows the name and the intro on a plain block with no Showreel at all', async () => {
-    await pages.publishGlobal('site', { intro: 'Kurgu, hareket ve grafik.' })
+  it('shows the name and the statement on a plain block with no Showreel at all', async () => {
+    await pages.publishGlobal('site', { statement: 'Kurgu, hareket ve grafik.' })
     const html = await home()
     expect(html).toContain('Kurgu, hareket ve grafik.')
     expect(html).not.toContain('<video')
@@ -48,7 +48,7 @@ describe('the hero', () => {
 
   it('puts the poster of the Showreel in the HTML, with no "watch with sound" without a link', async () => {
     const reel = await pages.site.uploadVideo(pages.editor, { use: 'showreel' })
-    await pages.publishGlobal('site', { intro: 'Kurgu, hareket ve grafik.', showreel: reel.id })
+    await pages.publishGlobal('site', { statement: 'Kurgu, hareket ve grafik.', showreel: reel.id })
     const html = await home()
     const poster = (await getSite())!.showreel!.poster
     expect(html).toContain(`src="${poster.src}"`)
@@ -89,8 +89,16 @@ describe('the hero', () => {
 })
 
 describe('the Featured Works', () => {
-  const feature = (title: string, featuredOrder: number) =>
-    pages.publishWork({ title, extra: { featured: true, featuredOrder } })
+  // The CMS refuses to publish a featured Work without a 16:9 Preview loop (backend #43).
+  let loopId: number | undefined
+  const previewLoop = async () =>
+    (loopId ??= (await pages.site.uploadVideo(pages.editor, { use: 'previewLoop' })).id)
+  const feature = async (title: string, featuredOrder: number) =>
+    pages.publishWork({
+      title,
+      previewLoop: await previewLoop(),
+      extra: { featured: true, featuredOrder },
+    })
 
   it('are left out, with no link, when no Work is featured', async () => {
     await pages.publishWork({ title: 'Öne çıkmayan' })
@@ -127,6 +135,7 @@ describe('the Featured Works', () => {
   it('show the Disciplines and the client on each card', async () => {
     await pages.publishWork({
       title: 'Müşterili',
+      previewLoop: await previewLoop(),
       disciplines: ['motion', 'grafik'],
       extra: { featured: true, featuredOrder: 5, client: 'Mavi Saat' },
     })
