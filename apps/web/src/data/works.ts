@@ -204,6 +204,16 @@ export async function getWorkBySlug(slug: string): Promise<WorkBySlug> {
   return work ? { kind: 'work', work } : { kind: 'notFound' }
 }
 
+/**
+ * The current slug of the Work a renamed slug used to name, or null for any other slug (current,
+ * draft or unknown). Only the slug lookup, the same cached step as `getWorkBySlug`: the proxy
+ * answers the redirect itself (src/proxy.ts).
+ */
+export async function getRenamedWorkSlug(slug: string): Promise<string | null> {
+  const found = await lookUpSlug(slug)
+  return found.kind === 'redirect' ? found.slug : null
+}
+
 function lookUpSlug(slug: string): Promise<SlugLookup> {
   return cachedRead(['work-slug', slug], [WORKS_TAG], async () => {
     const payload = await getWebPayload()

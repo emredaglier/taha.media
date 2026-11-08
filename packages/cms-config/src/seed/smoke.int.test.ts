@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { FEATURED_MAX, FEATURED_MIN } from '../featured'
+import { toMainMedia } from '../main-media-read'
 import { createTestSite, type TestSite } from '../testing'
 import { seedLocal } from './local'
 import { applyLiveEdit, prepareSmokeContent, type SmokeManifest } from './smoke'
@@ -52,9 +53,14 @@ describe('prepareSmokeContent', () => {
       draft: true,
       where: { slug: { equals: manifest.draft.slug } },
       overrideAccess: true,
+      depth: 2,
     })
     expect(latest).toHaveLength(1)
     expect(latest[0]?.title).toBe(manifest.draft.title)
+    // The preview instance leaves out a draft it cannot render yet, one with no cover or main
+    // media (apps/web/src/data/works.ts), so the spec would get a 404 for it (#61).
+    expect(latest[0]?.cover).toMatchObject({ id: expect.any(Number) })
+    expect(() => toMainMedia(latest[0]!.mainMedia)).not.toThrow()
   })
 
   it('renames a published Work so its old address has to redirect', async () => {

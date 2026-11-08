@@ -82,6 +82,8 @@ function MainMedia({ work }: { work: Work }) {
 /** One Work: main media first, then the details, the stills and a link to the next Work. */
 export default async function WorkPage({ params }: { params: Promise<Params> }) {
   const found = await getWorkBySlug((await params).slug)
+  // Only a fallback: the proxy answers old slugs first, since this redirect sends `Location` twice
+  // on the render that fills the cache (src/proxy.ts).
   if (found.kind === 'redirect') permanentRedirect(`/isler/${found.slug}`)
   if (found.kind === 'notFound') notFound()
 

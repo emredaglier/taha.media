@@ -60,10 +60,19 @@ export async function prepareSmokeContent(payload: Payload): Promise<SmokeManife
     data: { slug: newSlug, _status: 'published' },
   })
 
+  // Ready to publish (a cover and main media) but never published: the preview instance leaves out
+  // a draft it cannot render yet, so a bare one would be a 404 there too (#61).
   const draft = await payload.create({
     collection: 'works',
     draft: true,
-    data: { title: 'Taslak Çalışma', year: 2026, disciplines: ['kurgu'], _status: 'draft' },
+    data: {
+      title: 'Taslak Çalışma',
+      year: 2026,
+      disciplines: ['kurgu'],
+      cover: liveEdit.cover,
+      mainMedia: { kind: 'image', image: liveEdit.cover },
+      _status: 'draft',
+    },
   })
 
   const works = (await published()).docs.map((work) => ({
