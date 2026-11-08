@@ -41,6 +41,13 @@ export type HelixState = {
   time: number | null
   /** The Featured Work the last input asked to open (a click on the front card, Enter), or null. */
   open: number | null
+  /** The Work the Helix last came to rest on and announced (a screen reader's last word). */
+  announced: number
+  /**
+   * The Work the Helix came to rest on in the latest step, when it is a new one (not the one
+   * last announced); otherwise null. The front Work's live region speaks when this is set.
+   */
+  arrived: number | null
 }
 
 export type HelixInput =
@@ -60,6 +67,8 @@ export type HelixInput =
   | { kind: 'card'; card: number }
   /** Enter: open the front Work. */
   | { kind: 'enter' }
+  /** Keyboard or screen-reader focus reached the link of Work `work`: turn it to the front. */
+  | { kind: 'focus'; work: number }
 
 /** The visible band reaches at least this many slots either side of the front. */
 const MIN_VISIBLE_SLOTS = 3
@@ -94,6 +103,8 @@ export function createHelix(works: number, frontWork = 0): HelixState {
     motion: { kind: 'rest' },
     time: null,
     open: null,
+    announced: frontWork,
+    arrived: null,
   }
 }
 
@@ -217,7 +228,15 @@ function advance(state: HelixState, now: number): HelixState {
  * applies `input`.
  */
 export function stepHelix(state: HelixState, input: HelixInput, now: number): HelixState {
-  const current: HelixState = { ...advance(state, now), open: null }
+  const advanced = advance(state, now)
+  const restedOn = state.motion.kind !== 'rest' && isResting(advanced) ? frontWork(advanced) : null
+  const arrived = restedOn !== null && restedOn !== state.announced ? restedOn : null
+  const current: HelixState = {
+    ...advanced,
+    open: null,
+    arrived,
+    announced: arrived ?? state.announced,
+  }
   switch (input.kind) {
     case 'frame':
       return current
@@ -232,6 +251,12 @@ export function stepHelix(state: HelixState, input: HelixInput, now: number): He
       // The shortest way round: the place nearest to where the Helix is that puts this card in front.
       const laps = Math.round((current.progress - input.card) / current.cards)
       return tweenTo(current, input.card + laps * current.cards, now)
+    }
+    case 'focus': {
+      // The nearest place to where the Helix is that puts a card of this Work in front.
+      const laps = Math.round((current.progress - input.work) / current.works)
+      const to = input.work + laps * current.works
+      return heading(current) === to ? current : tweenTo(current, to, now)
     }
     case 'enter':
       return { ...current, open: workOfCard(current, frontCard(current)) }

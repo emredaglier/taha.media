@@ -343,3 +343,95 @@ describe('endless', () => {
     expect(back.progress).toBe(start.progress)
   })
 })
+
+describe('focus', () => {
+  const focus = (work: number): Timed[] => [{ at: 0, input: { kind: 'focus', work } }]
+
+  it.each(WORK_COUNTS)(
+    'with %i Works: focusing Work k brings it to the front the shortest way and rests there',
+    (n) => {
+      for (const front of [0, 1, n - 1]) {
+        const start = simulate(createHelix(n, front), [], { until: 0 })
+        for (const work of range(n)) {
+          const after = simulate(start, focus(work), { until: LATER })
+          expect(frontWork(after)).toBe(work)
+          expect(isResting(after)).toBe(true)
+          // Brute force: the nearest card position that shows this Work.
+          const shortest = Math.min(
+            ...range(start.cards)
+              .filter((card) => workOfCard(start, card) === work)
+              .flatMap((card) => [-1, 0, 1].map((lap) => card + lap * start.cards))
+              .map((place) => Math.abs(place - start.progress)),
+          )
+          expect(Math.abs(after.progress - start.progress)).toBe(shortest)
+        }
+      }
+    },
+  )
+
+  it('works from far round the endless Helix', () => {
+    const start = { ...createHelix(5), progress: 123, goal: 123 }
+    const after = simulate(start, focus(2), { until: LATER })
+    expect(frontWork(after)).toBe(2)
+    expect(Math.abs(after.progress - 123)).toBeLessThanOrEqual(2.5)
+  })
+
+  it('leaves the Helix alone when the Work is already in front', () => {
+    const start = createHelix(6, 3)
+    expect(stepHelix(start, { kind: 'focus', work: 3 }, 0).motion).toEqual({ kind: 'rest' })
+  })
+})
+
+describe('the rest signal', () => {
+  /** The Works the Helix announced over a run: every frame is stepped, as a browser does. */
+  function announcements(start: HelixState, timeline: Timed[], until: number): number[] {
+    const events = [...timeline].sort((a, b) => a.at - b.at)
+    const heard: number[] = []
+    let state = stepHelix(start, { kind: 'frame' }, 0)
+    for (let frame = 1; frame * (1000 / 60) <= until; frame++) {
+      const now = frame * (1000 / 60)
+      while (events.length > 0 && events[0]!.at <= now) {
+        const { at, input } = events.shift()!
+        state = stepHelix(state, input, at)
+        if (state.arrived !== null) heard.push(state.arrived)
+      }
+      state = stepHelix(state, { kind: 'frame' }, now)
+      if (state.arrived !== null) heard.push(state.arrived)
+    }
+    return heard
+  }
+
+  it('fires once, on the new Work, when a turn comes to rest, and not while turning', () => {
+    expect(announcements(createHelix(6), presses(1, 1), LATER)).toEqual([1])
+    expect(
+      announcements(createHelix(6), [{ at: 0, input: { kind: 'focus', work: 4 } }], LATER),
+    ).toEqual([4])
+  })
+
+  it('fires once for several presses in quick succession', () => {
+    expect(announcements(createHelix(6), presses(3, 1), LATER)).toEqual([3])
+  })
+
+  it('does not fire when it rests on the Work it last announced', () => {
+    const there = [...presses(1, 1), ...presses(1, -1, 2500)]
+    // Forward to Work 1 (announced), back to Work 0 (announced), nothing more.
+    expect(announcements(createHelix(6), there, 2 * LATER)).toEqual([1, 0])
+    // Away and back before it stops: it rests on Work 0 again.
+    expect(
+      announcements(createHelix(6), [...presses(1, 1), ...presses(1, -1, 200)], LATER),
+    ).toEqual([])
+  })
+
+  it('does not fire for a Helix at rest, or for a click on the front card', () => {
+    expect(announcements(createHelix(6), [], LATER)).toEqual([])
+    expect(
+      announcements(createHelix(6), [{ at: 0, input: { kind: 'card', card: 0 } }], LATER),
+    ).toEqual([])
+  })
+
+  it('fires for a Work that repeats on the Helix, once per stop', () => {
+    // Two Works: card 2 shows Work 0 again; turning two cards lands on the same Work.
+    expect(announcements(createHelix(2), presses(2, 1), LATER)).toEqual([])
+    expect(announcements(createHelix(2), presses(1, 1), LATER)).toEqual([1])
+  })
+})

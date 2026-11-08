@@ -46,7 +46,7 @@ const SIZES = '(min-width: 1100px) 33vw, (min-width: 700px) 50vw, 100vw'
 function FeaturedCard({ work }: { work: FeaturedWork }) {
   return (
     <li>
-      <Link href={`/isler/${work.slug}`} className="group block">
+      <Link href={`/isler/${work.slug}`} className="group block" data-work-slug={work.slug}>
         {/* The loop fills a 16:9 box, so media that isn't quite 16:9 is cropped, never stretched. */}
         <div className="relative aspect-video overflow-hidden bg-placeholder">
           <LoopVideo video={work.previewLoop} sizes={SIZES} hoverToPlay fill />

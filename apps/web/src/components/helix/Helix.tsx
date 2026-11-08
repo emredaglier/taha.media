@@ -20,6 +20,7 @@ import {
 import { HELIX_TUNING } from '../../lib/helix-tuning'
 import { isMenuOpen } from '../../lib/menu-a11y'
 import type { HelixWork } from '../FeaturedWorks'
+import { FrontWork, watchWorkLinks } from './FrontWork'
 import { createHelixRenderer, HelixUnavailable } from './renderer'
 
 /**
@@ -68,10 +69,19 @@ export function Helix({ works, onFail }: { works: HelixWork[]; onFail: () => voi
   const router = useRouter()
   const [front, setFront] = useState(() => frontOf(createHelix(works.length)))
 
+  // The Work whose static link has focus, and what the live region last said.
+  const [focusedWork, setFocusedWork] = useState<number | null>(null)
+  const [announcement, setAnnouncement] = useState('')
+
   const fail = useEffectEvent(onFail)
   const open = useEffectEvent((work: number) => {
     const target = works[work]
     if (target) router.push(`/isler/${target.slug}`)
+  })
+
+  const announce = useEffectEvent((work: number) => {
+    const target = works[work]
+    if (target) setAnnouncement(`${target.title}, ${work + 1} / ${works.length}`)
   })
 
   useEffect(() => {
@@ -97,6 +107,7 @@ export function Helix({ works, onFail }: { works: HelixWork[]; onFail: () => voi
     const apply = (input: HelixInput) => {
       state = stepHelix(state, input, performance.now())
       if (state.open !== null) open(state.open)
+      if (state.arrived !== null) announce(state.arrived)
     }
 
     // --- drawing: every frame while the tab is visible, skipped while nothing moves
@@ -111,6 +122,7 @@ export function Helix({ works, onFail }: { works: HelixWork[]; onFail: () => voi
       const dt = Math.min((now - lastFrame) / 1000, 0.1)
       lastFrame = now
       state = stepHelix(state, { kind: 'frame' }, now)
+      if (state.arrived !== null) announce(state.arrived)
       // Fast turning bends the cards; the bend follows the speed with time-based easing.
       const target = clamp(state.speed / 60, -bendMax, bendMax)
       bend += (target - bend) * (1 - (1 - bendEase) ** (dt * 60))
@@ -186,6 +198,12 @@ export function Helix({ works, onFail }: { works: HelixWork[]; onFail: () => voi
       }
     }
 
+    // Focus on a Work's (visually hidden) static link turns that Work to the front.
+    const unwatchLinks = watchWorkLinks(works, (work, focused) => {
+      setFocusedWork((current) => (focused ? work : current === work ? null : current))
+      if (focused) apply({ kind: 'focus', work })
+    })
+
     window.addEventListener('wheel', onWheel, { passive: false })
     window.addEventListener('keydown', onKeyDown)
     canvas.addEventListener('pointerdown', onPointerDown)
@@ -197,6 +215,7 @@ export function Helix({ works, onFail }: { works: HelixWork[]; onFail: () => voi
 
     return () => {
       stop()
+      unwatchLinks()
       resized.disconnect()
       window.removeEventListener('wheel', onWheel)
       window.removeEventListener('keydown', onKeyDown)
@@ -210,33 +229,24 @@ export function Helix({ works, onFail }: { works: HelixWork[]; onFail: () => voi
     }
   }, [works])
 
-  const work = works[front.work]
-
   return (
-    <div className="helix:visible invisible fixed inset-0 z-0">
+    <div
+      role="region"
+      aria-label="Öne çıkan işler"
+      className="helix:visible invisible fixed inset-0 z-0"
+    >
       <canvas
         ref={canvasRef}
         aria-hidden="true"
         className="absolute inset-0 size-full cursor-grab touch-none select-none active:cursor-grabbing"
       />
-      {/* Wireframe positions until the owner's design. Screen readers get the Works from the
-          static Home's links, once each, so this stays out of their way. */}
-      {work ? (
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between gap-6 px-6 pb-8"
-        >
-          <div>
-            <p className="font-serif text-4xl">{work.title}</p>
-            <p className="mt-2 text-sm text-text-muted">
-              {work.client ? `${work.disciplines} — ${work.client}` : work.disciplines}
-            </p>
-          </div>
-          <p className="shrink-0 text-sm text-text-muted tabular-nums">
-            {front.counter.current} / {front.counter.total}
-          </p>
-        </div>
-      ) : null}
+      <FrontWork
+        work={works[front.work]}
+        position={front.counter.current}
+        total={front.counter.total}
+        focused={focusedWork === front.work}
+        announcement={announcement}
+      />
     </div>
   )
 }
