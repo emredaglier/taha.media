@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { getWorks } from '../../data/works'
-import { startPageSite, type PageSite } from '../../test/page-html'
+import { getWorks } from '../../../data/works'
+import { startPageSite, type PageSite } from '../../../test/page-html'
 
 let pages: PageSite
 

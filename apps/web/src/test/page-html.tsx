@@ -3,18 +3,20 @@
  *
  * `startPageSite()` builds a temporary CMS (the `createTestSite` helper), points the data module
  * at it, and lets a test publish content and render a route's server output: the async page
- * inside the root layout, as HTML. `renderRoute(url)` reports one of three outcomes: HTML,
- * not-found (the not-found page, status 404) or a redirect with its target.
+ * inside every layout on its path, as HTML. `renderRoute(url)` reports one of three outcomes:
+ * HTML, not-found (the not-found page, status 404) or a redirect with its target.
  *
  * Routes come from the real `app/**\/page.tsx` files, so an unknown path is not-found here for
- * the same reason it is in Next. No test starts Next (CLAUDE.md).
+ * the same reason it is in Next. The layouts come from the real `app/**\/layout.tsx` files: one
+ * per folder above the page, route groups included, the root layout outermost. Route groups never
+ * appear in the URL. The not-found page is wrapped the same way, so it gets the root layout only,
+ * as in Next (it replaces everything below it). No test starts Next (CLAUDE.md).
  */
 import type { Discipline } from '@taha/cms-config'
 import { createTestSite, type TestSite } from '@taha/cms-config/testing'
-import type { ComponentType, ReactElement } from 'react'
+import type { ComponentType, ReactElement, ReactNode } from 'react'
 import { prerender } from 'react-dom/static'
 
-import RootLayout from '../app/layout'
 import NotFound from '../app/not-found'
 
 export type RouteOutcome =
@@ -28,10 +30,16 @@ type PageProps = {
   searchParams: Promise<Record<string, string | string[]>>
 }
 type PageModule = { default: ComponentType<PageProps> }
+type LayoutProps = { children: ReactNode; params: PageProps['params'] }
 
 const pageFiles = import.meta.glob('../app/**/page.tsx') as Record<
   string,
   () => Promise<PageModule>
+>
+
+const layoutModules = import.meta.glob('../app/**/layout.tsx', { eager: true }) as Record<
+  string,
+  { default: ComponentType<LayoutProps> }
 >
 
 /** Routes in the shape `/isler/[slug]`, from the page files' paths; route groups are dropped. */
@@ -41,12 +49,34 @@ const routes = Object.entries(pageFiles).map(([file, load]) => {
     .replace(/\/?page\.tsx$/, '')
     .split('/')
     .filter((segment) => segment !== '' && !/^\(.*\)$/.test(segment))
-  return { segments, load }
+  return { file, segments, load }
 })
+
+/**
+ * The layout files that wrap the page (or not-found) file `file`, outermost first: one per folder
+ * on its path that holds a `layout.tsx`, route groups included. `layouts` is every layout file.
+ */
+export function layoutsOnPath(file: string, layouts: readonly string[]): string[] {
+  const folders = file.replace('../app/', '').split('/').slice(0, -1)
+  return Array.from({ length: folders.length + 1 }, (_, depth) =>
+    ['../app', ...folders.slice(0, depth), 'layout.tsx'].join('/'),
+  ).filter((layoutFile) => layouts.includes(layoutFile))
+}
+
+/** Wraps `element` in every layout on the path of `file`, the innermost one closest to it. */
+function inLayouts(file: string, params: Record<string, string>, element: ReactElement) {
+  return layoutsOnPath(file, Object.keys(layoutModules)).reduceRight<ReactElement>(
+    (children, layoutFile) => {
+      const Layout = layoutModules[layoutFile]!.default
+      return <Layout params={Promise.resolve(params)}>{children}</Layout>
+    },
+    element,
+  )
+}
 
 function matchRoute(pathname: string) {
   const parts = pathname.split('/').filter(Boolean).map(decodeURIComponent)
-  for (const { segments, load } of routes) {
+  for (const { file, segments, load } of routes) {
     if (segments.length !== parts.length) continue
     const params: Record<string, string> = {}
     const matches = segments.every((segment, index) => {
@@ -57,7 +87,7 @@ function matchRoute(pathname: string) {
       }
       return segment === parts[index]
     })
-    if (matches) return { params, load }
+    if (matches) return { file, params, load }
   }
   return null
 }
@@ -83,11 +113,7 @@ export function outcomeOfThrown(error: unknown): RouteOutcome | null {
 const notFoundPage = async (): Promise<RouteOutcome> => ({
   kind: 'not-found',
   status: 404,
-  html: await toHtml(
-    <RootLayout>
-      <NotFound />
-    </RootLayout>,
-  ),
+  html: await toHtml(inLayouts('../app/not-found.tsx', {}, <NotFound />)),
 })
 
 /** Renders the route at `url` (path and optional query) the way a request to Next would. */
@@ -104,9 +130,11 @@ export async function renderRoute(url: string): Promise<RouteOutcome> {
   const Page = (await route.load()).default
   try {
     const html = await toHtml(
-      <RootLayout>
-        <Page params={Promise.resolve(route.params)} searchParams={Promise.resolve(query)} />
-      </RootLayout>,
+      inLayouts(
+        route.file,
+        route.params,
+        <Page params={Promise.resolve(route.params)} searchParams={Promise.resolve(query)} />,
+      ),
     )
     return { kind: 'html', status: 200, html }
   } catch (error) {

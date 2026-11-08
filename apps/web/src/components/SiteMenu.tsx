@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 
 import { lockScroll, nextFocus } from '../lib/menu-a11y'
-import { menuLinks } from '../lib/nav-links'
+import { legalLink, menuLinks } from '../lib/nav-links'
 
 const PANEL_ID = 'site-menu-panel'
 
@@ -14,8 +14,12 @@ const PANEL_ID = 'site-menu-panel'
  * toggle is taken over: the page behind can't scroll, focus moves in and is trapped (every Tab
  * step is picked by `nextFocus`, for Safari), Escape closes and returns focus to MENU, and
  * following a link closes it. Adapted from daglier.com's mobile menu (ADR-0100), without its motion.
+ *
+ * After the pages come Gizlilik and the © line (`copyright`, rendered by the server): Home has no
+ * footer (ADR-0103), so the menu holds them. Gizlilik is a link in the panel, so it is in the
+ * focus loop like the rest.
  */
-export function SiteMenu() {
+export function SiteMenu({ copyright }: { copyright: string }) {
   const pathname = usePathname()
   const detailsRef = useRef<HTMLDetailsElement>(null)
   const summaryRef = useRef<HTMLElement>(null)
@@ -99,6 +103,17 @@ export function SiteMenu() {
               </li>
             ))}
           </ul>
+          <div className="flex items-baseline gap-4 text-sm text-text-muted">
+            <Link
+              href={legalLink.href}
+              className="underline"
+              aria-current={pathname === legalLink.href ? 'page' : undefined}
+              onClick={() => setOpen(false)}
+            >
+              {legalLink.label}
+            </Link>
+            <p>{copyright}</p>
+          </div>
         </nav>
       </div>
     </details>

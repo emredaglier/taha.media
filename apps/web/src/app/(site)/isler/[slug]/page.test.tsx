@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { startPageSite, type PageSite } from '../../../test/page-html'
+import { startPageSite, type PageSite } from '../../../../test/page-html'
 import { generateStaticParams } from './page'
 
 let pages: PageSite
@@ -150,7 +150,7 @@ describe('details', () => {
 
 describe('next Work', () => {
   it('links to the following Work in list order, and wraps to the first', async () => {
-    const { getWorks } = await import('../../../data/works')
+    const { getWorks } = await import('../../../../data/works')
     const slugs = (await getWorks()).map((work) => work.slug)
     expect(slugs.length).toBeGreaterThan(1)
     const first = slugs[0]!

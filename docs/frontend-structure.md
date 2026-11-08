@@ -24,6 +24,7 @@ Backend spec (issue #1) facts the frontend relies on: its "Data module contract"
 
 - **Header** (changed 2026-11-06 by FLOW): name/logo (home link) and a MENU button at every width. MENU opens a full-screen menu with İşler, Galeri and Hakkımda, each a separate page (daglier's MobileMenu restyled, keeping the Safari focus fix). Once Hand control ships, desktop visitors with a camera also see its toggle, "Elinle gez", next to MENU (see "Hand control").
 - **Footer** (2026-11-06, changed 2026-11-08): on every page except Home, holding the Gizlilik link and ©. Its design isn't done yet. Gizlilik and © are also in the menu, so Home reaches them without a footer. Email and socials live on Hakkımda first.
+- **Layouts** (2026-11-08, #48): one root layout (skip link, header), so moving between Home and other pages stays client-side. A nested layout can't remove the parent's footer, so the footer isn't in the root: the `app/(site)/` route group's layout adds `main` and the footer for every page except Home (İşler, a Work, Galeri, Hakkımda, Gizlilik). Home sits outside the group and renders its own `main`. The not-found page replaces everything below the root layout, so it brings its own `main` and footer. The page-HTML test seam wraps each page in every layout on its path.
 - One theme, no toggle (likely dark, but Figma decides). Tokens stay structured so a second theme can be added later.
 
 ## Behavior

@@ -3,8 +3,8 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
-import { WorkCard } from '../../components/WorkCard'
-import { getWorks } from '../../data/works'
+import { WorkCard } from '../../../components/WorkCard'
+import { getWorks } from '../../../data/works'
 
 export const metadata: Metadata = { title: 'İşler' }
 

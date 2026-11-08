@@ -2,7 +2,6 @@ import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 
 import { Observability } from '../components/Observability'
-import { SiteFooter } from '../components/SiteFooter'
 import { SiteHeader } from '../components/SiteHeader'
 import {
   beaconAttributes,
@@ -22,7 +21,11 @@ export const metadata: Metadata = {
   ...(isPreviewInstance() ? { robots: { index: false, follow: false } } : {}),
 }
 
-/** The shell every public route renders in: skip link, header, `main`, footer. */
+/**
+ * The shell every public route renders in: skip link and header. The `main` and the footer come
+ * from the route's own layout (`PageFrame`): Home has no footer (ADR-0103), so the footer can't
+ * live here. A single root layout keeps navigation between Home and the other pages client-side.
+ */
 export default function RootLayout({ children }: { children: ReactNode }) {
   const sentry = sentryOptions({
     dsn: sentryDsn(),
@@ -44,10 +47,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           İçeriğe geç
         </a>
         <SiteHeader />
-        <main id="main" className="flex-1 px-6">
-          {children}
-        </main>
-        <SiteFooter />
+        {children}
         {sentry ? <Observability options={sentry} /> : null}
         {beacon ? <script defer {...beacon} /> : null}
       </body>

@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { menuLinks } from '../lib/nav-links'
+import { legalLink, menuLinks } from '../lib/nav-links'
 import { startPageSite, type PageSite } from '../test/page-html'
 
 let pages: PageSite
@@ -44,10 +44,58 @@ describe.each(['/', '/yok-boyle-bir-sayfa'])('the shell around %s', (url) => {
     }
   })
 
-  it('has the footer with the year and the Gizlilik link', async () => {
+  it('has Gizlilik and © in the menu, after the page links', async () => {
     const html = await htmlOf(url)
-    expect(html).toContain(`© ${new Date().getFullYear()} Taha Çiftçi`)
-    expect(html).toMatch(/<footer[\s\S]*<a[^>]*href="\/gizlilik"/)
+    const details = /<details[\s\S]*<\/details>/.exec(html)?.[0] ?? ''
+    const legal = details.indexOf(`href="${legalLink.href}"`)
+    expect(details).toMatch(
+      new RegExp(`<a[^>]*href="${legalLink.href}"[^>]*>${legalLink.label}</a>`),
+    )
+    expect(legal).toBeGreaterThan(details.indexOf(`href="${menuLinks.at(-1)!.href}"`))
+    expect(details.indexOf(COPYRIGHT)).toBeGreaterThan(legal)
+  })
+})
+
+const COPYRIGHT = `© ${new Date().getFullYear()} Taha Çiftçi`
+
+describe('the footer', () => {
+  beforeAll(async () => {
+    await pages.publishWork({ title: 'Bir İş', slug: 'bir-is' })
+  })
+
+  it('is not on Home, which holds the screen (ADR-0103)', async () => {
+    const html = await htmlOf('/')
+    expect(html).not.toContain('<footer')
+    expect(html.match(/<main[\s>]/g)).toHaveLength(1)
+    expect(html).toMatch(/<main[^>]*id="main"/)
+  })
+
+  it.each(['/isler', '/isler/bir-is', '/hakkimda', '/gizlilik'])(
+    'follows the main content of %s, with the year and the Gizlilik link',
+    async (url) => {
+      const html = await htmlOf(url)
+      expect(html.match(/<footer[\s>]/g)).toHaveLength(1)
+      expect(html.match(/<main[\s>]/g)).toHaveLength(1)
+      expect(html).toMatch(/<\/main>\s*<footer/)
+      expect(html).toContain(COPYRIGHT)
+      expect(html).toMatch(/<footer[\s\S]*<a[^>]*href="\/gizlilik"[^>]*>Gizlilik<\/a>/)
+    },
+  )
+
+  it('is on the not-found page', async () => {
+    const outcome = await pages.render('/yok-boyle-bir-sayfa')
+    expect(outcome.kind).toBe('not-found')
+    if (outcome.kind !== 'not-found') return
+    expect(outcome.html.match(/<footer[\s>]/g)).toHaveLength(1)
+    expect(outcome.html).toMatch(/<\/main>\s*<footer/)
+    expect(outcome.html).toMatch(/<footer[\s\S]*<a[^>]*href="\/gizlilik"[^>]*>Gizlilik<\/a>/)
+  })
+
+  it('is on the not-found page of a Work that does not exist', async () => {
+    const outcome = await pages.render('/isler/yok-boyle-bir-is')
+    expect(outcome.kind).toBe('not-found')
+    if (outcome.kind !== 'not-found') return
+    expect(outcome.html).toContain('<footer')
   })
 })
 

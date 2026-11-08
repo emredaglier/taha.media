@@ -3,6 +3,7 @@ import Link from 'next/link'
 
 import { FeaturedWorks } from '../components/FeaturedWorks'
 import { Hero } from '../components/Hero'
+import { PageMain } from '../components/PageFrame'
 import { Picture } from '../components/Picture'
 import { RichText } from '../components/RichText'
 import { getAbout, getSite } from '../data/pages'
@@ -19,12 +20,16 @@ export async function generateMetadata(): Promise<Metadata> {
   return site ? seoToMetadata(site.seo, { home: true }) : {}
 }
 
-/** Home's static layout: what phones, reduced motion and no-JavaScript visitors get. */
+/**
+ * Home's static layout: what phones, reduced motion and no-JavaScript visitors get. Home holds
+ * the screen and has no footer (ADR-0103), so it sits outside the `(site)` route group and
+ * renders its own `main`.
+ */
 export default async function HomePage() {
   const [site, featured, about] = await Promise.all([getSite(), getFeaturedWorks(), getAbout()])
   const intro = firstParagraph(about?.bio)
   return (
-    <>
+    <PageMain>
       <Hero site={site} />
       <FeaturedWorks works={featured} />
       {about?.portrait || intro ? (
@@ -50,6 +55,6 @@ export default async function HomePage() {
           </div>
         </section>
       ) : null}
-    </>
+    </PageMain>
   )
 }

@@ -1,10 +1,10 @@
 import { DISCIPLINE_LABELS } from '@taha/cms-config'
 import type { Metadata } from 'next'
 
-import { Picture } from '../../components/Picture'
-import { RichText } from '../../components/RichText'
-import { getAbout, getSite } from '../../data/pages'
-import { seoToMetadata } from '../../lib/seo'
+import { Picture } from '../../../components/Picture'
+import { RichText } from '../../../components/RichText'
+import { getAbout, getSite } from '../../../data/pages'
+import { seoToMetadata } from '../../../lib/seo'
 
 const TITLE = 'Hakkımda'
 

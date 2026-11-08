@@ -1,8 +1,8 @@
 import type { Metadata } from 'next'
 
-import { RichText } from '../../components/RichText'
-import { getPrivacy } from '../../data/pages'
-import { seoToMetadata } from '../../lib/seo'
+import { RichText } from '../../../components/RichText'
+import { getPrivacy } from '../../../data/pages'
+import { seoToMetadata } from '../../../lib/seo'
 
 const TITLE = 'Gizlilik'
 

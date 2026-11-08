@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { block, BOLD, doc, ITALIC, linkNode, paragraphs, textNode } from '../../test/lexical'
-import { startPageSite, type PageSite } from '../../test/page-html'
+import { block, BOLD, doc, ITALIC, linkNode, paragraphs, textNode } from '../../../test/lexical'
+import { startPageSite, type PageSite } from '../../../test/page-html'
 import { generateMetadata } from './page'
 
 let pages: PageSite

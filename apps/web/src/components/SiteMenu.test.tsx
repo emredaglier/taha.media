@@ -13,6 +13,7 @@ vi.mock('next/link', async () => {
   }
 })
 
+import { legalLink, menuLinks } from '../lib/nav-links'
 import { SiteMenu } from './SiteMenu'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -20,7 +21,8 @@ import { SiteMenu } from './SiteMenu'
 let container: HTMLElement
 let root: Root
 
-const render = () => act(() => root.render(<SiteMenu />))
+const COPYRIGHT = '© 2026 Taha Çiftçi'
+const render = () => act(() => root.render(<SiteMenu copyright={COPYRIGHT} />))
 const toggle = () => container.querySelector('summary') as HTMLElement
 const links = () => [...container.querySelectorAll<HTMLAnchorElement>('nav a')]
 const details = () => container.querySelector('details')!
@@ -55,6 +57,30 @@ describe('closed', () => {
   })
 })
 
+describe('the links', () => {
+  it('are the three pages, then Gizlilik, then the © line', async () => {
+    await render()
+    expect(links().map((link) => link.getAttribute('href'))).toEqual([
+      ...menuLinks.map(({ href }) => href),
+      legalLink.href,
+    ])
+    expect(links().at(-1)!.textContent).toBe('Gizlilik')
+    const nav = container.querySelector('nav')!
+    expect(nav.textContent).toContain(COPYRIGHT)
+    const last = links().at(-1)!
+    expect(last.compareDocumentPosition(nav.querySelector('p')!)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    )
+  })
+
+  it('marks Gizlilik as the current page on /gizlilik', async () => {
+    pathname = '/gizlilik'
+    await render()
+    expect(links().at(-1)!.getAttribute('aria-current')).toBe('page')
+    expect(links()[0]!.getAttribute('aria-current')).toBeNull()
+  })
+})
+
 describe('open', () => {
   beforeEach(async () => {
     await render()
@@ -82,21 +108,30 @@ describe('open', () => {
     expect(document.activeElement).toBe(toggle())
   })
 
-  it('traps Tab and Shift+Tab inside MENU and the links', () => {
-    const [first, , last] = links()
-    last!.focus()
+  it('traps Tab and Shift+Tab inside MENU and every link, Gizlilik included', () => {
+    const all = links()
+    const first = all[0]!
+    const last = all.at(-1)!
+    expect(last.getAttribute('href')).toBe('/gizlilik')
+    last.focus()
     press('Tab')
     expect(document.activeElement).toBe(toggle())
     press('Tab')
     expect(document.activeElement).toBe(first)
-    press('Tab', { shiftKey: true })
+    for (const link of all.slice(1)) {
+      press('Tab')
+      expect(document.activeElement).toBe(link)
+    }
+    press('Tab')
     expect(document.activeElement).toBe(toggle())
     press('Tab', { shiftKey: true })
     expect(document.activeElement).toBe(last)
+    press('Tab', { shiftKey: true })
+    expect(document.activeElement).toBe(all.at(-2))
   })
 
-  it('closes when a link is followed', () => {
-    act(() => links()[1]!.click())
+  it.each([1, 3])('closes when link %i is followed', (index) => {
+    act(() => links()[index]!.click())
     expect(toggle().getAttribute('aria-expanded')).toBe('false')
   })
 

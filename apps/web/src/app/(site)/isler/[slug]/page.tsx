@@ -3,13 +3,13 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound, permanentRedirect } from 'next/navigation'
 
-import { ExternalVideo } from '../../../components/ExternalVideo'
-import { Picture } from '../../../components/Picture'
-import { RichText } from '../../../components/RichText'
-import { getPublishedWorkSlugs, getWorkBySlug, getWorks, type Work } from '../../../data/works'
-import { mediaFrameStyle } from '../../../lib/media-frame'
-import { nextWork } from '../../../lib/next-work'
-import { seoToMetadata } from '../../../lib/seo'
+import { ExternalVideo } from '../../../../components/ExternalVideo'
+import { Picture } from '../../../../components/Picture'
+import { RichText } from '../../../../components/RichText'
+import { getPublishedWorkSlugs, getWorkBySlug, getWorks, type Work } from '../../../../data/works'
+import { mediaFrameStyle } from '../../../../lib/media-frame'
+import { nextWork } from '../../../../lib/next-work'
+import { seoToMetadata } from '../../../../lib/seo'
 
 type Params = { slug: string }
 

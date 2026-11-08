@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { paragraphs } from '../../test/lexical'
-import { startPageSite, type PageSite } from '../../test/page-html'
+import { paragraphs } from '../../../test/lexical'
+import { startPageSite, type PageSite } from '../../../test/page-html'
 import { generateMetadata } from './page'
 
 let pages: PageSite
