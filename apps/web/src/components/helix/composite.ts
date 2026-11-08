@@ -59,8 +59,13 @@ export type CompositeFrame = {
   reach: number
   /** The screen's shape (width / height). */
   aspect: number
-  /** Seconds, for the jitter, the tracking band and the noise. */
+  /** Seconds, for the tracking band. */
   time: number
+  /**
+   * Which drawn frame this is (`nextFrame`, wrapped): the line jitter re-rolls every frame, not
+   * on a clock, so it does so on every display (#66).
+   */
+  frame: number
   /** How fast the Helix turns, 0 to 1: it raises the jitter. */
   speed: number
   /** How far the Helix has turned, in screen heights (`turnOnScreen`): the outline follows it. */
@@ -133,7 +138,7 @@ precision highp float;
 in vec2 vUv;
 uniform sampler2D uScene, uMeltInputs, uShowreel, uHeat;
 uniform vec2 uRes, uCentre;
-uniform float uShowreelOn, uMelt, uReach, uAspect, uTime, uSpeed, uShift;
+uniform float uShowreelOn, uMelt, uReach, uAspect, uTime, uFrame, uSpeed, uShift;
 out vec4 outColor;
 const float SHARP_BAND = ${float(HELIX_TUNING.sharpBand)};
 const float FAR_CARDS = ${float(HELIX_TUNING.farCards)};
@@ -173,9 +178,9 @@ void main() {
   float heat = texture(uHeat, uv).r;
   float m0 = meltAt(uv);
   float m = clamp(m0 + heat * CURSOR_BUMP * 0.25 * (1.0 - m0), 0.0, 1.0);
-  // Rows two pixels tall jump sideways, 14 new jumps a second; the tracking band rolls down.
+  // Rows two pixels tall jump sideways, a new jump every drawn frame; the tracking band rolls down.
   float row = floor(uv.y * uRes.y / 2.0);
-  float rj = hash12(vec2(row, floor(uTime * 14.0))) - 0.5;
+  float rj = hash12(vec2(row, uFrame)) - 0.5;
   float tq = (fract(uv.y * 0.6 - uTime * 0.07) - 0.5) / 0.04;
   float trk = exp(-tq * tq);
   // Sharp cards (low melt of the card itself, read a little inside so the pixels just outside
@@ -251,6 +256,7 @@ export function createComposite(gl: WebGL2RenderingContext): Composite {
     'uReach',
     'uAspect',
     'uTime',
+    'uFrame',
     'uSpeed',
     'uShift',
     'uCentre',
@@ -277,7 +283,7 @@ export function createComposite(gl: WebGL2RenderingContext): Composite {
       size = { width: Math.max(1, width), height: Math.max(1, height) }
     },
 
-    draw({ showreelOn, melt, centre, reach, aspect, time, speed, shift, heat }) {
+    draw({ showreelOn, melt, centre, reach, aspect, time, frame, speed, shift, heat }) {
       gl.disable(gl.DEPTH_TEST)
       gl.disable(gl.BLEND)
       gl.useProgram(program)
@@ -296,6 +302,7 @@ export function createComposite(gl: WebGL2RenderingContext): Composite {
       gl.uniform1f(at.uReach, reach)
       gl.uniform1f(at.uAspect, aspect)
       gl.uniform1f(at.uTime, time)
+      gl.uniform1f(at.uFrame, frame)
       gl.uniform1f(at.uSpeed, speed)
       gl.uniform1f(at.uShift, shift)
       gl.uniform2f(at.uCentre, centre.x, centre.y)

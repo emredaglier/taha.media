@@ -22,6 +22,7 @@ import {
   uniforms,
   vertexArray,
 } from './gl'
+import { nextFrame } from './frame-count'
 import { createHeatTrail } from './heat'
 import { createPreviewLoops } from './loops'
 import { createShowreelLayer } from './showreel'
@@ -203,6 +204,8 @@ export function createHelixRenderer(
   // shows the placeholder colour, or nothing if that can't be read.
   const placeholder = cssColour(canvas, '--color-placeholder') ?? new Uint8Array([0, 0, 0, 0])
   let destroyed = false
+  // Counts the drawn frames for the signal's line jitter (#66); a hidden tab draws none.
+  let frame = 0
   const stills = works.map(({ poster }) => {
     const texture = colourTexture(gl, placeholder)
     const still = { texture, crop: cropToCard(poster.width, poster.height, poster.focalPoint) }
@@ -322,6 +325,7 @@ export function createHelixRenderer(
         reach: box ? Math.hypot(box.halfWidth * aspect, box.halfHeight) / 2 : 0,
         aspect,
         time: (performance.now() / 1000) % 1000,
+        frame: (frame = nextFrame(frame)),
         speed,
         shift: turnOnScreen(progress, focal),
         heat: heat.texture,
