@@ -17,9 +17,21 @@
   --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
 
+/*
+ * `helix:` applies while the Helix runs on Home. JavaScript sets the mark only once the Helix has
+ * started, so nothing is hidden waiting for it (ADR-0101).
+ */
+@custom-variant helix (html[data-home='helix'] &);
+
 @layer base {
   html {
     color-scheme: dark;
     background-color: var(--color-background);
+  }
+
+  /* While the Helix runs, Home holds the screen: no page scroll (ADR-0103). */
+  html[data-home='helix'] {
+    overflow: hidden;
+    overscroll-behavior: none;
   }
 }

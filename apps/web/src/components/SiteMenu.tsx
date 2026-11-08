@@ -4,10 +4,8 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 
-import { lockScroll, nextFocus } from '../lib/menu-a11y'
+import { lockScroll, MENU_PANEL_ID, nextFocus } from '../lib/menu-a11y'
 import { legalLink, menuLinks } from '../lib/nav-links'
-
-const PANEL_ID = 'site-menu-panel'
 
 /**
  * A native <details>, so without JavaScript it still opens and reaches every link. With JS the
@@ -71,7 +69,7 @@ export function SiteMenu({ copyright }: { copyright: string }) {
     <details ref={detailsRef}>
       <summary
         ref={summaryRef}
-        aria-controls={PANEL_ID}
+        aria-controls={MENU_PANEL_ID}
         aria-expanded={open}
         className="relative z-50 cursor-pointer list-none text-sm uppercase [&::-webkit-details-marker]:hidden"
         onClick={(event) => {
@@ -84,7 +82,7 @@ export function SiteMenu({ copyright }: { copyright: string }) {
       </summary>
       <div
         ref={panelRef}
-        id={PANEL_ID}
+        id={MENU_PANEL_ID}
         className="fixed inset-0 z-40 overflow-y-auto bg-background text-text"
       >
         <nav aria-label="Menü" className="flex min-h-dvh flex-col justify-center gap-6 px-6">

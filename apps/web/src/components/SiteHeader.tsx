@@ -5,11 +5,12 @@ import { SiteMenu } from './SiteMenu'
 
 /**
  * The name links Home; MENU opens the full-screen menu at every width. The © line goes to the
- * menu as a prop, so the year the server rendered is the one the client hydrates with.
+ * menu as a prop, so the year the server rendered is the one the client hydrates with. It stacks
+ * above the Helix, which covers the whole screen on Home.
  */
 export function SiteHeader() {
   return (
-    <header className="flex items-baseline justify-between gap-4 px-6 py-4">
+    <header className="relative z-10 flex items-baseline justify-between gap-4 px-6 py-4">
       <Link href="/" className="font-serif text-xl text-text">
         {OWNER_NAME}
       </Link>

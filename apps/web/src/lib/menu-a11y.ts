@@ -1,3 +1,13 @@
+/** The id of the menu's full-screen panel. */
+export const MENU_PANEL_ID = 'site-menu-panel'
+
+/**
+ * Whether the menu is open: its `<details>` is, natively before hydration and from SiteMenu's
+ * state after. The Helix ignores input while it is.
+ */
+export const isMenuOpen = (document: Document): boolean =>
+  document.getElementById(MENU_PANEL_ID)?.closest('details')?.open === true
+
 /** Scroll lock for the open menu: `overflow: hidden` on the root. Returns the undo. */
 export const lockScroll = (html: HTMLElement): (() => void) => {
   const before = html.style.overflow

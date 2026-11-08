@@ -19,14 +19,18 @@ export function chooseLoopMode(options: {
   return options.hoverToPlay && options.finePointer ? 'hover' : 'view'
 }
 
-const REDUCED_MOTION = '(prefers-reduced-motion: reduce)'
+export const REDUCED_MOTION = '(prefers-reduced-motion: reduce)'
 const FINE_POINTER = '(hover: hover) and (pointer: fine)'
 
 type Connection = EventTarget & { saveData?: boolean }
 const connection = (): Connection | undefined =>
   (navigator as Navigator & { connection?: Connection }).connection
 
-function subscribe(onChange: () => void): () => void {
+/** Whether the visitor asked for Save-Data. */
+export const saveDataOn = (): boolean => connection()?.saveData === true
+
+/** Calls `onChange` when reduced motion, the pointer or Save-Data changes. Returns the undo. */
+export function subscribeToPreferences(onChange: () => void): () => void {
   const queries = [matchMedia(REDUCED_MOTION), matchMedia(FINE_POINTER)]
   const network = connection()
   for (const query of queries) query.addEventListener('change', onChange)
@@ -40,7 +44,7 @@ function subscribe(onChange: () => void): () => void {
 const snapshot = (hoverToPlay: boolean): LoopMode =>
   chooseLoopMode({
     reducedMotion: matchMedia(REDUCED_MOTION).matches,
-    saveData: connection()?.saveData === true,
+    saveData: saveDataOn(),
     finePointer: matchMedia(FINE_POINTER).matches,
     hoverToPlay,
   })
@@ -48,7 +52,7 @@ const snapshot = (hoverToPlay: boolean): LoopMode =>
 /** The mode for this device, live; the server and the first client render say `poster`. */
 export function useLoopMode(hoverToPlay: boolean): LoopMode {
   return useSyncExternalStore(
-    subscribe,
+    subscribeToPreferences,
     () => snapshot(hoverToPlay),
     () => 'poster',
   )

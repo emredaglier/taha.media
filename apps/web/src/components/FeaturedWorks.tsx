@@ -15,6 +15,31 @@ export type FeaturedWork = Work & { previewLoop: VideoRead }
 export const withPreviewLoop = (works: Work[]): FeaturedWork[] =>
   works.filter((work): work is FeaturedWork => work.previewLoop !== null)
 
+const disciplineLine = (work: Work) =>
+  work.disciplines.map((discipline) => DISCIPLINE_LABELS[discipline]).join(' · ')
+
+/** What a Helix card and its overlay need of a Featured Work, and nothing more. */
+export type HelixWork = {
+  slug: string
+  title: string
+  /** The Disciplines as one line. */
+  disciplines: string
+  client: string | null
+  /** The Preview loop's poster, the card's still frame. */
+  poster: { src: string; width: number; height: number; focalPoint: { x: number; y: number } }
+}
+
+export const toHelixWork = (work: FeaturedWork): HelixWork => {
+  const { src, width, height, focalPoint } = work.previewLoop.poster
+  return {
+    slug: work.slug,
+    title: work.title,
+    disciplines: disciplineLine(work),
+    client: work.client,
+    poster: { src, width, height, focalPoint },
+  }
+}
+
 /** One column on phones, two from 700px, three from 1100px. */
 const SIZES = '(min-width: 1100px) 33vw, (min-width: 700px) 50vw, 100vw'
 
@@ -28,7 +53,7 @@ function FeaturedCard({ work }: { work: FeaturedWork }) {
         </div>
         <h3 className="mt-3 font-serif text-xl group-hover:underline">{work.title}</h3>
         <div className="mt-1 flex justify-between gap-4 text-sm">
-          <p>{work.disciplines.map((discipline) => DISCIPLINE_LABELS[discipline]).join(' · ')}</p>
+          <p>{disciplineLine(work)}</p>
           {work.client ? <p className="text-text-muted">{work.client}</p> : null}
         </div>
       </Link>
