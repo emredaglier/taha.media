@@ -1,0 +1,1496 @@
+<!doctype html>
+<!--
+  PROTOTYPE, throwaway. Not production code.
+  Question: which melt material should the Home Helix use? (docs/frontend-structure.md, "Home Helix")
+  Four sketches, switchable via ?melt=drip|fluid|glass|blobs, the yellow bar, or the ← → keys:
+    drip   columns of pixels slide down at uneven speeds, like hot wax
+    fluid  a fluid simulation the cursor and the turning stir; the picture smears like paint in water
+    glass  the picture stays whole but warps through water and heat haze; the cursor drops ripples
+    blobs  the picture breaks into soft blobs of colour that merge and pull apart
+  Every sketch runs the whole Home: the Showreel full-bleed, the scroll zoom-out into the Helix,
+  the timed melt (the point of no return), then the Helix (wheel, drag, ↑ ↓, click, Enter).
+  One melt material does every job: the Showreel exit, the top and bottom edges, far cards,
+  cards you aren't pointing at, and cards appearing during the zoom.
+  Footage: procedural placeholder loops (timecode = it's a video). "Showreel…" and "Loops…"
+  play your own MP4s; they stay on your machine.
+  Camera (desktop only, opt-in): the index fingertip is the cursor (it explores: focus, ripples).
+  Pinch index and thumb and move to scroll the zoom or turn the Helix; let go to release.
+  A quick pinch (touch and part) clicks. Hand tracking is
+  Google's MediaPipe gesture recognizer, loaded from jsDelivr and Google's model bucket on first
+  use (~18 MB; production would self-host on R2). Video never leaves the browser.
+  H hides the prototype chrome. Open by double-clicking. No network needed, except the camera's first load. Geometry and input come from the 21st.dev
+  dither-helix-carousel; the dither look does not.
+-->
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PROTOTİP · Ana sayfa sarmalı</title>
+<style>
+  :root{
+    --bg:#101010; --fg:#f2f2f2; --mute:#9a9a9a;
+    --serif:"Times New Roman",Times,serif;            /* stand-in for the display serif */
+    --sans:"Helvetica Neue",Helvetica,Arial,sans-serif; /* stand-in for the grotesk */
+    --mono:ui-monospace,Menlo,monospace;
+    --proto:#ffd84d;
+  }
+  html[data-tone="light"]{ --bg:#ecebe7; --fg:#141414; --mute:#5c5c5c; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{background:var(--bg);color:var(--fg)}
+  body{font-family:var(--sans);background:var(--bg);-webkit-font-smoothing:antialiased}
+  html.locked,html.locked body{overflow:hidden;height:100%}
+  button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+
+  #gl{position:fixed;inset:0;width:100%;height:100%;display:block;z-index:0;touch-action:pan-y;cursor:default}
+  html.locked #gl{touch-action:none;cursor:grab}
+  html.locked #gl:active{cursor:grabbing}
+  .spacer{height:240vh;pointer-events:none}
+
+  /* ---------- header (stays throughout) ---------- */
+  .hdr{position:fixed;inset:0 0 auto 0;z-index:5;height:8.6vh;min-height:52px;padding:0 2.1vw;display:flex;
+       justify-content:space-between;align-items:center;color:#fff;mix-blend-mode:difference;pointer-events:none}
+  .logo b{font:800 clamp(14px,1.15vw,22px)/1 var(--sans);letter-spacing:-.01em}
+  .menu-btn{font:400 clamp(15px,1.3vw,24px)/1 var(--serif)}
+
+  /* ---------- hero text (leaves with the zoom) ---------- */
+  .hero{position:fixed;inset:0;z-index:3;pointer-events:none;color:#fff;will-change:opacity,transform}
+  .name{position:absolute;left:2.2vw;bottom:6vh;font:400 clamp(44px,7vw,140px)/.9 var(--serif);letter-spacing:-.02em}
+  .copy{position:absolute;left:2.7vw;bottom:3vh;font:400 clamp(10px,.72vw,14px)/1 var(--sans);opacity:.85}
+  .statement{position:absolute;left:62.5vw;right:2.5vw;bottom:5vh;font:400 clamp(15px,2.1vw,40px)/1.1 var(--serif);letter-spacing:-.01em}
+  .sound{position:absolute;right:2.5vw;top:12vh;font:400 clamp(12px,.9vw,16px)/1 var(--sans);pointer-events:auto;
+         text-decoration:underline;color:#fff}
+  @media (max-width:700px){ .statement{left:2.2vw;bottom:auto;top:62vh;right:6vw} }
+
+  /* ---------- Helix overlay (after the melt) ---------- */
+  .work{position:fixed;inset:auto 0 0 0;z-index:3;pointer-events:none;opacity:0;transition:opacity .6s}
+  .work.on{opacity:1}
+  .work .title{position:absolute;left:2.2vw;bottom:9vh;font:400 clamp(28px,3.2vw,60px)/1 var(--serif);letter-spacing:-.01em}
+  .work .meta{position:absolute;left:2.4vw;bottom:5.6vh;font:400 clamp(11px,.9vw,15px)/1 var(--sans);color:var(--mute)}
+  .work .count{position:absolute;right:2.5vw;bottom:5.6vh;font:400 clamp(12px,1vw,16px)/1 var(--sans);color:var(--mute);font-variant-numeric:tabular-nums}
+  .work .count i{font-style:normal;opacity:.5}
+
+  /* ---------- prototype chrome (not part of the design) ---------- */
+  .bar{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:20;display:flex;align-items:center;gap:2px;
+       background:var(--proto);color:#111;border-radius:999px;padding:4px;font:600 12px/1 var(--mono);
+       box-shadow:0 6px 24px #0006;white-space:nowrap;max-width:calc(100vw - 16px);overflow-x:auto}
+  .bar button,.bar label{padding:8px 10px;border-radius:999px;cursor:pointer}
+  .bar button:hover,.bar label:hover{background:#0001}
+  .bar .label{padding:0 6px;min-width:13em;text-align:center}
+  .bar .sep{width:1px;height:18px;background:#0003;margin:0 4px}
+  .bar input[type=file]{display:none}
+  .state{position:fixed;left:50%;bottom:58px;transform:translateX(-50%);z-index:20;font:11px/1.3 var(--mono);color:#111;
+         background:#ffd84dd9;padding:4px 8px;border-radius:4px;white-space:nowrap;max-width:calc(100vw - 16px);overflow:hidden;text-overflow:ellipsis}
+  .panel{position:fixed;right:12px;bottom:90px;z-index:20;width:300px;max-height:calc(100vh - 120px);overflow:auto;
+         background:var(--proto);color:#111;border-radius:10px;padding:12px 14px;font:12px/1.3 var(--mono);box-shadow:0 6px 24px #0006}
+  .panel[hidden]{display:none}
+  .panel h3{font:700 12px/1 var(--mono);margin:12px 0 6px}
+  .panel h3:first-child{margin-top:0}
+  .panel p{margin:0 0 8px;opacity:.75}
+  .panel label{display:grid;grid-template-columns:1fr auto;gap:2px 8px;margin:6px 0}
+  .panel label input[type=range]{grid-column:1 / -1;width:100%}
+  .panel output{font-variant-numeric:tabular-nums}
+  .panel .row{display:flex;gap:8px;align-items:center;margin:6px 0}
+  .toast{position:fixed;left:50%;top:12vh;transform:translateX(-50%);z-index:30;background:#111;color:#fff;
+         font:12px/1.3 var(--mono);padding:8px 12px;border-radius:6px;opacity:0;transition:opacity .3s;pointer-events:none}
+  .toast.on{opacity:1}
+  .err{position:fixed;inset:20px;z-index:40;background:#300;color:#fdd;font:12px/1.4 var(--mono);padding:16px;overflow:auto;white-space:pre-wrap}
+  html.bare .bar,html.bare .state,html.bare .panel{display:none}
+  .bar button.active{background:#111;color:var(--proto)}
+  .cam{position:fixed;left:12px;top:calc(max(8.6vh,52px) + 8px);z-index:20;width:200px;border-radius:8px;overflow:hidden;
+       background:#000;box-shadow:0 6px 24px #0006}
+  .cam .mirror{position:relative;transform:scaleX(-1)}
+  .cam video{display:block;width:100%;height:auto}
+  .cam canvas{position:absolute;inset:0;width:100%;height:100%}
+  .cam p{font:11px/1.3 var(--mono);background:var(--proto);color:#111;padding:4px 6px}
+  .finger{position:fixed;left:-14px;top:-14px;width:28px;height:28px;border:2px solid #fff;border-radius:50%;
+          mix-blend-mode:difference;z-index:21;pointer-events:none;transition:background-color .15s}
+  .finger.pinched{background:#fff}
+  .finger.click::before{content:'';position:absolute;inset:-12px;border:2px solid #fff;border-radius:50%;animation:ping .35s ease-out forwards}
+  @keyframes ping{from{transform:scale(.4);opacity:1}to{transform:scale(1.5);opacity:0}}
+  @media (max-width:700px){ .state{display:none} }
+</style>
+</head>
+<body>
+<canvas id="gl" tabindex="0" aria-label="Öne çıkan işler"></canvas>
+<div class="spacer" id="spacer"></div>
+
+<header class="hdr"><span class="logo"><b>TAHA</b></span><span class="menu-btn">MENÜ</span></header>
+
+<div class="hero" id="hero">
+  <a class="sound" href="#" id="sound">Sesli izle</a>
+  <div class="name">Taha Çiftçi</div>
+  <div class="copy">© 2026 Taha Çiftçi. Tüm hakları saklıdır.</div>
+  <p class="statement">Kurgu ve hareketle marka hikâyeleri anlatan bağımsız bir yapımcı. (yer tutucu)</p>
+</div>
+
+<div class="work" id="work" aria-live="polite">
+  <div class="title" id="w-title"></div>
+  <div class="meta" id="w-meta"></div>
+  <div class="count" id="w-count"></div>
+</div>
+
+<div class="state" id="state"></div>
+<div class="bar" role="toolbar" aria-label="Prototype">
+  <button id="prev" title="Previous sketch (←)">‹</button>
+  <span class="label" id="label"></span>
+  <button id="next" title="Next sketch (→)">›</button>
+  <span class="sep"></span>
+  <button id="toggle">Sliders</button>
+  <button id="replay" title="Back to the Showreel">↺ Showreel</button>
+  <label>Showreel…<input type="file" accept="video/*" id="reel-file"></label>
+  <label>Loops…<input type="file" accept="video/*" multiple id="loop-files"></label>
+  <button id="cam-btn" title="Steer with your index finger (desktop)">Camera</button>
+</div>
+<div class="cam" id="cam" hidden>
+  <div class="mirror"><video id="cam-video" muted playsinline></video><canvas id="cam-draw" width="320" height="240"></canvas></div>
+  <p>camera on · <span id="cam-status">off</span></p>
+</div>
+<div class="finger" id="finger" hidden></div>
+<div class="panel" id="panel" hidden></div>
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+const $ = (s) => document.querySelector(s);
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+const inOutCubic = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+const smooth = (t) => t * t * (3 - 2 * t);
+const rnd = (i) => { const x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+
+function fail(msg) {
+  const el = document.createElement('pre');
+  el.className = 'err';
+  el.textContent = msg;
+  document.body.appendChild(el);
+  console.error(msg);
+}
+
+/* =====================================================================================
+   Geometry and input, from the dither-helix-carousel (16:9 cards, Y flipped so that
+   scrolling down brings the next Work up from below).
+   ===================================================================================== */
+const CARD_H = 1.6, RADIUS = 3.8, RADIUS_STEP = 0.055, CAMERA_Z = 10, FOV = 48, NEAR = 0.1, FAR = 60;
+const TWIST = 0.8, RISE = 0.79, RATIO = 16 / 9;
+const WHEEL = 0.0022, DRAG = 0.007, FOLLOW = 4.7, WHEEL_IDLE = 110, CLICK_SLOP = 6;   // FOLLOW: 1/s, how fast the Helix follows input
+const BEND = 2.7, BEND_EASE = 0.12, BEND_MAX = 0.07;
+const HOVER_IN = 0.095, HOVER_OUT = 0.07, HOVER_SETTLE = 8, FOCUS_FALLOFF = 0.7, CLICK_MS = 1300;
+const MIN_CARDS = 10;
+const FOCAL = 1 / Math.tan((FOV * Math.PI) / 360);
+
+/* =====================================================================================
+   Sketches and their sliders
+   ===================================================================================== */
+const VARIANTS = [
+  { key: 'drip', name: 'Drip', note: 'Columns of pixels slide down at uneven speeds, like hot wax. The Showreel runs down the screen column by column.',
+    params: [
+      { label: 'Drip length', min: 0.05, max: 0.9, step: 0.01, value: 0.4 },
+      { label: 'Drip width (higher = thinner)', min: 6, max: 160, step: 1, value: 38 },
+      { label: 'Turning speed → drip', min: 0, max: 2, step: 0.05, value: 1 },
+      { label: 'Cursor heat (moving cursor)', min: 0, max: 2, step: 0.05, value: 1 },
+    ] },
+  { key: 'fluid', name: 'Fluid smear', note: 'A fluid simulation. The moving cursor and the turning stir it; the edges churn on their own; the picture heals back.',
+    params: [
+      { label: 'Cursor force', min: 0, max: 3, step: 0.05, value: 1 },
+      { label: 'Edge churn', min: 0, max: 3, step: 0.05, value: 1 },
+      { label: 'Heal speed', min: 0, max: 1, step: 0.01, value: 0.35 },
+      { label: 'Swirl', min: 0, max: 1, step: 0.01, value: 0.45 },
+    ] },
+  { key: 'glass', name: 'Liquid glass', note: 'The picture stays whole but warps, as through water or heat haze. The cursor drops ripples; the Showreel dissolves in a ring from its centre.',
+    params: [
+      { label: 'Ripple strength', min: 0, max: 2, step: 0.05, value: 1 },
+      { label: 'Haze speed', min: 0, max: 2, step: 0.05, value: 0.6 },
+      { label: 'Cursor ripples', min: 0, max: 2, step: 0.05, value: 0.35 },   // owner's pick
+      { label: 'Colour split', min: 0, max: 2, step: 0.05, value: 0.7 },
+    ] },
+  { key: 'blobs', name: 'Liquefy into blobs', note: 'The picture breaks into soft blobs of colour that merge and pull apart, riding with the cards. The Showreel falls apart into drops.',
+    params: [
+      { label: 'Blob scale (higher = smaller)', min: 1, max: 12, step: 0.1, value: 4.5 },
+      { label: 'Edge softness', min: 0.005, max: 0.15, step: 0.005, value: 0.035 },
+      { label: 'Flow speed', min: 0, max: 2, step: 0.05, value: 0.6 },
+      { label: 'Cursor heat (moving cursor)', min: 0, max: 2, step: 0.05, value: 1 },
+    ] },
+];
+for (const v of VARIANTS) v.values = v.params.map((p) => p.value);
+
+const G = { band: 0.25, far: 0.7, dim: 0.55, meltDur: 1.3, scrollVh: 140, spin: 2.5, pullBack: true, tone: 'dark', camSens: 5, camPinch: 0.35, settle: 0.55 };
+const TONES = { dark: [0.063, 0.063, 0.063], light: [0.925, 0.922, 0.906] };
+const camCapable = matchMedia('(hover: hover) and (pointer: fine)').matches && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+
+/* =====================================================================================
+   Placeholder footage: procedural 16:9 loops
+   ===================================================================================== */
+const SCENES = {
+  night(c, t, w, h) {
+    const g = c.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, '#04081a'); g.addColorStop(0.55, '#1a2858'); g.addColorStop(0.63, '#e0703a');
+    g.addColorStop(0.67, '#1a1020'); g.addColorStop(1, '#07060c');
+    c.fillStyle = g; c.fillRect(0, 0, w, h);
+    c.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 46; i++) {
+      const y = h * (0.68 + rnd(i) * 0.3);
+      const sp = (80 + rnd(i + 9) * 420) * (rnd(i + 3) > 0.5 ? 1 : -1);
+      const len = 40 + rnd(i + 5) * 180;
+      const span = w + 400;
+      const x = (((rnd(i + 1) * span + t * sp) % span) + span) % span - 200;
+      c.strokeStyle = rnd(i + 7) > 0.4 ? 'rgba(255,70,40,.85)' : 'rgba(255,230,190,.85)';
+      c.lineWidth = 1 + rnd(i + 2) * 4;
+      c.beginPath(); c.moveTo(x, y); c.lineTo(x + len * Math.sign(sp), y); c.stroke();
+    }
+    c.globalCompositeOperation = 'source-over';
+  },
+  coast(c, t, w, h) {
+    const g = c.createLinearGradient(0, 0, 0, h * 0.6);
+    g.addColorStop(0, '#ff9f7a'); g.addColorStop(0.6, '#f8d5ae'); g.addColorStop(1, '#9fd3cf');
+    c.fillStyle = g; c.fillRect(0, 0, w, h * 0.6);
+    c.fillStyle = '#fff3d1';
+    c.beginPath(); c.arc(w * 0.68, h * (0.36 + Math.sin(t * 0.5) * 0.02), h * 0.12, 0, Math.PI * 2); c.fill();
+    const s = c.createLinearGradient(0, h * 0.6, 0, h);
+    s.addColorStop(0, '#1f7f93'); s.addColorStop(1, '#0a3442');
+    c.fillStyle = s; c.fillRect(0, h * 0.6, w, h * 0.4);
+    c.strokeStyle = 'rgba(255,255,255,.4)'; c.lineWidth = 2;
+    for (let k = 0; k < 14; k++) {
+      const y = h * 0.62 + k * k * 1.6;
+      c.beginPath();
+      for (let x = 0; x <= w; x += 12) {
+        const yy = y + Math.sin(x * 0.02 + t * (1 + k * 0.15) + k) * (2 + k * 0.4);
+        x ? c.lineTo(x, yy) : c.moveTo(x, yy);
+      }
+      c.stroke();
+    }
+  },
+  neon(c, t, w, h) {
+    c.fillStyle = '#120018'; c.fillRect(0, 0, w, h);
+    c.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 34; i++) {
+      const x = w * (0.5 + 0.47 * Math.sin(t * 0.3 * (0.5 + rnd(i)) + i));
+      const y = h * (0.5 + 0.44 * Math.cos(t * 0.23 * (0.5 + rnd(i + 4)) + i * 1.7));
+      const r = 12 + rnd(i + 2) * 80;
+      const flick = 0.22 + 0.12 * Math.sin(t * 6 + i);
+      c.fillStyle = `hsla(${280 + rnd(i) * 120},100%,60%,${flick})`;
+      c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill();
+    }
+    c.globalCompositeOperation = 'source-over';
+  },
+  type(c, t, w, h) {
+    c.fillStyle = '#f3d80b'; c.fillRect(0, 0, w, h);
+    c.fillStyle = '#111'; c.textBaseline = 'middle';
+    c.font = `900 ${Math.round(h * 0.5)}px Helvetica, Arial, sans-serif`;
+    const word = 'HAREKET  ';
+    const tw = c.measureText(word).width;
+    for (let x = -((t * h * 0.6) % tw); x < w; x += tw) c.fillText(word, x, h * 0.42);
+    c.font = `700 ${Math.round(h * 0.11)}px Helvetica, Arial, sans-serif`;
+    const w2 = 'KURGU · MOTION · GRAFİK  ';
+    const tw2 = c.measureText(w2).width;
+    for (let x = ((t * h * 0.3) % tw2) - tw2; x < w; x += tw2) c.fillText(w2, x, h * 0.84);
+    c.textBaseline = 'alphabetic';
+  },
+  forest(c, t, w, h) {
+    const g = c.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, '#d9ead9'); g.addColorStop(1, '#7fae8e');
+    c.fillStyle = g; c.fillRect(0, 0, w, h);
+    const cols = ['#9cc3a5', '#6f9f7e', '#467a58', '#2a5a3c', '#123823'];
+    for (let L = 0; L < 5; L++) {
+      c.fillStyle = cols[L];
+      c.beginPath(); c.moveTo(0, h);
+      for (let x = 0; x <= w; x += 8) {
+        const y = h * (0.32 + L * 0.13) + Math.sin(x * (0.006 + L * 0.002) + t * 0.25 * (L + 1) + L) * h * 0.05
+          + Math.sin(x * 0.021 + L * 3) * h * 0.02;
+        c.lineTo(x, y);
+      }
+      c.lineTo(w, h); c.closePath(); c.fill();
+      c.fillStyle = 'rgba(255,255,255,.07)'; c.fillRect(0, 0, w, h);
+    }
+  },
+  red(c, t, w, h) {
+    c.fillStyle = '#7e0b10'; c.fillRect(0, 0, w, h);
+    c.fillStyle = 'rgba(0,0,0,.2)';
+    for (let i = 0; i < 20; i++) c.fillRect(((i * 64 + t * 40) % (w + 64)) - 64, 0, 30, h);
+    const r = c.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, h * 0.7);
+    r.addColorStop(0, 'rgba(255,190,150,.45)'); r.addColorStop(1, 'rgba(255,190,150,0)');
+    c.fillStyle = r; c.fillRect(0, 0, w, h);
+    c.save(); c.translate(w / 2, h / 2); c.rotate(t * 0.6);
+    c.fillStyle = '#f4efe8'; c.fillRect(-h * 0.17, -h * 0.17, h * 0.34, h * 0.34); c.restore();
+  },
+};
+function timecode(c, t, w, h) {
+  const s = Math.floor(t) % 60, f = Math.floor((t % 1) * 25);
+  c.fillStyle = 'rgba(255,255,255,.8)';
+  c.font = `600 ${Math.round(h * 0.045)}px ui-monospace, Menlo, monospace`;
+  c.textAlign = 'right';
+  c.fillText(`00:00:${String(s).padStart(2, '0')}:${String(f).padStart(2, '0')}`, w - h * 0.04, h - h * 0.05);
+  c.textAlign = 'left';
+}
+const PLACEHOLDER_WORKS = [
+  { title: 'Gece Sürüşü', disciplines: 'Kurgu · Motion', client: 'Atlas Otomotiv', slug: 'gece-surusu', scene: 'night' },
+  { title: 'Kıyıda', disciplines: 'Kurgu', client: 'Ege Turizm', slug: 'kiyida', scene: 'coast' },
+  { title: 'Neon', disciplines: 'Kurgu · Motion', client: 'Pulse Records', slug: 'neon', scene: 'neon' },
+  { title: 'Hareket', disciplines: 'Motion · Grafik', client: 'Studio Kare', slug: 'hareket', scene: 'type' },
+  { title: 'Orman', disciplines: 'Kurgu', client: 'Doğa Derneği', slug: 'orman', scene: 'forest' },
+  { title: 'Kırmızı Oda', disciplines: 'Kurgu · Grafik', client: 'Sahne Tiyatrosu', slug: 'kirmizi-oda', scene: 'red' },
+];
+const SCENE_KEYS = Object.keys(SCENES);
+
+/* =====================================================================================
+   WebGL
+   ===================================================================================== */
+const canvas = $('#gl');
+const gl = canvas.getContext('webgl2', { alpha: false, antialias: false, premultipliedAlpha: false });
+if (!gl) { fail('This prototype needs WebGL2.'); throw new Error('no webgl2'); }
+const floatOk = !!gl.getExtension('EXT_color_buffer_float') || !!gl.getExtension('EXT_color_buffer_half_float');
+const HALF = floatOk ? { internal: gl.RGBA16F, format: gl.RGBA, type: gl.HALF_FLOAT } : {};
+
+function compile(type, src, label) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+    const numbered = src.split('\n').map((l, i) => `${String(i + 1).padStart(3)} ${l}`).join('\n');
+    fail(`Shader "${label}" failed:\n${gl.getShaderInfoLog(s)}\n\n${numbered}`);
+    return null;
+  }
+  return s;
+}
+function program(vs, fs, label) {
+  const p = gl.createProgram();
+  const a = compile(gl.VERTEX_SHADER, vs, label + ' (vs)'), b = compile(gl.FRAGMENT_SHADER, fs, label + ' (fs)');
+  if (!a || !b) throw new Error('shader ' + label);
+  gl.attachShader(p, a); gl.attachShader(p, b);
+  gl.bindAttribLocation(p, 0, 'aPos');
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) { fail(`Link "${label}": ${gl.getProgramInfoLog(p)}`); throw new Error('link'); }
+  const cache = new Map();
+  const loc = (n) => { if (!cache.has(n)) cache.set(n, gl.getUniformLocation(p, n)); return cache.get(n); };
+  return {
+    use() { gl.useProgram(p); return this; },
+    f(n, ...v) {
+      const l = loc(n); if (l === null) return this;
+      if (v.length === 1) gl.uniform1f(l, v[0]); else if (v.length === 2) gl.uniform2f(l, v[0], v[1]);
+      else if (v.length === 3) gl.uniform3f(l, v[0], v[1], v[2]); else gl.uniform4f(l, v[0], v[1], v[2], v[3]);
+      return this;
+    },
+    tex(n, t, unit) {
+      gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, t);
+      const l = loc(n); if (l !== null) gl.uniform1i(l, unit);
+      return this;
+    },
+  };
+}
+function makeTex(w, h, { internal = gl.RGBA8, format = gl.RGBA, type = gl.UNSIGNED_BYTE, mips = false } = {}) {
+  const t = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texImage2D(gl.TEXTURE_2D, 0, internal, w, h, 0, format, type, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, mips ? gl.LINEAR_MIPMAP_LINEAR : gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  return t;
+}
+function makeTarget(w, h, opts) {
+  const tex = makeTex(w, h, opts);
+  const fbo = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  return { tex, fbo, w, h };
+}
+function freeTarget(t) { if (t) { gl.deleteTexture(t.tex); gl.deleteFramebuffer(t.fbo); } }
+function pingpong(w, h) {
+  return { read: makeTarget(w, h, HALF), write: makeTarget(w, h, HALF), w, h,
+    swap() { const r = this.read; this.read = this.write; this.write = r; },
+    free() { freeTarget(this.read); freeTarget(this.write); } };
+}
+
+/* ---------------- shaders ---------------- */
+const QUAD_VERT = `#version 300 es
+in vec2 aPos;
+out vec2 vUv;
+void main() { vUv = aPos; gl_Position = vec4(aPos * 2.0 - 1.0, 0.0, 1.0); }`;
+
+const GEOM = `
+const float RADIUS = ${RADIUS.toFixed(3)};
+const float RADIUS_STEP = ${RADIUS_STEP.toFixed(4)};
+const float CAMERA_Z = ${CAMERA_Z.toFixed(1)};
+const float NEAR = ${NEAR.toFixed(2)};
+const float FAR = ${FAR.toFixed(1)};
+const float BEND = ${BEND.toFixed(2)};
+`;
+
+const CARD_VERT = `#version 300 es
+in vec2 aPos;
+uniform float uIndex, uProgress, uCount, uAngleStep, uPitch, uVelocity, uFocal, uAspect, uScale;
+uniform vec2 uCard;
+out vec2 vUv;
+out float vDepth;
+${GEOM}
+void main() {
+  vUv = aPos;
+  vec2 local = (aPos - 0.5) * uCard;
+  float F = floor(uCount * 0.5);
+  float slot = mod(uIndex - uProgress + F, uCount) - F;
+  float baseAngle = slot * uAngleStep;
+  float baseY = -slot * uPitch;
+  float ty = (aPos.y - 0.5) * 2.0;
+  baseAngle += uVelocity * BEND * ty * ty * uAngleStep * 0.5;
+  float r = RADIUS + slot * RADIUS_STEP;
+  float theta = baseAngle + local.x / r;
+  vec3 p = vec3(sin(theta) * r, local.y + baseY, cos(theta) * r);
+  float vz = p.z - CAMERA_Z;
+  vDepth = -vz;
+  gl_Position = vec4(p.x * uFocal / uAspect * uScale, p.y * uFocal * uScale,
+                     ((FAR + NEAR) * vz + 2.0 * FAR * NEAR) / (NEAR - FAR), -vz);
+}`;
+
+const CARD_FRAG = `#version 300 es
+precision highp float;
+in vec2 vUv;
+in float vDepth;
+uniform sampler2D uMap;
+uniform vec2 uImageRatio;
+uniform vec3 uBg;
+uniform float uHover, uDim, uEntry;
+layout(location = 0) out vec4 outScene;  // rgb, a = nearness
+layout(location = 1) out vec4 outMeta;   // r = absent (entry), g = dim, b = hover, a = card
+void main() {
+  vec2 uv = (vUv - 0.5) * uImageRatio + 0.5;
+  if (!gl_FrontFacing) uv.x = 1.0 - uv.x;   // cards past the side show their back: keep the picture readable
+  vec3 c = texture(uMap, uv).rgb;
+  float fog = smoothstep(8.0, 20.6, vDepth) * (1.0 - uHover);
+  c = mix(c, uBg, fog * 0.35);   // a little haze; the melt does the rest
+  outScene = vec4(c, 1.0 - fog);
+  outMeta = vec4(uEntry, uDim, uHover, 1.0);
+}`;
+
+/* The Showreel: the front slot's card mesh, interpolated in screen space from full-bleed (0) to
+   its slot on the cylinder (1), with the crop window widening from the viewport's shape to 16:9. */
+const REEL_VERT = `#version 300 es
+in vec2 aPos;
+uniform vec2 uCard;
+uniform float uFocal, uAspect, uZoom, uHelixScale, uSlot, uAngleStep, uPitch;
+out vec2 vUv;
+${GEOM}
+void main() {
+  vUv = aPos;
+  vec2 local = (aPos - 0.5) * uCard;
+  float r = RADIUS + uSlot * RADIUS_STEP;            // uSlot: 0 while zooming; its card's slot while melting
+  float theta = uSlot * uAngleStep + local.x / r;
+  vec3 p = vec3(sin(theta) * r, local.y - uSlot * uPitch, cos(theta) * r);
+  float w = CAMERA_Z - p.z;
+  vec2 cardNdc = vec2(p.x * uFocal / uAspect, p.y * uFocal) / w * uHelixScale;
+  vec2 screenNdc = aPos * 2.0 - 1.0;
+  gl_Position = vec4(mix(screenNdc, cardNdc, uZoom), 0.0, 1.0);
+}`;
+const REEL_FRAG = `#version 300 es
+precision highp float;
+in vec2 vUv;
+uniform sampler2D uMap;
+uniform vec2 uScale0, uScale1;
+uniform float uZoom;
+out vec4 o;
+void main() {
+  vec2 uv = (vUv - 0.5) * mix(uScale0, uScale1, uZoom) + 0.5;
+  o = vec4(texture(uMap, uv).rgb, 1.0);
+}`;
+
+const HEAD = `#version 300 es
+precision highp float;
+in vec2 vUv;
+out vec4 o;
+`;
+const NOISE = `
+float hash12(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+float vnoise(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash12(i), hash12(i + vec2(1.0, 0.0)), u.x),
+             mix(hash12(i + vec2(0.0, 1.0)), hash12(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+float fbm(vec2 p) { float a = 0.5, s = 0.0; for (int i = 0; i < 4; i++) { s += a * vnoise(p); p = p * 2.03 + 17.1; a *= 0.5; } return s; }
+float seg(vec2 p, vec2 a, vec2 b, float asp) {
+  p.x *= asp; a.x *= asp; b.x *= asp;
+  vec2 pa = p - a, ba = b - a;
+  float h = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-6), 0.0, 1.0);
+  return length(pa - ba * h);
+}
+`;
+/* The single progression every job reads: how melted a pixel is. Edge band, depth into the spiral,
+   being a card you aren't pointing at, and not having appeared yet. The pointed-at card is exempt
+   from the first two. 1 = fully melted = page colour. */
+const MELT = `
+uniform sampler2D uScene;
+uniform sampler2D uMeta;
+uniform sampler2D uReel;
+uniform vec2 uRes;
+uniform float uBand, uFar, uDim, uTime, uSpeed, uDir, uShift;
+float aspect() { return uRes.x / uRes.y; }
+float edgeOf(vec2 uv) { float d = abs(uv.y - 0.5) * 2.0; return pow(smoothstep(uBand, 1.0, d), 1.65); }
+float meltOf(vec2 uv) {
+  vec4 s = texture(uScene, uv);
+  vec4 m = texture(uMeta, uv);
+  float keep = 1.0 - m.b;
+  float v = max(edgeOf(uv) * keep, (1.0 - s.a) * uFar * keep);
+  v = max(v, m.g * uDim);
+  v = max(v, m.r);
+  return clamp(v, 0.0, 1.0);
+}
+vec3 sceneAt(vec2 uv, float lod) { return textureLod(uScene, clamp(uv, 0.001, 0.999), lod).rgb; }
+vec4 reelAt(vec2 uv, float lod) {
+  if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return vec4(0.0);
+  return textureLod(uReel, uv, lod);   // premultiplied: outside the reel is (0,0,0,0)
+}
+`;
+const COMP = `
+uniform sampler2D uSim;
+uniform vec2 uSimTexel;
+uniform vec3 uBg;
+uniform float uMelt, uReelOn;
+uniform vec2 uReelCenter;
+uniform vec4 uP;
+vec3 over(vec3 c, vec4 r) { return c * (1.0 - r.a) + r.rgb; }
+`;
+
+const VARIANT_MAIN = {
+  drip: `
+float column(float x, float seed) { float f = uP.y; return vnoise(vec2(x * f, seed)) * 0.65 + vnoise(vec2(x * f * 2.7, seed + 9.1)) * 0.35; }
+void main() {
+  vec2 uv = vUv;
+  float heat = texture(uSim, uv).b;
+  float m0 = meltOf(uv);
+  float m = clamp(m0 + heat * uP.w * (1.0 - m0) * 0.8 + uSpeed * uP.z * 0.45 * (0.25 + m0), 0.0, 1.0);
+  float o1 = uP.x * pow(m, 1.5) * (0.2 + column(uv.x, 1.3));
+  vec3 acc = vec3(0.0);
+  for (int i = 0; i < 7; i++) { float k = float(i) / 6.0; acc += sceneAt(uv + vec2(0.0, o1 * (0.55 + 0.45 * k)), m * 1.5); }
+  vec3 c = acc / 7.0;
+  c = mix(c, uBg, smoothstep(0.55, 1.0, m));
+  if (uReelOn > 0.5) {
+    float start = column(uv.x, 5.7) * 0.6;
+    float pr = clamp((uMelt - start) / 0.4, 0.0, 1.0);
+    float oR = pr * pr * (0.6 + column(uv.x, 2.2)) * 1.2;
+    vec4 r = vec4(0.0);
+    for (int i = 0; i < 7; i++) { float k = float(i) / 6.0; r += reelAt(uv + vec2(0.0, oR * (0.55 + 0.45 * k)), pr * 2.0); }
+    r /= 7.0;
+    r *= 1.0 - smoothstep(0.4, 1.0, pr);
+    c = over(c, r);
+  }
+  o = vec4(c, 1.0);
+}`,
+  fluid: `
+void main() {
+  vec2 uv = vUv;
+  vec2 D = texture(uSim, uv).xy;
+  float m0 = meltOf(uv);
+  vec2 src = uv + D * mix(0.35, 1.0, m0);   // sharp = nearly solid, melted = liquid
+  float dl = length(D * vec2(aspect(), 1.0));
+  float m = meltOf(src);
+  vec3 c = sceneAt(src, clamp(dl * 50.0, 0.0, 3.0) + m * 1.2);
+  c = mix(c, uBg, smoothstep(0.55, 1.0, m));
+  if (uReelOn > 0.5) {
+    vec2 rs = mix(uv, uv + D, smoothstep(0.0, 0.15, uMelt));
+    vec4 r = reelAt(rs, clamp(dl * 50.0, 0.0, 3.0) * uMelt);
+    float n = fbm(rs * vec2(aspect(), 1.0) * 5.0);
+    float th = uMelt * 1.15 - 0.12;
+    r *= smoothstep(th, th + 0.1, n);
+    c = over(c, r);
+  }
+  o = vec4(c, 1.0);
+}`,
+  glass: `
+void main() {
+  vec2 uv = vUv;
+  vec2 t = uSimTexel;
+  float hl = texture(uSim, uv - vec2(t.x, 0.0)).r, hr = texture(uSim, uv + vec2(t.x, 0.0)).r;
+  float hd = texture(uSim, uv - vec2(0.0, t.y)).r, hu = texture(uSim, uv + vec2(0.0, t.y)).r;
+  vec2 n = vec2(hr - hl, hu - hd);
+  float m = meltOf(uv);
+  vec2 q = (uv - vec2(0.0, uShift)) * vec2(aspect(), 1.0);
+  float ts = uTime * uP.y;
+  vec2 haze = vec2(fbm(q * vec2(2.0, 4.0) + vec2(0.0, -ts)), fbm(q * vec2(2.0, 4.0) + vec2(5.2, -ts * 1.2))) - 0.47;
+  vec2 off = n * uP.x * 0.25 + haze * m * 0.07 * (1.0 + uSpeed * 2.0);
+  float ca = uP.w * 0.006 * (m + length(n) * 6.0);
+  float lod = m * 2.5;
+  vec3 c = vec3(sceneAt(uv + off + vec2(ca, 0.0), lod).r, sceneAt(uv + off, lod).g, sceneAt(uv + off - vec2(ca, 0.0), lod).b);
+  vec3 nn = normalize(vec3(-n * uP.x * 12.0, 1.0));
+  c += pow(clamp(dot(nn, normalize(vec3(0.4, 0.6, 1.0))), 0.0, 1.0), 60.0) * 0.35 * texture(uMeta, uv).a;
+  c = mix(c, uBg, smoothstep(0.55, 1.0, m));
+  if (uReelOn > 0.5) {
+    vec2 rq = (uv - uReelCenter) * vec2(aspect(), 1.0);
+    float dist = length(rq);
+    float R = uMelt * 0.62 - 0.06;
+    float wob = (fbm(rq * 8.0 + uTime) - 0.47) * 0.08;
+    float ring = exp(-pow((dist - R - wob) / 0.035, 2.0)) * step(0.001, uMelt);
+    vec2 rdir = rq / max(dist, 1e-4);
+    vec2 roff = -rdir * ring * 0.035 + off * uMelt;
+    vec4 r = reelAt(uv + roff, ring * 2.0);
+    r *= smoothstep(R - 0.01, R + 0.03, dist + wob);
+    c = over(c, r) + ring * r.a * 0.25;
+  }
+  o = vec4(c, 1.0);
+}`,
+  blobs: `
+float field(vec2 uv, float t) {
+  vec2 q = (uv - vec2(0.0, uShift)) * vec2(aspect(), 1.0) * uP.x;
+  q.y += t;
+  return fbm(q + vec2(fbm(q * 0.5 + t * 0.3), fbm(q * 0.5 - t * 0.2 + 4.0)) * 0.9);
+}
+void main() {
+  vec2 uv = vUv;
+  float heat = texture(uSim, uv).b;
+  float t = uTime * uP.z * 0.25;
+  float m0 = meltOf(uv);
+  float m = clamp(m0 + heat * uP.w * (1.0 - m0) * 0.45 + uSpeed * 0.3 * (0.3 + m0), 0.0, 1.0);
+  float f = field(uv, t);
+  float th = m * 1.05 - 0.08;
+  float s = uP.y;
+  float mask = smoothstep(th - s, th + s, f);
+  vec2 e = vec2(3.0 / uRes.y, 0.0);
+  vec2 g = vec2(field(uv + e.xy, t) - field(uv - e.xy, t), field(uv + e.yx, t) - field(uv - e.yx, t)) / (2.0 * e.x);
+  vec2 src = uv - g * m * 0.004;
+  vec3 c = mix(sceneAt(src, 0.0), sceneAt(src, 4.5), smoothstep(0.1, 0.8, m));
+  float rim = (1.0 - smoothstep(0.0, s * 1.8, abs(f - th))) * smoothstep(0.02, 0.2, m) * texture(uMeta, uv).a;
+  c += rim * 0.22;
+  c = mix(uBg, c, mask);
+  if (uReelOn > 0.5) {
+    float fr = field(uv + vec2(0.0, uMelt * 0.14), t + 2.0);
+    float thr = uMelt * 1.1 - 0.08;
+    float mr = smoothstep(thr - s, thr + s, fr);
+    vec4 r = reelAt(uv + vec2(0.0, uMelt * 0.07) - g * uMelt * 0.004, uMelt * 4.0);
+    float rimR = (1.0 - smoothstep(0.0, s * 1.8, abs(fr - thr))) * step(0.001, uMelt);
+    c = over(c, r * mr) + rimR * r.a * mr * 0.2;
+  }
+  o = vec4(c, 1.0);
+}`,
+};
+
+/* ---------------- simulations ---------------- */
+const TRAIL_FRAG = HEAD + NOISE + `
+uniform sampler2D uState;
+uniform vec2 uTexel, uA, uB;
+uniform float uStrength, uRadius, uDecay, uAspect;
+void main() {
+  float c = texture(uState, vUv).b * 4.0
+    + texture(uState, vUv + vec2(uTexel.x, 0.0)).b + texture(uState, vUv - vec2(uTexel.x, 0.0)).b
+    + texture(uState, vUv + vec2(0.0, uTexel.y)).b + texture(uState, vUv - vec2(0.0, uTexel.y)).b;
+  float heat = c / 8.0 * uDecay;
+  float d = seg(vUv, uA, uB, uAspect);
+  heat += uStrength * exp(-d * d / (uRadius * uRadius));
+  o = vec4(0.0, 0.0, min(heat, 1.5), 1.0);
+}`;
+const WAVE_FRAG = HEAD + NOISE + `
+uniform sampler2D uState;
+uniform vec2 uTexel, uA, uB, uC;
+uniform float uStrength, uRadius, uDamp, uAspect, uCStrength;
+void main() {
+  vec4 s = texture(uState, vUv);
+  float n = texture(uState, vUv + vec2(uTexel.x, 0.0)).r + texture(uState, vUv - vec2(uTexel.x, 0.0)).r
+          + texture(uState, vUv + vec2(0.0, uTexel.y)).r + texture(uState, vUv - vec2(0.0, uTexel.y)).r;
+  float next = (n * 0.5 - s.g) * uDamp;
+  float d = seg(vUv, uA, uB, uAspect);
+  next += uStrength * exp(-d * d / (uRadius * uRadius));
+  vec2 pc = (vUv - uC) * vec2(uAspect, 1.0);
+  next += uCStrength * exp(-dot(pc, pc) / (uRadius * uRadius * 9.0));
+  o = vec4(clamp(next, -4.0, 4.0), s.r, 0.0, 1.0);
+}`;
+// Fluid: the classic stable-fluids loop (after Pavel Dobryakov's WebGL fluid), advecting a
+// displacement field instead of dye so the picture itself smears, then heals.
+const FL = {
+  churn: HEAD + NOISE + MELT + `
+uniform sampler2D uVel;
+uniform float uDt, uChurn, uTurn, uMeltForce;
+void main() {
+  vec2 v = texture(uVel, vUv).xy;
+  float m = meltOf(vUv);
+  vec2 q = (vUv - vec2(0.0, uShift)) * vec2(aspect(), 1.0) * 3.0 + uTime * 0.15;
+  float e = 0.02;
+  vec2 curl = vec2(fbm(q + vec2(0.0, e)) - fbm(q - vec2(0.0, e)), -(fbm(q + vec2(e, 0.0)) - fbm(q - vec2(e, 0.0)))) / (2.0 * e);
+  v += curl * uChurn * m * uDt;
+  v.y += uDir * uSpeed * uTurn * (0.25 + m) * uDt;
+  v += curl * uMeltForce * texture(uReel, vUv).a * uDt;
+  o = vec4(v, 0.0, 1.0);
+}`,
+  splat: HEAD + `
+uniform sampler2D uTarget;
+uniform vec2 uPoint;
+uniform vec3 uColor;
+uniform float uRadius, uAspect;
+void main() {
+  vec2 p = vUv - uPoint; p.x *= uAspect;
+  o = vec4(texture(uTarget, vUv).xyz + exp(-dot(p, p) / uRadius) * uColor, 1.0);
+}`,
+  curl: HEAD + `
+uniform sampler2D uVel; uniform vec2 uTexel;
+void main() {
+  float L = texture(uVel, vUv - vec2(uTexel.x, 0.0)).y, R = texture(uVel, vUv + vec2(uTexel.x, 0.0)).y;
+  float T = texture(uVel, vUv + vec2(0.0, uTexel.y)).x, B = texture(uVel, vUv - vec2(0.0, uTexel.y)).x;
+  o = vec4(0.5 * (R - L - T + B), 0.0, 0.0, 1.0);
+}`,
+  vort: HEAD + `
+uniform sampler2D uVel, uCurl; uniform vec2 uTexel; uniform float uCurlStrength, uDt;
+void main() {
+  float L = texture(uCurl, vUv - vec2(uTexel.x, 0.0)).x, R = texture(uCurl, vUv + vec2(uTexel.x, 0.0)).x;
+  float T = texture(uCurl, vUv + vec2(0.0, uTexel.y)).x, B = texture(uCurl, vUv - vec2(0.0, uTexel.y)).x;
+  float C = texture(uCurl, vUv).x;
+  vec2 force = 0.5 * vec2(abs(T) - abs(B), abs(R) - abs(L));
+  force /= length(force) + 1e-4;
+  force *= uCurlStrength * C; force.y *= -1.0;
+  vec2 v = texture(uVel, vUv).xy + force * uDt;
+  o = vec4(clamp(v, -1000.0, 1000.0), 0.0, 1.0);
+}`,
+  div: HEAD + `
+uniform sampler2D uVel; uniform vec2 uTexel;
+void main() {
+  float L = texture(uVel, vUv - vec2(uTexel.x, 0.0)).x, R = texture(uVel, vUv + vec2(uTexel.x, 0.0)).x;
+  float T = texture(uVel, vUv + vec2(0.0, uTexel.y)).y, B = texture(uVel, vUv - vec2(0.0, uTexel.y)).y;
+  vec2 C = texture(uVel, vUv).xy;
+  if (vUv.x - uTexel.x < 0.0) L = -C.x;
+  if (vUv.x + uTexel.x > 1.0) R = -C.x;
+  if (vUv.y + uTexel.y > 1.0) T = -C.y;
+  if (vUv.y - uTexel.y < 0.0) B = -C.y;
+  o = vec4(0.5 * (R - L + T - B), 0.0, 0.0, 1.0);
+}`,
+  scale: HEAD + `
+uniform sampler2D uSrc; uniform float uK;
+void main() { o = texture(uSrc, vUv) * uK; }`,
+  pressure: HEAD + `
+uniform sampler2D uPressure, uDiv; uniform vec2 uTexel;
+void main() {
+  float L = texture(uPressure, vUv - vec2(uTexel.x, 0.0)).x, R = texture(uPressure, vUv + vec2(uTexel.x, 0.0)).x;
+  float T = texture(uPressure, vUv + vec2(0.0, uTexel.y)).x, B = texture(uPressure, vUv - vec2(0.0, uTexel.y)).x;
+  o = vec4((L + R + B + T - texture(uDiv, vUv).x) * 0.25, 0.0, 0.0, 1.0);
+}`,
+  grad: HEAD + `
+uniform sampler2D uPressure, uVel; uniform vec2 uTexel;
+void main() {
+  float L = texture(uPressure, vUv - vec2(uTexel.x, 0.0)).x, R = texture(uPressure, vUv + vec2(uTexel.x, 0.0)).x;
+  float T = texture(uPressure, vUv + vec2(0.0, uTexel.y)).x, B = texture(uPressure, vUv - vec2(0.0, uTexel.y)).x;
+  o = vec4(texture(uVel, vUv).xy - vec2(R - L, T - B), 0.0, 1.0);
+}`,
+  advVel: HEAD + `
+uniform sampler2D uVel; uniform vec2 uTexel; uniform float uDt, uDiss;
+void main() {
+  vec2 coord = vUv - uDt * texture(uVel, vUv).xy * uTexel;
+  o = vec4(texture(uVel, coord).xy / (1.0 + uDiss * uDt), 0.0, 1.0);
+}`,
+  advDisp: HEAD + `
+uniform sampler2D uVel, uD; uniform vec2 uTexel; uniform float uDt, uRelax;
+void main() {
+  vec2 v = uDt * texture(uVel, vUv).xy * uTexel;
+  vec2 d = texture(uD, vUv - v).xy - v;
+  o = vec4(clamp(d * exp(-uRelax * uDt), -0.2, 0.2), 0.0, 1.0);
+}`,
+};
+
+const progs = {};
+progs.card = program(CARD_VERT, CARD_FRAG, 'card');
+progs.reel = program(REEL_VERT, REEL_FRAG, 'reel');
+for (const v of VARIANTS) progs[v.key] = program(QUAD_VERT, HEAD + NOISE + MELT + COMP + VARIANT_MAIN[v.key], v.key);
+progs.trail = program(QUAD_VERT, TRAIL_FRAG, 'trail');
+progs.wave = program(QUAD_VERT, WAVE_FRAG, 'wave');
+for (const k of Object.keys(FL)) progs['fl_' + k] = program(QUAD_VERT, FL[k], 'fluid ' + k);
+
+/* ---------------- geometry ---------------- */
+const COLS = 40, ROWS = 8;
+const verts = [];
+for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
+  const x0 = x / COLS, x1 = (x + 1) / COLS, y0 = y / ROWS, y1 = (y + 1) / ROWS;
+  verts.push(x0, y0, x1, y0, x0, y1, x0, y1, x1, y0, x1, y1);
+}
+const cardMesh = gl.createVertexArray();
+gl.bindVertexArray(cardMesh);
+gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(verts), gl.STATIC_DRAW);
+gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+const cardVertexCount = verts.length / 2;
+const quad = gl.createVertexArray();
+gl.bindVertexArray(quad);
+gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 1]), gl.STATIC_DRAW);
+gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+function drawQuad(target) {
+  gl.bindFramebuffer(gl.FRAMEBUFFER, target ? target.fbo : null);
+  gl.viewport(0, 0, target ? target.w : W, target ? target.h : H);
+  gl.bindVertexArray(quad);
+  gl.drawArrays(gl.TRIANGLES, 0, 6);
+}
+
+/* ---------------- media ---------------- */
+function makeMediaTex() {
+  const t = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([40, 40, 40, 255]));
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.generateMipmap(gl.TEXTURE_2D);
+  return t;
+}
+function upload(tex, source) {
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+  gl.generateMipmap(gl.TEXTURE_2D);
+}
+function makeCanvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+
+let works = [];
+function setWorks(list) {
+  for (const w of works) { gl.deleteTexture(w.tex); if (w.video) { w.video.pause(); URL.revokeObjectURL(w.video.src); } }
+  works = list.map((w, i) => {
+    const canvas2 = w.video ? null : makeCanvas(512, 288);
+    const item = { ...w, canvas: canvas2, ctx: canvas2 && canvas2.getContext('2d'), tex: makeMediaTex(), aspect: RATIO, offset: rnd(i + 3) * 20 };
+    if (item.ctx) { SCENES[item.scene](item.ctx, item.offset, 512, 288); timecode(item.ctx, item.offset, 512, 288); upload(item.tex, item.canvas); }
+    return item;
+  });
+  const repeats = Math.ceil(MIN_CARDS / works.length);
+  cards = Array.from({ length: works.length * repeats }, (_, i) => ({ work: i % works.length }));
+  dim = new Float32Array(cards.length); hover = new Float32Array(cards.length); entry = new Float32Array(cards.length);
+  const order = cards.map((_, i) => i).sort(() => Math.random() - 0.5);
+  delay = new Float32Array(cards.length);
+  order.forEach((ci, rank) => { delay[ci] = ci === 0 ? 0 : 0.08 + (rank / cards.length) * 0.55; });
+}
+let cards = [], dim, hover, entry, delay;
+setWorks(PLACEHOLDER_WORKS);
+
+const showreel = { canvas: makeCanvas(960, 540), tex: makeMediaTex(), aspect: RATIO, video: null };
+showreel.ctx = showreel.canvas.getContext('2d');
+function drawShowreel(t) {
+  const c = showreel.ctx, w = 960, h = 540, cut = 1.3;
+  const idx = Math.floor(t / cut) % SCENE_KEYS.length;
+  const push = 1 + (t % cut) * 0.06;
+  c.save(); c.translate(w / 2, h / 2); c.scale(push, push); c.translate(-w / 2, -h / 2);
+  SCENES[SCENE_KEYS[idx]](c, t + idx * 7, w, h);
+  c.restore();
+  timecode(c, t, w, h);
+}
+
+/* ---------------- targets ---------------- */
+let W = 0, H = 0, cssW = 0, cssH = 0;
+let scene = null, reelT = null, sims = {};
+let focalK = FOCAL, S0 = 3;
+function allocScreen() {
+  if (scene) { gl.deleteTexture(scene.tex); gl.deleteTexture(scene.meta); gl.deleteRenderbuffer(scene.depth); gl.deleteFramebuffer(scene.fbo); }
+  freeTarget(reelT);
+  const tex = makeTex(W, H, { mips: true }), meta = makeTex(W, H);
+  const fbo = gl.createFramebuffer(), depth = gl.createRenderbuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, meta, 0);
+  gl.bindRenderbuffer(gl.RENDERBUFFER, depth);
+  gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, W, H);
+  gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depth);
+  gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1]);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  scene = { tex, meta, fbo, depth };
+  reelT = makeTarget(W, H, { mips: true });
+  for (const k of Object.keys(sims)) sims[k].free();
+  sims = {};
+}
+function layout() {
+  const asp = cssW / cssH;
+  // Fit the front card to at most 86% of the width on narrow screens.
+  const theta = (CARD_H * RATIO) / 2 / RADIUS;
+  const ex = Math.sin(theta) * RADIUS, ez = Math.cos(theta) * RADIUS;
+  const hw1 = (ex * FOCAL) / asp / (CAMERA_Z - ez);
+  focalK = FOCAL * Math.min(1, 0.86 / hw1);
+  // The helix scale at which the front card covers the viewport (start of the pull-back).
+  const hw = (ex * focalK) / asp / (CAMERA_Z - ez);
+  const hh = ((CARD_H / 2) * focalK) / (CAMERA_Z - ez);
+  S0 = Math.max(1 / hw, 1 / hh) * 1.02;
+}
+function resize() {
+  cssW = canvas.clientWidth; cssH = canvas.clientHeight;
+  if (!cssW || !cssH) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  W = canvas.width = Math.round(cssW * dpr);
+  H = canvas.height = Math.round(cssH * dpr);
+  allocScreen(); layout(); setSpacer();
+}
+new ResizeObserver(resize).observe(canvas);
+
+function simFor(key) {
+  if (sims[key]) return sims[key];
+  const asp = cssW / cssH;
+  if (key === 'fluid') {
+    const h = 180, w = Math.max(8, Math.round(h * asp));
+    sims.fluid = { w, h, vel: pingpong(w, h), pressure: pingpong(w, h), disp: pingpong(w, h),
+      div: makeTarget(w, h, HALF), curl: makeTarget(w, h, HALF),
+      free() { this.vel.free(); this.pressure.free(); this.disp.free(); freeTarget(this.div); freeTarget(this.curl); } };
+  } else if (key === 'glass') {
+    const h = Math.min(320, Math.round(cssH / 2.5)), w = Math.max(8, Math.round(h * asp));
+    sims.glass = Object.assign(pingpong(w, h), {});
+  } else {
+    const h = 160, w = Math.max(8, Math.round(h * asp));
+    sims[key] = pingpong(w, h);
+  }
+  return sims[key];
+}
+
+/* =====================================================================================
+   State
+   ===================================================================================== */
+let cur = Math.max(0, VARIANTS.findIndex((v) => v.key === new URLSearchParams(location.search).get('melt')));
+let phase = 'hero';            // 'hero' (scroll-scrubbed zoom) | 'melt' (timed) | 'helix' (committed)
+let sTarget = 0, sSmooth = 0, meltStart = 0, meltP = 0, meltKick = false;
+let progress = 0, goal = 0, velocity = 0, smoothed = 0, lastInput = 0, snapped = true, tween = null;
+let pv = 0, settling = false, settleTo = 0, inputDir = 0, lastKind = 'wheel';   // pv: turning speed, cards/s
+/* All turning input goes through here: the Helix follows the input; when the input ends it settles. */
+function nudge(delta, kind) {
+  tween = null; goal += delta; lastInput = performance.now(); snapped = false; settling = false;
+  if (delta) inputDir = Math.sign(delta);
+  lastKind = kind;
+}
+/* Settling: aim for the next card in the direction of travel (unless the move barely left the last
+   one), then a critically damped spring takes over from the current speed, so the motion glides
+   into the card instead of stopping and starting again. */
+function startSettle() {
+  snapped = true; settling = true;
+  const x = goal + pv * 0.08;
+  const f = x - Math.floor(x);
+  const d = inputDir || Math.sign(pv);
+  settleTo = d > 0 ? Math.floor(x) + (f > 0.12 ? 1 : 0) : d < 0 ? Math.floor(x) + (f > 0.88 ? 1 : 0) : Math.round(x);
+}
+let hovered = -1, pointerSpeed = 0;
+const ptr = { x: -1, y: -1 }, ptrFrame = { x: -1, y: -1 };
+let movedPx = 0, ptrUv = [0.5, 0.5], ptrUvLast = [0.5, 0.5];
+let lastNow = 0, playing = 0, front = 0;
+
+function scrollRangePx() { return (innerHeight * G.scrollVh) / 100; }
+function setSpacer() { $('#spacer').style.height = `calc(100vh + ${G.scrollVh}vh)`; }
+addEventListener('scroll', () => { if (phase === 'hero') sTarget = scrollY / scrollRangePx(); }, { passive: true });
+
+function lock() { document.documentElement.classList.add('locked'); }
+function replay() {
+  document.documentElement.classList.remove('locked');
+  phase = 'hero'; scrollTo(0, 0); sTarget = sSmooth = 0; meltP = 0; meltKick = false;
+  progress = goal = 0; tween = null; snapped = true; hovered = -1; pv = 0; settling = false; inputDir = 0;
+  dim.fill(0); hover.fill(0);
+  for (const k of Object.keys(sims)) sims[k].free();
+  sims = {};
+}
+
+/* ---------------- projection & picking (CSS px) ---------------- */
+function slotOf(i) { const n = cards.length, F = Math.floor(n / 2); return ((((i - progress + F) % n) + n) % n) - F; }
+function project(i) {
+  const slot = slotOf(i);
+  const angle = slot * TWIST, r = RADIUS + slot * RADIUS_STEP;
+  const y = -slot * RISE * CARD_H, z = Math.cos(angle) * r;
+  const away = CAMERA_Z - z;
+  if (away <= NEAR) return null;
+  const asp = cssW / cssH;
+  return {
+    x: ((Math.sin(angle) * r * focalK) / asp / away * 0.5 + 0.5) * cssW,
+    y: (0.5 - ((y * focalK) / away) * 0.5) * cssH,
+    halfW: ((CARD_H * RATIO * focalK) / asp / away) * 0.25 * cssW,
+    halfH: ((CARD_H * focalK) / away) * 0.25 * cssH,
+    away, slot,
+  };
+}
+function pick(px, py) {
+  let best = -1, bestAway = Infinity;
+  for (let i = 0; i < cards.length; i++) {
+    const at = project(i);
+    if (!at || Math.abs(px - at.x) > at.halfW || Math.abs(py - at.y) > at.halfH) continue;
+    if (at.away < bestAway) { bestAway = at.away; best = i; }
+  }
+  return best;
+}
+
+/* ---------------- input ---------------- */
+addEventListener('wheel', (e) => {
+  if (phase === 'hero') return;           // the page scrolls natively and scrubs the zoom
+  e.preventDefault();
+  nudge(e.deltaY * (e.deltaMode === 1 ? 16 : 1) * WHEEL, 'wheel');
+}, { passive: false });
+
+let dragFrom = null, dragTravel = 0;
+canvas.addEventListener('pointerdown', (e) => {
+  if (phase === 'hero') return;
+  dragFrom = e.clientY; dragTravel = 0; tween = null;
+  canvas.setPointerCapture(e.pointerId);
+});
+canvas.addEventListener('pointermove', (e) => {
+  const b = canvas.getBoundingClientRect();
+  ptr.x = e.clientX - b.left; ptr.y = e.clientY - b.top;
+  if (dragFrom !== null) {
+    const travel = dragFrom - e.clientY;
+    dragTravel += Math.abs(travel); dragFrom = e.clientY;
+    nudge(travel * DRAG, 'drag');
+  }
+});
+function onUp() {
+  const wasClick = dragFrom !== null && dragTravel < CLICK_SLOP;
+  dragFrom = null;
+  if (wasClick) clickAt(ptr.x, ptr.y);
+}
+/* A click on the Helix: the front card opens its Work, any other card turns to the front. */
+function clickAt(x, y) {
+  if (phase === 'hero') return;
+  const hit = pick(x, y);
+  if (hit < 0) return;
+  if (Math.abs(slotOf(hit)) < 0.5) openWork(hit);
+  else { const to = hit + Math.round((goal - hit) / cards.length) * cards.length; tween = { from: goal, to, at: performance.now() }; snapped = true; settling = false; }
+}
+canvas.addEventListener('pointerup', onUp);
+canvas.addEventListener('pointercancel', onUp);
+canvas.addEventListener('pointerleave', () => { ptr.x = ptr.y = -1; ptrFrame.x = ptrFrame.y = -1; hovered = -1; });
+
+addEventListener('keydown', (e) => {
+  if (e.target.matches && e.target.matches('input, textarea, [contenteditable]')) return;
+  if (e.key === 'h' || e.key === 'H') { document.documentElement.classList.toggle('bare'); return; }
+  if (e.key === 'ArrowLeft') { setVariant(cur - 1); e.preventDefault(); return; }
+  if (e.key === 'ArrowRight') { setVariant(cur + 1); e.preventDefault(); return; }
+  if (phase === 'hero') return;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    const by = e.key === 'ArrowDown' ? 1 : -1;
+    tween = { from: settling ? settleTo : goal, to: Math.round(settling ? settleTo : goal) + by, at: performance.now() }; snapped = true; settling = false; e.preventDefault();
+  } else if (e.key === 'Enter') openWork(front);
+});
+
+let toastTimer = 0;
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('on'), 2200); }
+function openWork(i) { const w = works[cards[i].work]; toast(`→ /isler/${w.slug}  (the Work page, not part of this prototype)`); }
+$('#sound').addEventListener('click', (e) => { e.preventDefault(); toast('Sesli izle → the click-to-load full-length Showreel (ADR-0102)'); });
+
+/* ---------------- your own videos ---------------- */
+function videoFrom(file) {
+  const v = document.createElement('video');
+  v.muted = true; v.loop = true; v.playsInline = true; v.preload = 'auto';
+  v.src = URL.createObjectURL(file);
+  return v;
+}
+$('#reel-file').addEventListener('change', (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  if (showreel.video) { showreel.video.pause(); URL.revokeObjectURL(showreel.video.src); }
+  showreel.video = videoFrom(f);
+  showreel.video.addEventListener('loadedmetadata', () => { showreel.aspect = showreel.video.videoWidth / showreel.video.videoHeight; });
+  showreel.video.play().catch(() => {});
+  toast(`Showreel: ${f.name}`);
+});
+$('#loop-files').addEventListener('change', (e) => {
+  const files = [...e.target.files]; if (!files.length) return;
+  setWorks(files.map((f, i) => ({ title: f.name.replace(/\.[^.]+$/, ''), disciplines: 'Kurgu', client: '—', slug: `is-${i + 1}`, video: videoFrom(f) })));
+  works.forEach((w) => w.video.addEventListener('loadedmetadata', () => {
+    w.aspect = w.video.videoWidth / w.video.videoHeight;
+    if (Math.abs(w.video.videoWidth - (w.video.videoHeight * 16) / 9) > 2) toast(`${w.title} is not 16:9: the CMS would refuse to feature it (#43). Cropped here.`);
+  }));
+  toast(`${files.length} loop${files.length > 1 ? 's' : ''} → ${cards.length} cards`);
+});
+
+/* ---------------- prototype UI ---------------- */
+function setVariant(i) {
+  cur = (i + VARIANTS.length) % VARIANTS.length;
+  const v = VARIANTS[cur];
+  $('#label').textContent = `${String.fromCharCode(65 + cur)} · ${v.name}`;
+  try { history.replaceState(null, '', `?melt=${v.key}`); } catch { /* file:// in some browsers */ }
+  for (const k of Object.keys(sims)) sims[k].free();
+  sims = {};
+  buildPanel();
+}
+function slider(parent, label, min, max, step, value, onInput, fmt = (x) => (+x).toFixed(2)) {
+  const l = document.createElement('label');
+  l.innerHTML = `<span>${label}</span><output>${fmt(value)}</output><input type="range" min="${min}" max="${max}" step="${step}" value="${value}">`;
+  const input = l.querySelector('input'), out = l.querySelector('output');
+  input.addEventListener('input', () => { out.textContent = fmt(input.value); onInput(+input.value); });
+  parent.appendChild(l);
+}
+function buildPanel() {
+  const p = $('#panel'); p.innerHTML = '';
+  const v = VARIANTS[cur];
+  p.insertAdjacentHTML('beforeend', `<h3>${String.fromCharCode(65 + cur)} · ${v.name}</h3><p>${v.note}</p>`);
+  v.params.forEach((q, i) => slider(p, q.label, q.min, q.max, q.step, v.values[i], (x) => { v.values[i] = x; }));
+  p.insertAdjacentHTML('beforeend', '<h3>Shared</h3>');
+  slider(p, 'Sharp band (0 = no sharp band)', 0, 0.8, 0.01, G.band, (x) => { G.band = x; });
+  slider(p, 'Far cards melt', 0, 1, 0.01, G.far, (x) => { G.far = x; });
+  slider(p, 'Cards you aren’t pointing at melt', 0, 1, 0.01, G.dim, (x) => { G.dim = x; });
+  slider(p, 'Showreel melt, seconds', 0.6, 3, 0.05, G.meltDur, (x) => { G.meltDur = x; });
+  slider(p, 'Scroll length for the zoom, vh', 60, 300, 5, G.scrollVh, (x) => { G.scrollVh = x; setSpacer(); }, (x) => String(Math.round(x)));
+  slider(p, 'Spin while zooming, cards', 0, 6, 0.1, G.spin, (x) => { G.spin = x; });
+  slider(p, 'Settle into a card, s', 0.25, 1.2, 0.05, G.settle, (x) => { G.settle = x; });
+  const row = document.createElement('div'); row.className = 'row';
+  row.innerHTML = `<label style="display:flex;gap:6px;margin:0"><input type="checkbox" ${G.pullBack ? 'checked' : ''}> camera pull-back</label>
+    <select><option value="dark">dark page</option><option value="light">light page</option></select>`;
+  row.querySelector('input').addEventListener('change', (e) => { G.pullBack = e.target.checked; });
+  const sel = row.querySelector('select'); sel.value = G.tone;
+  sel.addEventListener('change', (e) => { G.tone = e.target.value; document.documentElement.dataset.tone = G.tone; });
+  p.appendChild(row);
+  if (camCapable) {
+    p.insertAdjacentHTML('beforeend', '<h3>Camera</h3><p>The index fingertip explores (the ring is the cursor). Pinch index and thumb and move to scroll or turn; let go to release. A quick pinch clicks. The status shows the live pinch value.</p>');
+    slider(p, 'Grab sensitivity', 1, 15, 0.5, G.camSens, (x) => { G.camSens = x; }, (x) => (+x).toFixed(1));
+    slider(p, 'Pinch closes below (thumb–index gap ÷ palm)', 0.15, 0.6, 0.01, G.camPinch, (x) => { G.camPinch = x; });
+  }
+}
+$('#prev').addEventListener('click', () => setVariant(cur - 1));
+$('#next').addEventListener('click', () => setVariant(cur + 1));
+$('#toggle').addEventListener('click', () => { $('#panel').hidden = !$('#panel').hidden; });
+$('#replay').addEventListener('click', replay);
+setVariant(cur);
+
+/* =====================================================================================
+   Camera finger steering (desktop, opt-in)
+   ===================================================================================== */
+const MP = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
+const MODEL = 'https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/1/gesture_recognizer.task';
+const cam = { on: false, status: 'off', stream: null, video: $('#cam-video'), recognizer: null, lastTime: -1,
+  miss: 0, y: null, fx: null, fy: null, ownsPtr: false,
+  pinched: false, pstreak: 0, ratio: 0, pinchAt: 0, releasedAt: -1e9, travel: 0, off: { x: 0, y: 0 }, last: null, hist: [] };
+const CLICK_MS_CAM = 350, CLICK_TRAVEL_CAM = 0.03;   // a quick pinch: shorter than this, moving less than this (frame heights)
+if (!camCapable) $('#cam-btn').hidden = true;
+
+function oneEuro(minCutoff = 1.2, beta = 0.02, dCutoff = 1) {
+  let x = null, dx = 0, t = 0;
+  const alpha = (cutoff, dt) => 1 / (1 + 1 / (2 * Math.PI * cutoff) / dt);
+  return (v, now) => {
+    if (x === null) { x = v; t = now; return v; }
+    const dt = Math.max((now - t) / 1000, 1e-3); t = now;
+    dx += alpha(dCutoff, dt) * ((v - x) / dt - dx);
+    x += alpha(minCutoff + beta * Math.abs(dx), dt) * (v - x);
+    return x;
+  };
+}
+async function loadRecognizer() {
+  const { FilesetResolver, GestureRecognizer } = await import(`${MP}/vision_bundle.mjs`);
+  const files = await FilesetResolver.forVisionTasks(`${MP}/wasm`);
+  const make = (delegate) => GestureRecognizer.createFromOptions(files, {
+    baseOptions: { modelAssetPath: MODEL, delegate }, runningMode: 'VIDEO', numHands: 1 });
+  try { return await make('GPU'); } catch (err) { console.warn('GPU delegate failed, using CPU', err); return await make('CPU'); }
+}
+function setCam(status) { cam.status = status; $('#cam-status').textContent = status; $('#cam-btn').classList.toggle('active', cam.on); }
+function stopTracks() { if (cam.stream) { for (const t of cam.stream.getTracks()) t.stop(); cam.stream = null; } }
+function releasePtr() { if (cam.ownsPtr) { ptr.x = ptr.y = -1; ptrFrame.x = ptrFrame.y = -1; cam.ownsPtr = false; } $('#finger').hidden = true; }
+async function cameraOn() {
+  cam.on = true; setCam('starting camera…');
+  try {
+    cam.stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: 'user' }, audio: false });
+  } catch (err) {
+    cameraOff();
+    toast(`Camera blocked (${err.name}). Allow it for this page; Safari may need the file served from localhost.`);
+    return;
+  }
+  if (!cam.on) { stopTracks(); return; }
+  cam.video.srcObject = cam.stream;
+  await cam.video.play().catch(() => {});
+  $('#cam').hidden = false;
+  if (!cam.recognizer) {
+    setCam('loading hand tracking (~18 MB, first time)…');
+    try { cam.recognizer = await loadRecognizer(); }
+    catch (err) { console.error(err); cameraOff(); toast('Couldn’t load hand tracking: it needs internet the first time.'); return; }
+  }
+  if (cam.on) setCam('no hand');
+}
+function cameraOff() {
+  cam.on = false; stopTracks(); cam.video.srcObject = null;
+  $('#cam').hidden = true; releasePtr();
+  cam.pinched = false; cam.pstreak = 0; cam.y = null; cam.fx = cam.fy = null; cam.lastTime = -1; cam.hist = [];
+  setCam('off');
+}
+$('#cam-btn').addEventListener('click', () => (cam.on ? cameraOff() : cameraOn()));
+document.addEventListener('visibilitychange', () => { if (document.hidden && cam.on) cameraOff(); });
+
+function drawHand(lm) {
+  const c = $('#cam-draw').getContext('2d'), w = 320, h = 240;
+  c.clearRect(0, 0, w, h);
+  if (!lm) return;
+  c.fillStyle = 'rgba(255,255,255,.8)';
+  for (const p of lm) { c.beginPath(); c.arc(p.x * w, p.y * h, 3, 0, Math.PI * 2); c.fill(); }
+  c.strokeStyle = cam.pinched ? '#ffd84d' : 'rgba(255,255,255,.5)'; c.lineWidth = cam.pinched ? 4 : 1.5;
+  c.beginPath(); c.moveTo(lm[4].x * w, lm[4].y * h); c.lineTo(lm[8].x * w, lm[8].y * h); c.stroke();
+  c.fillStyle = cam.pinched ? '#ffd84d' : '#fff';
+  c.beginPath(); c.arc(lm[8].x * w, lm[8].y * h, 6, 0, Math.PI * 2); c.fill();
+}
+function flashClick() {
+  const dot = $('#finger');
+  dot.classList.remove('click'); void dot.offsetWidth; dot.classList.add('click');
+}
+/* Pinch starts: the grab holds on to where the cursor was just before the fingers began to close,
+   so closing them doesn't drag the target away. */
+function startPinch(now, mid) {
+  const back = cam.hist.find((h) => h.t >= now - 120) || cam.hist[0] || { x: mid.x, y: mid.y };
+  cam.off = { x: back.x - mid.x, y: back.y - mid.y };
+  cam.pinched = true; cam.pinchAt = now; cam.travel = 0; cam.y = null;
+}
+/* Pinch ends: a quick one that barely moved is a click. Otherwise it was a grab, and the Helix
+   settles on its own (snapping). The cursor eases back from the pinch point to the fingertip. */
+function endPinch(now, tip, allowClick) {
+  if (!cam.pinched) return;
+  cam.pinched = false; cam.y = null; cam.releasedAt = now;
+  cam.off = tip && cam.last ? { x: cam.last.x - tip.x, y: cam.last.y - tip.y } : { x: 0, y: 0 };
+  if (allowClick && now - cam.pinchAt < CLICK_MS_CAM && cam.travel < CLICK_TRAVEL_CAM) { flashClick(); clickAt(ptr.x, ptr.y); }
+}
+function camStep(now) {
+  if (!cam.on || !cam.recognizer || cam.video.readyState < 2 || cam.video.currentTime === cam.lastTime) return;
+  cam.lastTime = cam.video.currentTime;
+  let res;
+  try { res = cam.recognizer.recognizeForVideo(cam.video, now); } catch (err) { console.error(err); return; }
+  const lm = res.landmarks && res.landmarks[0];
+  if (!lm) {
+    drawHand(null);
+    if (++cam.miss > 4) { endPinch(now, null, false); cam.fx = cam.fy = null; cam.hist = []; releasePtr(); }
+    setCam('no hand');
+    return;
+  }
+  cam.miss = 0;
+  // Pinch: the thumb–index gap relative to the palm (wrist to index knuckle), in camera pixels. Hysteresis
+  // (closes below the threshold, opens above 1.5×) and two frames in a row before it counts.
+  const d = (a, b) => Math.hypot((lm[a].x - lm[b].x) * 640, (lm[a].y - lm[b].y) * 480);
+  cam.ratio = d(4, 8) / Math.max(d(0, 5), 1);
+  const closed = cam.pinched ? cam.ratio < G.camPinch * 1.5 : cam.ratio < G.camPinch;
+  cam.pstreak = closed === cam.pinched ? 0 : cam.pstreak + 1;
+  const tip = { x: 1 - lm[8].x, y: lm[8].y };                                     // mirrored
+  const mid = { x: 1 - (lm[4].x + lm[8].x) / 2, y: (lm[4].y + lm[8].y) / 2 };
+  if (cam.pstreak >= 2) { cam.pstreak = 0; if (cam.pinched) endPinch(now, tip, true); else startPinch(now, mid); }
+  drawHand(lm);
+  // The cursor: the fingertip while exploring, the pinch point (anchored) while grabbing.
+  let cx, cy;
+  if (cam.pinched) { cx = mid.x + cam.off.x; cy = mid.y + cam.off.y; }
+  else { const k = Math.max(0, 1 - (now - cam.releasedAt) / 200); cx = tip.x + cam.off.x * k; cy = tip.y + cam.off.y * k; }
+  if (!cam.fx) { cam.fx = oneEuro(); cam.fy = oneEuro(); }
+  const fx = cam.fx(cx, now), fy = cam.fy(cy, now);
+  cam.last = { x: fx, y: fy };
+  cam.hist.push({ t: now, x: fx, y: fy }); if (cam.hist.length > 12) cam.hist.shift();
+  ptr.x = clamp((fx - 0.15) / 0.7, 0, 1) * cssW; ptr.y = clamp((fy - 0.12) / 0.76, 0, 1) * cssH; cam.ownsPtr = true;
+  const dot = $('#finger');
+  dot.hidden = false; dot.style.transform = `translate(${ptr.x}px, ${ptr.y}px)`; dot.classList.toggle('pinched', cam.pinched);
+  // Grab: while pinched, vertical movement scrolls the zoom or turns the Helix, like a mouse drag.
+  if (cam.pinched) {
+    if (cam.y !== null) {
+      const raw = cam.y - fy;                    // up = positive = content up
+      cam.travel += Math.abs(raw);
+      const dy = raw * G.camSens;
+      if (phase === 'hero') scrollBy(0, dy * innerHeight * 0.6);
+      else if (Math.abs(dy) > 0.0005) nudge(dy, 'drag');
+    }
+    cam.y = fy;
+  }
+  setCam(`${cam.pinched ? 'pinched → grab' : 'exploring'} · pinch ${cam.ratio.toFixed(2)}`);
+}
+
+/* =====================================================================================
+   Frame
+   ===================================================================================== */
+function frame(now) {
+  requestAnimationFrame(frame);
+  const dt = clamp((now - lastNow) / 1000 || 1 / 60, 1 / 240, 1 / 30);
+  lastNow = now;
+  if (!W) return;
+  const n = cards.length;
+  const v = VARIANTS[cur];
+
+  // --- phase: scrubbed zoom → timed melt → committed Helix
+  if (phase === 'hero') {
+    sSmooth += (clamp(sTarget, 0, 1) - sSmooth) * (1 - Math.exp(-dt * 7));   // time-based: same feel at any frame rate
+    if (sTarget >= 0.995 && sSmooth > 0.95) { sSmooth = 1; phase = 'melt'; meltStart = now; meltKick = true; lock(); }
+  }
+  if (phase === 'melt') {
+    meltP = clamp((now - meltStart) / (G.meltDur * 1000), 0, 1);
+    if (meltP >= 1) { phase = 'helix'; lock(); }
+  }
+  const zoom = phase === 'hero' ? sSmooth : 1;
+  const e = smooth(zoom);
+  const helixScale = G.pullBack ? Math.pow(S0, 1 - e) : 1;
+
+  // --- turning
+  const before = progress;
+  if (phase === 'hero') { goal = 0; progress = -G.spin * (1 - e); }
+  else {                         // melt and helix: the Helix turns from the moment the melt starts
+    if (tween) {
+      const t = clamp((now - tween.at) / CLICK_MS, 0, 1);
+      goal = tween.from + (tween.to - tween.from) * inOutCubic(t);
+      if (t >= 1) tween = null;
+    }
+    // Input has ended: right away after a drag or pinch, after a short gap for the wheel.
+    const holding = dragFrom !== null || cam.pinched;
+    if (!tween && !snapped && !holding && now - lastInput > (lastKind === 'wheel' ? WHEEL_IDLE : 0)) startSettle();
+    if (settling) {
+      const w = 4.6 / G.settle;                  // settles in about G.settle seconds
+      pv += (w * w * (settleTo - progress) - 2 * w * pv) * dt;
+      progress += pv * dt;
+      goal = settleTo;
+      if (Math.abs(settleTo - progress) < 1e-4 && Math.abs(pv) < 1e-3) { progress = settleTo; pv = 0; settling = false; }
+    } else {
+      const p0 = progress;
+      progress += (goal - progress) * (1 - Math.exp(-dt * FOLLOW));
+      pv = (progress - p0) / dt;
+    }
+  }
+  velocity = progress - before;
+  smoothed += (clamp(velocity, -BEND_MAX, BEND_MAX) - smoothed) * BEND_EASE;
+  const speed = clamp(Math.abs(smoothed) / BEND_MAX, 0, 1);
+  const dir = Math.sign(smoothed);
+  front = (((Math.round(phase === 'hero' ? 0 : goal)) % n) + n) % n;
+
+  camStep(now);
+
+  // --- pointer
+  movedPx = ptr.x >= 0 && ptrFrame.x >= 0 ? Math.hypot(ptr.x - ptrFrame.x, ptr.y - ptrFrame.y) : 0;
+  ptrUvLast = ptrFrame.x >= 0 ? [ptrFrame.x / cssW, 1 - ptrFrame.y / cssH] : [ptr.x / cssW, 1 - ptr.y / cssH];
+  ptrUv = [ptr.x / cssW, 1 - ptr.y / cssH];
+  ptrFrame.x = ptr.x; ptrFrame.y = ptr.y;
+  pointerSpeed = Math.max(movedPx, pointerSpeed * 0.8);
+
+  // --- focus
+  if (phase !== 'hero' && ptr.x >= 0 && pointerSpeed < HOVER_SETTLE && dragFrom === null && !cam.pinched) hovered = pick(ptr.x, ptr.y);
+  if (phase === 'hero') hovered = -1;
+  for (let i = 0; i < n; i++) {
+    const wantHover = i === hovered ? 1 : 0;
+    hover[i] += (wantHover - hover[i]) * (wantHover > hover[i] ? HOVER_IN : HOVER_OUT);
+    let wantDim = 0;
+    if (hovered >= 0) { let gap = Math.abs(i - hovered); gap = Math.min(gap, n - gap); wantDim = clamp(gap / FOCUS_FALLOFF, 0, 1); }
+    dim[i] += (wantDim - dim[i]) * (wantDim > dim[i] ? HOVER_IN : HOVER_OUT);
+    entry[i] = phase === 'hero' ? 1 - clamp((zoom - delay[i]) / 0.35, 0, 1) : 0;
+  }
+
+  // --- media: only cards in the sharp middle band play (the rest hold a still frame)
+  const t = now / 1000;
+  const playingWork = new Set();
+  if (phase !== 'hero') for (let i = 0; i < n; i++) if (Math.abs(slotOf(i)) < 1.6 || i === hovered) playingWork.add(cards[i].work);
+  playing = playingWork.size;
+  works.forEach((w, wi) => {
+    const on = playingWork.has(wi);
+    if (w.video) {
+      if (on && w.video.paused) w.video.play().catch(() => {});
+      if (!on && !w.video.paused) w.video.pause();
+      if (w.video.readyState >= 2 && (on || !w.uploaded)) { upload(w.tex, w.video); w.uploaded = true; }
+    } else if (on) {
+      SCENES[w.scene](w.ctx, t + w.offset, 512, 288); timecode(w.ctx, t + w.offset, 512, 288); upload(w.tex, w.canvas);
+    }
+  });
+  if (phase !== 'helix') {
+    if (showreel.video) { if (showreel.video.readyState >= 2) upload(showreel.tex, showreel.video); }
+    else { drawShowreel(t); upload(showreel.tex, showreel.canvas); }
+  }
+
+  const bg = TONES[G.tone];
+  const asp = cssW / cssH;
+  const slotUv = ((RISE * CARD_H * focalK) / (CAMERA_Z - RADIUS)) * 0.5;
+  const shift = progress * slotUv;
+
+  // --- pass 1: the cards
+  gl.bindFramebuffer(gl.FRAMEBUFFER, scene.fbo);
+  gl.viewport(0, 0, W, H);
+  gl.enable(gl.DEPTH_TEST);
+  gl.clearBufferfv(gl.COLOR, 0, [bg[0], bg[1], bg[2], 1]);
+  gl.clearBufferfv(gl.COLOR, 1, [0, 0, 0, 0]);
+  gl.clear(gl.DEPTH_BUFFER_BIT);
+  const C = progs.card.use();
+  gl.bindVertexArray(cardMesh);
+  C.f('uCount', n).f('uProgress', progress).f('uAngleStep', TWIST).f('uPitch', RISE * CARD_H).f('uVelocity', smoothed)
+    .f('uCard', CARD_H * RATIO, CARD_H).f('uFocal', focalK).f('uAspect', asp).f('uScale', helixScale).f('uBg', bg[0], bg[1], bg[2]);
+  for (let i = 0; i < n; i++) {
+    const w = works[cards[i].work];
+    C.tex('uMap', w.tex, 0).f('uIndex', i).f('uHover', hover[i]).f('uDim', dim[i]).f('uEntry', entry[i])
+      .f('uImageRatio', w.aspect < RATIO ? 1 : RATIO / w.aspect, w.aspect < RATIO ? w.aspect / RATIO : 1);
+    gl.drawArrays(gl.TRIANGLES, 0, cardVertexCount);
+  }
+  gl.disable(gl.DEPTH_TEST);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, scene.tex); gl.generateMipmap(gl.TEXTURE_2D);
+
+  // --- pass 2: the Showreel layer
+  gl.bindFramebuffer(gl.FRAMEBUFFER, reelT.fbo);
+  gl.viewport(0, 0, W, H);
+  gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+  if (phase !== 'helix') {
+    const ra = showreel.aspect;
+    const s0 = asp > ra ? [1, ra / asp] : [asp / ra, 1];
+    const s1 = RATIO > ra ? [1, ra / RATIO] : [RATIO / ra, 1];
+    progs.reel.use().tex('uMap', showreel.tex, 0).f('uCard', CARD_H * RATIO, CARD_H).f('uFocal', focalK).f('uAspect', asp)
+      .f('uZoom', e).f('uHelixScale', helixScale).f('uScale0', s0[0], s0[1]).f('uScale1', s1[0], s1[1])
+      .f('uSlot', phase === 'melt' ? slotOf(0) : 0).f('uAngleStep', TWIST).f('uPitch', RISE * CARD_H);
+    gl.bindVertexArray(cardMesh);
+    gl.drawArrays(gl.TRIANGLES, 0, cardVertexCount);
+  }
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, reelT.tex); gl.generateMipmap(gl.TEXTURE_2D);
+
+  // --- pass 3: the sketch's simulation
+  const P = v.values;
+  const strength = clamp(movedPx / 30, 0, 1);
+  const sim = simFor(v.key);
+  let simTex, simTexel = [1, 1];
+  if (v.key === 'drip' || v.key === 'blobs') {
+    progs.trail.use().tex('uState', sim.read.tex, 0).f('uTexel', 1 / sim.w, 1 / sim.h).f('uA', ...ptrUvLast).f('uB', ...ptrUv)
+      .f('uStrength', ptr.x >= 0 ? strength * 0.6 : 0).f('uRadius', 0.05).f('uDecay', 0.965).f('uAspect', asp);
+    drawQuad(sim.write); sim.swap(); simTex = sim.read.tex;
+  } else if (v.key === 'glass') {
+    for (let k = 0; k < 2; k++) {
+      let cPt = [-9, -9], cStr = 0;
+      if (meltKick && k === 0) { cPt = [0.5, 0.5]; cStr = -0.8; }
+      else if (Math.random() < speed * 0.6) { cPt = [Math.random(), Math.random() < 0.5 ? Math.random() * 0.25 : 1 - Math.random() * 0.25]; cStr = -0.08 * speed; }
+      progs.wave.use().tex('uState', sim.read.tex, 0).f('uTexel', 1 / sim.w, 1 / sim.h).f('uA', ...ptrUvLast).f('uB', ...ptrUv)
+        .f('uStrength', ptr.x >= 0 && k === 0 ? -strength * 0.12 * P[2] : 0).f('uRadius', 0.018).f('uDamp', 0.975)
+        .f('uAspect', asp).f('uC', cPt[0], cPt[1]).f('uCStrength', cStr);
+      drawQuad(sim.write); sim.swap();
+    }
+    simTex = sim.read.tex; simTexel = [1 / sim.w, 1 / sim.h];
+  } else {
+    stepFluid(sim, dt, P, speed, dir, shift, now);
+    simTex = sim.disp.read.tex;
+  }
+  meltKick = false;
+
+  // --- pass 4: composite with the melt material
+  const M = progs[v.key].use();
+  M.tex('uScene', scene.tex, 0).tex('uMeta', scene.meta, 1).tex('uReel', reelT.tex, 2).tex('uSim', simTex, 3);
+  meltUniforms(M, now, speed, dir, shift);
+  M.f('uSimTexel', simTexel[0], simTexel[1]).f('uBg', bg[0], bg[1], bg[2]).f('uMelt', phase === 'melt' ? meltP : phase === 'helix' ? 1 : 0)
+    .f('uReelOn', phase === 'helix' ? 0 : 1).f('uP', P[0], P[1], P[2], P[3]);
+  const reelAt0 = phase === 'melt' ? project(0) : null;
+  M.f('uReelCenter', reelAt0 ? reelAt0.x / cssW : 0.5, reelAt0 ? 1 - reelAt0.y / cssH : 0.5);
+  drawQuad(null);
+
+  // --- DOM overlays
+  const hero = $('#hero');
+  hero.style.opacity = String(1 - smooth(clamp(zoom / 0.35, 0, 1)));
+  hero.style.transform = `translateY(${zoom * 40}px)`;
+  const wk = works[cards[front].work];
+  $('#work').classList.toggle('on', phase === 'helix' || (phase === 'melt' && meltP > 0.5));
+  if ($('#w-title').textContent !== wk.title) {
+    $('#w-title').textContent = wk.title;
+    $('#w-meta').textContent = `${wk.disciplines} — ${wk.client}`;
+  }
+  $('#w-count').innerHTML = `${String(cards[front].work + 1).padStart(2, '0')}<i> / ${String(works.length).padStart(2, '0')}</i>`;
+  $('#state').textContent = `${String.fromCharCode(65 + cur)} ${v.name} · ${phase} · scroll ${clamp(sTarget, 0, 1).toFixed(2)} · zoom ${zoom.toFixed(2)} · melt ${meltP.toFixed(2)} · speed ${speed.toFixed(2)} · front ${cards[front].work + 1}/${works.length} · hover ${hovered >= 0 ? cards[hovered].work + 1 : '–'} · playing ${playing} · ${n} cards${cam.on ? ' · cam ' + cam.status : ''}${floatOk ? '' : ' · NO FLOAT TARGETS'}`;
+}
+
+function meltUniforms(M, now, speed, dir, shift) {
+  M.f('uRes', W, H).f('uBand', G.band).f('uFar', G.far).f('uDim', G.dim).f('uTime', now / 1000).f('uSpeed', speed).f('uDir', dir).f('uShift', shift);
+}
+
+function stepFluid(F, dt, P, speed, dir, shift, now) {
+  const texel = [1 / F.w, 1 / F.h], asp = cssW / cssH;
+  const ch = progs.fl_churn.use();
+  ch.tex('uVel', F.vel.read.tex, 0).tex('uScene', scene.tex, 1).tex('uMeta', scene.meta, 2).tex('uReel', reelT.tex, 3);
+  meltUniforms(ch, now, speed, dir, shift);
+  ch.f('uDt', dt).f('uChurn', 220 * P[1]).f('uTurn', 1800).f('uMeltForce', phase === 'melt' ? Math.sin(Math.PI * meltP) * 1800 : 0);
+  drawQuad(F.vel.write); F.vel.swap();
+  if (ptr.x >= 0 && movedPx > 0) {
+    const dx = (ptrUv[0] - ptrUvLast[0]) * 6000 * P[0], dy = (ptrUv[1] - ptrUvLast[1]) * 6000 * P[0];
+    progs.fl_splat.use().tex('uTarget', F.vel.read.tex, 0).f('uPoint', ...ptrUv).f('uColor', dx, dy, 0).f('uRadius', 0.0025).f('uAspect', asp);
+    drawQuad(F.vel.write); F.vel.swap();
+  }
+  progs.fl_curl.use().tex('uVel', F.vel.read.tex, 0).f('uTexel', ...texel); drawQuad(F.curl);
+  progs.fl_vort.use().tex('uVel', F.vel.read.tex, 0).tex('uCurl', F.curl.tex, 1).f('uTexel', ...texel).f('uCurlStrength', 60 * P[3]).f('uDt', dt);
+  drawQuad(F.vel.write); F.vel.swap();
+  progs.fl_div.use().tex('uVel', F.vel.read.tex, 0).f('uTexel', ...texel); drawQuad(F.div);
+  progs.fl_scale.use().tex('uSrc', F.pressure.read.tex, 0).f('uK', 0.8); drawQuad(F.pressure.write); F.pressure.swap();
+  const pr = progs.fl_pressure.use();
+  for (let i = 0; i < 20; i++) {
+    pr.tex('uPressure', F.pressure.read.tex, 0).tex('uDiv', F.div.tex, 1).f('uTexel', ...texel);
+    drawQuad(F.pressure.write); F.pressure.swap();
+  }
+  progs.fl_grad.use().tex('uPressure', F.pressure.read.tex, 0).tex('uVel', F.vel.read.tex, 1).f('uTexel', ...texel);
+  drawQuad(F.vel.write); F.vel.swap();
+  progs.fl_advVel.use().tex('uVel', F.vel.read.tex, 0).f('uTexel', ...texel).f('uDt', dt).f('uDiss', 2.5);
+  drawQuad(F.vel.write); F.vel.swap();
+  progs.fl_advDisp.use().tex('uVel', F.vel.read.tex, 0).tex('uD', F.disp.read.tex, 1).f('uTexel', ...texel).f('uDt', dt).f('uRelax', 0.8 + P[2] * 6);
+  drawQuad(F.disp.write); F.disp.swap();
+}
+
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+scrollTo(0, 0);
+resize();
+requestAnimationFrame(frame);
+window.__proto = { get phase() { return phase; }, get variant() { return VARIANTS[cur].key; }, setVariant, replay };
+</script>
+</body>
+</html>
