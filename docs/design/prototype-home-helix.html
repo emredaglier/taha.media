@@ -2,7 +2,9 @@
 <!--
   PROTOTYPE, throwaway. Not production code.
   Question: which melt material should the Home Helix use? (docs/frontend-structure.md, "Home Helix")
-  Four sketches, switchable via ?melt=drip|fluid|glass|blobs, the yellow bar, or the ← → keys:
+  Seventeen sketches, switchable via ?melt=drip|fluid|glass|blobs|burn|halftone|exposure|focus|datamosh|signal|paper|burndeckle|glyphs|grain|ink|mosaic|shards,
+  the yellow bar, or the ← → keys. The last thirteen (the "edge" materials) share the EDGE chunk: an organic outline band
+  on every card. See docs/research/helix-material-ideas.md.
     drip   columns of pixels slide down at uneven speeds, like hot wax
     fluid  a fluid simulation the cursor and the turning stir; the picture smears like paint in water
     glass  the picture stays whole but warps through water and heat haze; the cursor drops ripples
@@ -209,10 +211,104 @@ const VARIANTS = [
       { label: 'Flow speed', min: 0, max: 2, step: 0.05, value: 0.6 },
       { label: 'Cursor heat (moving cursor)', min: 0, max: 2, step: 0.05, value: 1 },
     ] },
+  /* Edge materials (edge: true): compiled with the EDGE chunk (organic outline) and driven by the cursor trail's heat. */
+  { key: 'burn', name: 'Film burn', edge: true, note: 'The picture burns away along a ragged, glowing ember front, scorched and warm before it goes. The Showreel burns out from its centre in a ring.',
+    params: [
+      { label: 'Ember width', min: 0.01, max: 0.12, step: 0.005, value: 0.045 },
+      { label: 'Burn noise scale (higher = finer)', min: 1, max: 10, step: 0.1, value: 4.5 },
+      { label: 'Flicker (more with turning speed)', min: 0, max: 2, step: 0.05, value: 1 },
+      { label: 'Cursor heat (moving cursor)', min: 0, max: 2, step: 0.05, value: 1 },
+    ] },
+  { key: 'halftone', name: 'Halftone print', edge: true, note: 'The melt is a print breaking up: the picture turns into RGB dots that coarsen and shrink to paper. Card outlines break into dots. The Showreel prints away in a ring of big dots.',
+    params: [
+      { label: 'Dot grid size', min: 0.004, max: 0.02, step: 0.001, value: 0.008 },
+      { label: 'Coarsening as it melts', min: 0, max: 3, step: 0.05, value: 1.2 },
+      { label: 'Colour plate slip with turning speed', min: 0, max: 3, step: 0.05, value: 1 },
+      { label: 'Ink swell under the cursor', min: 0, max: 2, step: 0.05, value: 1 },
+    ] },
+  { key: 'exposure', name: 'Long exposure', edge: true, note: 'Light drags: cards leaving the sharp band stretch into streaks, longer with turning speed. The Showreel is drawn out into rays from its centre.',
+    params: [
+      { label: 'Streak length', min: 0.02, max: 0.4, step: 0.01, value: 0.14 },
+      { label: 'Turning speed → streak', min: 0, max: 3, step: 0.05, value: 1 },
+      { label: 'Afterglow (light trails)', min: 0, max: 1.5, step: 0.05, value: 0.8 },
+      { label: 'Cursor trail', min: 0, max: 2, step: 0.05, value: 1 },
+    ] },
+  { key: 'focus', name: 'Rack focus', edge: true, note: 'The sharp band is in focus; everything else defocuses into bokeh discs before it fades. The pointer pulls focus. The Showreel defocuses in a ring.',
+    params: [
+      { label: 'Max blur radius', min: 0.01, max: 0.07, step: 0.001, value: 0.035 },
+      { label: 'Bokeh highlights', min: 0, max: 8, step: 0.1, value: 4 },
+      { label: 'Turning speed → blur', min: 0, max: 3, step: 0.05, value: 1 },
+      { label: 'Cursor pulls focus', min: 0, max: 2, step: 0.05, value: 1 },
+    ] },
+  { key: 'datamosh', name: 'Datamosh', edge: true, note: 'A codec failure: blocks lock, posterise and drift off, each on its own schedule. The cursor makes blocks stutter. The Showreel breaks into blocks that slide off in a ring.',
+    params: [
+      { label: 'Block size', min: 0.015, max: 0.08, step: 0.001, value: 0.035 },
+      { label: 'Block drift', min: 0, max: 2, step: 0.05, value: 1 },
+      { label: 'Turning speed → drift', min: 0, max: 3, step: 0.05, value: 1 },
+      { label: 'Cursor stutter', min: 0, max: 2, step: 0.05, value: 1 },
+    ] },
+  { key: 'signal', name: 'Analogue signal', edge: true, note: 'A signal failing: line jitter, chroma bleed, a rolling tracking band and tape noise. The Showreel drops out line by line in a ring.',
+    params: [
+      { label: 'Line jitter', min: 0, max: 2, step: 0.05, value: 1 },
+      { label: 'Chroma bleed', min: 0, max: 3, step: 0.05, value: 1 },
+      { label: 'Tape noise', min: 0, max: 2, step: 0.05, value: 1 },
+      { label: 'Cursor tracking bump', min: 0, max: 2, step: 0.05, value: 1 },
+    ] },
+  { key: 'paper', name: 'Torn paper', edge: true, note: 'The picture tears away along a fibrous line, leaving a pale paper rim. Every card has a deckled edge; the cursor rips it. The Showreel opens a torn hole from its centre.',
+    params: [
+      { label: 'Tear roughness (higher = finer)', min: 3, max: 16, step: 0.5, value: 9 },
+      { label: 'Fibre rim width', min: 0.005, max: 0.06, step: 0.001, value: 0.02 },
+      { label: 'Paper grain', min: 0, max: 1, step: 0.05, value: 0.35 },
+      { label: 'Cursor rips the edge', min: 0, max: 2, step: 0.05, value: 1 },
+    ] },
+  { key: 'burndeckle', name: 'Film burn + deckle edges', edge: true, note: 'Film burn for the melt, torn-paper deckle with a pale fibre rim on every card outline.',
+    params: [
+      { label: 'Ember width', min: 0.01, max: 0.12, step: 0.005, value: 0.045 },
+      { label: 'Burn noise scale (higher = finer)', min: 1, max: 10, step: 0.1, value: 4.5 },
+      { label: 'Flicker (more with turning speed)', min: 0, max: 2, step: 0.05, value: 1 },
+      { label: 'Deckle width', min: 0.2, max: 2, step: 0.05, value: 1 },
+    ] },
+  { key: 'glyphs', name: 'Glyph mosaic', edge: true, note: 'The melt turns the picture into a grid of letters (T, A, H and a few marks from the page\'s own serif), chosen by brightness; cells shrink away to nothing. The pointer shrinks the grid back to picture. The Showreel becomes a ring of coarse glyphs.',
+    params: [
+      { label: 'Largest cell, px', min: 6, max: 24, step: 1, value: 14 },
+      { label: 'Glyph levels', min: 2, max: 8, step: 1, value: 6 },
+      { label: 'Stagger (cells vanish out of step)', min: 0, max: 1, step: 0.05, value: 0.6 },
+      { label: 'Cursor shrinks the grid', min: 0, max: 2, step: 0.05, value: 1 },
+    ] },
+  { key: 'grain', name: 'Grain disintegration', edge: true, note: 'The picture erodes into dust along a noisy front: grains peel off, drift on a flow field and thin out. The cursor scatters grains, turning blows them along. The Showreel crumbles outward from its centre.',
+    params: [
+      { label: 'Grain size, px', min: 1, max: 6, step: 0.1, value: 2.5 },
+      { label: 'Drift', min: 0, max: 0.15, step: 0.005, value: 0.06 },
+      { label: 'Edge-lit rim width', min: 0, max: 0.15, step: 0.005, value: 0.05 },
+      { label: 'Wind from turning speed', min: 0, max: 2, step: 0.05, value: 1 },
+    ] },
+  { key: 'ink', name: 'Ink development', edge: true, note: 'The picture goes under wet ink that spreads in feathered tendrils, and develops back out of it. The cursor is the brush: its trail leaves ink. The Showreel is consumed by an ink bloom from its centre.',
+    params: [
+      { label: 'Ink scale (higher = finer)', min: 1, max: 8, step: 0.1, value: 3 },
+      { label: 'Feather', min: 0.02, max: 0.3, step: 0.01, value: 0.12 },
+      { label: 'Wet edge (wick)', min: 0, max: 1, step: 0.05, value: 0.5 },
+      { label: 'Cursor ink', min: 0, max: 2, step: 0.05, value: 1 },
+    ] },
+  { key: 'mosaic', name: 'Staggered pixel mosaic', edge: true, note: 'Square blocks grow and drop out one by one in a noisy order, so the melt arrives as scattered blocks. Blocks near the pointer shrink back to picture. The Showreel flips to blocks in a ring.',
+    params: [
+      { label: 'Smallest block, px', min: 2, max: 8, step: 0.5, value: 4 },
+      { label: 'Largest block, px', min: 12, max: 64, step: 1, value: 32 },
+      { label: 'Stagger', min: 0, max: 1, step: 0.05, value: 0.6 },
+      { label: 'Cursor magnet (blocks shrink)', min: 0, max: 1, step: 0.05, value: 0.5 },
+    ] },
+  { key: 'shards', name: 'Voronoi shards', edge: true, note: 'The picture cracks into matte, opaque shards that separate, tilt and fall away, nearest the pointer first. No refraction. The Showreel breaks into shards that fall outward from its centre.',
+    params: [
+      { label: 'Shards across the screen height', min: 6, max: 40, step: 1, value: 16 },
+      { label: 'Crack lines', min: 0, max: 1, step: 0.05, value: 0.5 },
+      { label: 'Fall distance', min: 0, max: 0.4, step: 0.01, value: 0.15 },
+      { label: 'Tilt (shade per shard)', min: 0, max: 1, step: 0.05, value: 0.5 },
+    ] },
 ];
 for (const v of VARIANTS) v.values = v.params.map((p) => p.value);
 
 const G = { band: 0.25, far: 0.7, dim: 0.55, meltDur: 1.3, scrollVh: 140, spin: 2.5, pullBack: true, tone: 'dark', camSens: 5, camPinch: 0.35, settle: 0.55 };
+G.edgeMode = 1;   // signal front-card edge: 0 clean, 1 scanline (default), 2 teeth
+const EDGE_MODES = ['Clean', 'Scanline', 'Teeth'];
 const TONES = { dark: [0.063, 0.063, 0.063], light: [0.925, 0.922, 0.906] };
 const camCapable = matchMedia('(hover: hover) and (pointer: fine)').matches && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
 
@@ -659,6 +755,663 @@ void main() {
 }`,
 };
 
+/* Shared by the "edge" materials (burn, halftone, exposure, focus, datamosh, signal, paper, ...).
+   OUTLINE: edgeAt(uv) probes the card coverage in uMeta.a at 17 taps (two rings of 8, ~r and ~r/2 px out) and
+   returns, for the pixel: mean (blurred coverage, 0 outside .. 1 inside, 0.5 on the outline), band (1 on the
+   outline, 0 deep inside or far outside), dir (unit uv vector pointing into the card), n (two noise values,
+   anchored to the scrolling cards), jit (a small displacement, strongest on the outline) and src (where to read
+   the picture: pulled a little toward the card so pixels just outside can show its edge, plus half the jitter).
+   A material feeds this into its TEXTURE or DISPLACEMENT or an outline mask, never into the melt fade m, so the
+   fade and the five jobs of meltOf stay exactly as in the older variants. */
+const EDGE = `
+struct Edge { float band; float mean; vec2 dir; vec2 src; vec2 jit; vec2 n; };
+Edge edgeAt(vec2 uv) {
+  vec2 px = 1.0 / uRes;
+  float r = clamp(uRes.y / 150.0, 4.0, 12.0);
+  float acc = textureLod(uMeta, uv, 0.0).a, wsum = 1.0;
+  vec2 g = vec2(0.0);
+  for (int i = 0; i < 8; i++) {
+    float a = float(i) * 0.785398 + 0.3927;
+    vec2 d = vec2(cos(a), sin(a));
+    float c1 = textureLod(uMeta, uv + d * px * r, 0.0).a;
+    float c2 = textureLod(uMeta, uv + d * px * r * 0.5, 0.0).a;
+    acc += c1 + c2 * 1.5; wsum += 2.5;
+    g += d * (c1 + c2 * 1.5);
+  }
+  Edge e;
+  e.mean = acc / wsum;
+  e.band = 1.0 - pow(abs(2.0 * e.mean - 1.0), 1.6);
+  e.dir = g / max(length(g), 1e-3);
+  vec2 p = (uv - vec2(0.0, uShift)) * uRes / 11.0;
+  e.n = vec2(fbm(p * 0.8) * 0.7 + vnoise(p * 4.0) * 0.3, fbm(p * 0.8 + 41.3));
+  e.jit = (e.n - 0.5) * 2.0 * e.band * px * r * 0.9;
+  e.src = uv + e.dir * px * r * clamp(1.0 - 2.0 * e.mean, 0.0, 1.0) * 1.7 + e.jit * 0.5;
+  return e;
+}
+// Noisy coverage: 0.5 is the ragged outline, above it is the card. amp 0.6-1.3 = deckle depth (keep <= 1.3).
+float edgeS(Edge e, float amp) { return e.mean + (e.n.x - 0.47) * min(amp, 1.3); }
+float edgeKeep(Edge e, float amp) { return smoothstep(0.46, 0.54, edgeS(e, amp)); }
+float cardCover(vec2 uv) { return textureLod(uMeta, clamp(uv, 0.001, 0.999), 0.0).a; }
+vec3 emberCol(float d, float w) { return mix(vec3(0.75, 0.18, 0.04), vec3(1.0, 0.86, 0.6), 1.0 - smoothstep(0.0, w * 0.4, d)); }
+// Showreel dissolve: a front that grows from the Showreel's centre. The radius at melt 1 clears the reel's corners.
+float reelDist(vec2 uv) { return length((uv - uReelCenter) * vec2(aspect(), 1.0)); }
+vec2 reelDir(vec2 uv) { vec2 d = (uv - uReelCenter) * vec2(aspect(), 1.0); return d / max(length(d), 1e-4); }
+float reelRadius(float nv, float amp) { return uMelt * 0.85 - 0.03 + (nv - 0.5) * amp * smoothstep(0.0, 0.2, uMelt); }
+`;
+/* The edge materials. Each reads the cursor from uSim.b (heat), the turning from uSpeed/uDir, the melt from meltOf,
+   the outline from edgeAt (see EDGE). To add one: a VARIANTS entry with edge: true, and a key here. */
+Object.assign(VARIANT_MAIN, {
+  burn: `
+void main() {
+  vec2 uv = vUv;
+  Edge e = edgeAt(uv);
+  float heat = texture(uSim, uv).b;
+  float m0 = meltOf(uv);
+  float m = clamp(m0 + heat * uP.w * (1.0 - m0) * 0.35, 0.0, 1.0);
+  vec2 q = (uv - vec2(0.0, uShift)) * vec2(aspect(), 1.0) * uP.y;
+  float n = fbm(q + vec2(0.0, uTime * 0.12 + uDir * uSpeed * uP.z * 0.25));
+  float fl = 1.0 + uP.z * (0.12 + uSpeed * 0.5) * (vnoise(q * 2.0 + uTime * 8.0) * 2.0 - 1.0);
+  float th = m * 1.2 - 0.12;
+  float scorch = 1.0 - smoothstep(th, th + 0.10, n);
+  vec3 c = sceneAt(e.src, m * 1.5) * mix(1.0, 0.25, scorch);
+  c = mix(c, c * vec3(1.12, 0.86, 0.62), clamp(m * 1.2, 0.0, 1.0) * 0.7);
+  c += vec3(0.9, 0.45, 0.15) * heat * uP.w * 0.12 * smoothstep(0.02, 0.3, e.mean);
+  float keep = smoothstep(th, th + 0.012, n);
+  float s = edgeS(e, 1.1);
+  float keepE = smoothstep(0.46, 0.54, s);
+  float rimE = keepE * (1.0 - smoothstep(0.5, 0.64, s));
+  c += vec3(0.95, 0.45, 0.12) * rimE * 0.4 * (0.6 + 0.4 * fl) * keep;
+  c = mix(uBg, c, keep * keepE);
+  float front = (1.0 - smoothstep(0.0, uP.x, abs(n - th))) * step(0.015, m) * keepE * fl * (1.0 - smoothstep(0.9, 1.0, m));
+  c += emberCol(abs(n - th), uP.x) * front;
+  if (uReelOn > 0.5) {
+    vec2 rq = (uv - uReelCenter) * vec2(aspect(), 1.0);
+    float nr = fbm(rq * uP.y * 1.4 + uTime * 0.25);
+    float d = length(rq) - reelRadius(nr, 0.14);
+    float on = step(0.001, uMelt);
+    vec4 r = reelAt(uv, 0.0);
+    float fr = (1.0 - smoothstep(0.0, uP.x, abs(d))) * on * r.a * fl * (1.0 - smoothstep(0.92, 1.0, uMelt));
+    r.rgb *= mix(1.0, 0.3, (1.0 - smoothstep(0.0, 0.1, d)) * on);
+    r *= mix(1.0, smoothstep(0.0, 0.012, d), on) * (1.0 - step(0.999, uMelt));
+    c = over(c, r) + emberCol(abs(d), uP.x) * fr;
+  }
+  o = vec4(c, 1.0);
+}`,
+  halftone: `
+// Ink for one pixel: RGB plates on rotated grids, read at cell centres, so whatever is sampled there (the card, the
+// gap, the Showreel) decides the dot. Returns (ink rgb, coverage).
+vec4 htDots(vec2 uv, float mt, float heatV, bool reel) {
+  vec2 asp = vec2(aspect(), 1.0);
+  vec2 q = (uv - vec2(0.0, uShift)) * asp;
+  float cell = uP.x * (1.0 + uP.y * mt * 1.6);
+  float turn = uSpeed * uP.z;
+  vec3 ink = vec3(0.0);
+  float cov = 0.0;
+  for (int ch = 0; ch < 3; ch++) {
+    float ang = (ch == 0 ? 0.26 : (ch == 1 ? 1.31 : 0.785)) + turn * 0.08 * float(ch);
+    float cs = cos(ang), sn = sin(ang);
+    mat2 R = mat2(cs, -sn, sn, cs);
+    vec2 slip = vec2(float(ch) - 1.0, 0.5 * float(ch)) * turn * 0.004;
+    vec2 rq = R * (q + slip);
+    vec2 cc = (floor(rq / cell) + 0.5) * cell;
+    vec2 cuv = (transpose(R) * cc - slip) / asp + vec2(0.0, uShift);
+    float lod = clamp(log2(cell * uRes.y * 0.8), 0.0, 6.0);
+    float v;
+    if (reel) {
+      v = reelAt(cuv, lod)[ch] * (1.0 - smoothstep(0.55, 1.0, mt));
+    } else {
+      float tm = meltOf(cuv);
+      v = sceneAt(cuv, lod)[ch] * cardCover(cuv) * (1.0 - smoothstep(0.55, 1.0, tm));
+    }
+    v = clamp(v, 0.0, 1.0);
+    float rad = sqrt(v) * cell * 0.72 * (1.0 + heatV * uP.w * 0.5);
+    float dv = (1.0 - smoothstep(rad * 0.82, rad * 1.18 + 1e-4, length(rq - cc))) * step(1e-3, v);
+    ink[ch] = dv;
+    cov = max(cov, dv);
+  }
+  return vec4(ink, cov);
+}
+void main() {
+  vec2 uv = vUv;
+  Edge e = edgeAt(uv);
+  float heat = texture(uSim, uv).b;
+  float m = meltOf(uv);
+  float mt = clamp(m + e.band * 0.7 + heat * uP.w * 0.08, 0.0, 1.0);
+  vec3 plain = mix(sceneAt(uv + e.jit * 0.5, 0.0), uBg, smoothstep(0.55, 1.0, m));
+  vec4 d = htDots(uv, mt, heat, false);
+  vec3 c = mix(plain, uBg * (1.0 - d.a) + d.rgb, smoothstep(0.02, 0.22, mt));
+  if (uReelOn > 0.5) {
+    float dist = reelDist(uv);
+    float nr = fbm((uv - uReelCenter) * vec2(aspect(), 1.0) * 5.0);
+    float rm = clamp((reelRadius(nr, 0.1) - dist) / 0.12, 0.0, 1.0);
+    vec4 plainR = reelAt(uv, 0.0) * (1.0 - smoothstep(0.6, 1.0, rm));
+    vec4 dr = htDots(uv, rm, 0.0, true);
+    vec4 r = mix(plainR, dr, smoothstep(0.02, 0.22, rm));
+    c = over(c, r);
+  }
+  o = vec4(c, 1.0);
+}`,
+  exposure: `
+void main() {
+  vec2 uv = vUv;
+  Edge e = edgeAt(uv);
+  float heat = texture(uSim, uv).b;
+  float m0 = meltOf(uv);
+  float m = clamp(m0 + heat * uP.w * (1.0 - m0) * 0.2, 0.0, 1.0);
+  float outward = uv.y > 0.5 ? 1.0 : -1.0;
+  float sy = outward * (m * uP.x + heat * uP.w * 0.05 + e.band * 0.012) + uDir * uSpeed * uP.y * 0.05 * (0.25 + m);
+  float falloff = mix(3.0, 0.5, clamp(uP.z / 1.5, 0.0, 1.0));
+  vec2 base = uv + e.jit * 1.4;
+  vec3 acc = vec3(0.0);
+  float ws = 0.0, hi = 0.0;
+  for (int k = 0; k < 14; k++) {
+    float f = float(k) / 13.0;
+    float w = pow(1.0 - f * 0.9, falloff);
+    vec2 tuv = base - vec2(0.0, sy * f);
+    vec3 t = sceneAt(tuv, 0.0);
+    acc += t * w; ws += w;
+    hi += pow(dot(t, vec3(0.3, 0.59, 0.11)), 3.0) * w * cardCover(tuv);
+  }
+  vec3 c = acc / ws;
+  float streak = smoothstep(0.0, 0.02, abs(sy));
+  c *= 1.0 + uP.z * 0.8 * (hi / ws) * min(1.0, abs(sy) * 12.0);
+  c *= 1.0 - 0.45 * smoothstep(0.3, 0.9, m);
+  c = mix(c, uBg, smoothstep(0.55, 1.0, m));
+  c = mix(uBg, c, mix(edgeKeep(e, 0.8), 1.0, streak));
+  if (uReelOn > 0.5) {
+    float dist = reelDist(uv);
+    vec2 rd = reelDir(uv);
+    float rm = clamp((reelRadius(0.5, 0.0) - dist) / 0.14, 0.0, 1.0);
+    float rlen = rm * 0.4;
+    vec4 r = vec4(0.0);
+    float rw = 0.0;
+    for (int k = 0; k < 12; k++) {
+      float f = float(k) / 11.0;
+      float w = 1.0 - f * 0.8;
+      r += reelAt(uv - rd * rlen * f / vec2(aspect(), 1.0), 0.0) * w;
+      rw += w;
+    }
+    r = r / rw * (1.0 - smoothstep(0.45, 1.0, rm));
+    c = over(c, r);
+  }
+  o = vec4(c, 1.0);
+}`,
+  focus: `
+void main() {
+  vec2 uv = vUv;
+  Edge e = edgeAt(uv);
+  float heat = texture(uSim, uv).b;
+  float m = meltOf(uv);
+  float pull = clamp(heat * uP.w, 0.0, 1.0);
+  float r = (uP.x * m + uSpeed * uP.z * 0.012 * (0.3 + m) + e.band * 0.006 * (0.4 + e.n.y)) * (1.0 - 0.85 * pull);
+  vec2 base = e.src;
+  vec3 c;
+  if (r < 0.0006) {
+    c = sceneAt(base, 0.0);
+  } else {
+    float lod = clamp(log2(r * uRes.y * 0.35 + 1e-3), 0.0, 3.5);
+    vec3 acc = vec3(0.0);
+    float ws = 0.0;
+    for (int k = 0; k < 24; k++) {
+      float f = (float(k) + 0.5) / 24.0;
+      float a = float(k) * 2.39996;
+      vec2 tuv = base + vec2(cos(a), sin(a)) * sqrt(f) * r / vec2(aspect(), 1.0);
+      vec3 t = sceneAt(tuv, lod);
+      float w = 1.0 + uP.y * pow(dot(t, vec3(0.3, 0.59, 0.11)), 3.0) * cardCover(tuv);
+      acc += t * w;
+      ws += w;
+    }
+    c = acc / ws;
+  }
+  c = mix(c, uBg, smoothstep(0.65, 1.0, m));
+  c = mix(uBg, c, mix(smoothstep(0.4, 0.6, edgeS(e, 0.8)), 1.0, smoothstep(0.004, 0.015, r)));
+  if (uReelOn > 0.5) {
+    float rm = clamp((reelRadius(0.5, 0.0) - reelDist(uv)) / 0.14, 0.0, 1.0);
+    float rr = rm * 0.05;
+    vec4 racc = vec4(0.0);
+    float rws = 0.0;
+    for (int k = 0; k < 16; k++) {
+      float f = (float(k) + 0.5) / 16.0;
+      float a = float(k) * 2.39996;
+      vec4 t = reelAt(uv + vec2(cos(a), sin(a)) * sqrt(f) * rr / vec2(aspect(), 1.0), rm * 3.0);
+      float w = 1.0 + uP.y * pow(dot(t.rgb, vec3(0.3, 0.59, 0.11)) / max(t.a, 1e-3), 3.0) * t.a;
+      racc += t * w;
+      rws += w;
+    }
+    c = over(c, racc / rws * (1.0 - smoothstep(0.55, 1.0, rm)));
+  }
+  o = vec4(c, 1.0);
+}`,
+  datamosh: `
+void main() {
+  vec2 uv = vUv;
+  Edge e = edgeAt(uv);
+  vec2 asp = vec2(aspect(), 1.0);
+  float heat = texture(uSim, uv).b;
+  float m0 = meltOf(uv);
+  float m = clamp(m0 + heat * uP.w * 0.2 * (1.0 - m0), 0.0, 1.0);
+  float mt = clamp(m + e.band * 0.5 + heat * uP.w * 0.4, 0.0, 1.0);
+  float bs = uP.x;
+  vec2 b = floor((uv - vec2(0.0, uShift)) * asp / bs);
+  float reroll = floor(uTime * 1.5) * 0.37 * step(0.05, heat * uP.w);
+  float stuck = step(hash12(b + reroll), mt * 1.05);
+  float drift = ((hash12(b + 7.3) - 0.35) * mt * 0.22 * uP.y + uSpeed * uP.z * 0.06 * mt) * stuck;
+  vec2 bc = (b + 0.5) * bs / asp + vec2(0.0, uShift);
+  vec2 jb = (vec2(hash12(b + 1.7), hash12(b + 9.2)) - 0.5) * e.band * 16.0 / uRes;
+  vec2 suv = mix(uv, bc, stuck * 0.55) + jb - vec2(0.0, drift);
+  vec3 c = sceneAt(suv, m * 1.5);
+  c = mix(c, floor(c * 6.0) / 6.0, stuck * 0.8);
+  c = mix(uBg, c, smoothstep(0.35, 0.65, cardCover(suv)));
+  c = mix(uBg, c, 1.0 - smoothstep(0.8, 1.0, m));
+  if (uReelOn > 0.5) {
+    float dist = reelDist(uv);
+    vec2 rd = reelDir(uv);
+    float rm = clamp((reelRadius(0.5, 0.0) - dist) / 0.14, 0.0, 1.0);
+    vec2 rb = floor((uv - uReelCenter) * asp / (bs * 1.3));
+    float stuckR = step(hash12(rb + 3.1), rm * 1.1);
+    float dr = (hash12(rb + 5.5) - 0.2) * rm * 0.3 * uP.y * stuckR;
+    vec2 rbc = (rb + 0.5) * bs * 1.3 / asp + uReelCenter;
+    vec2 ruv = mix(uv, rbc, stuckR * 0.5) - rd * dr / asp;
+    vec4 r = reelAt(ruv, 0.0);
+    r *= 1.0 - smoothstep(0.7, 1.0, rm + (hash12(rb + 8.8) - 0.5) * 0.4);
+    c = over(c, r);
+  }
+  o = vec4(c, 1.0);
+}`,
+  signal: `
+uniform float uEdgeMode;   // front-card edge: 0 clean, 1 scanline, 2 teeth (the shared EDGE outline)
+void main() {
+  vec2 uv = vUv;
+  Edge e = edgeAt(uv);
+  float heat = texture(uSim, uv).b;
+  float m0 = meltOf(uv);
+  float m = clamp(m0 + heat * uP.w * 0.25 * (1.0 - m0), 0.0, 1.0);
+  float row = floor(uv.y * uRes.y / 2.0);
+  float rj = hash12(vec2(row, floor(uTime * 14.0))) - 0.5;
+  float tq = (fract(uv.y * 0.6 - uTime * 0.07) - 0.5) / 0.04;
+  float trk = exp(-tq * tq);
+  // Sharp cards only (low melt of the card itself, read a little inside so the pixels just outside agree):
+  // clean = no outline noise, scanline = per-row sideways shift, teeth = the shared noisy outline.
+  float mc = max(m, meltOf(uv + e.dir * 10.0 / uRes));
+  float sharp = 1.0 - smoothstep(0.0, 0.3, mc);
+  float wt = uEdgeMode > 1.5 ? 0.0 : sharp;
+  float eb = e.band * (1.0 - wt);
+  float scanAmp = (uEdgeMode > 0.5 && uEdgeMode < 1.5) ? sharp * (2.0 + uSpeed * 5.0 + heat * uP.w * 4.0) / uRes.x : 0.0;
+  float amp = (m * 0.07 * (1.0 + uSpeed) + eb * 0.010 + trk * m * 0.04 + heat * uP.w * 0.015 * (1.0 - wt)) * uP.x;
+  float j = rj * (amp + 2.0 * scanAmp * uP.x);
+  float ca = (m * 0.012 + eb * 0.002) * uP.y;
+  vec2 pos = uv + vec2(j, 0.0) + e.jit * 0.8 * (1.0 - wt);
+  float lod = m * 1.2;
+  vec3 c = vec3(sceneAt(pos + vec2(ca, 0.0), lod).r, sceneAt(pos, lod).g, sceneAt(pos - vec2(ca, 0.0), lod).b);
+  c *= 1.0 - 0.18 * m * step(0.5, fract(uv.y * uRes.y / 3.0));
+  float nz = hash12(uv * uRes + uTime);
+  float pres = smoothstep(0.02, 0.35, e.mean);
+  c += (nz - 0.5) * 0.12 * uP.z * (m + eb * 0.5) * pres;
+  c = mix(c, vec3(nz) * 0.85, smoothstep(0.55, 0.85, m) * min(uP.z, 1.0) * pres);
+  c = mix(c, uBg, smoothstep(0.85, 1.0, m));
+  c = mix(uBg, c, smoothstep(0.35, 0.65, cardCover(pos)));
+  if (uReelOn > 0.5) {
+    float dist = reelDist(uv);
+    float rad = reelRadius(0.5, 0.0);
+    float rm = clamp((rad - dist) / 0.14, 0.0, 1.0);
+    float rq6 = (dist - rad) / 0.06;
+    float ringJ = exp(-rq6 * rq6) * step(0.001, uMelt);
+    float rjj = rj * (ringJ * 0.03 + rm * 0.05) * uP.x;
+    float rca = ca * 0.5 + ringJ * 0.004 * uP.y;
+    vec4 ra = reelAt(uv + vec2(rjj + rca, 0.0), 0.0);
+    vec4 rg = reelAt(uv + vec2(rjj, 0.0), 0.0);
+    vec4 rb = reelAt(uv + vec2(rjj - rca, 0.0), 0.0);
+    vec4 r = vec4(ra.r, rg.g, rb.b, max(max(ra.a, rg.a), rb.a));
+    r.rgb = mix(r.rgb, vec3(nz) * r.a, smoothstep(0.1, 0.5, rm) * 0.7 * min(uP.z + 0.3, 1.0));
+    float gone = smoothstep(0.0, 0.35, rm - hash12(vec2(row, 7.0)) * 0.6);
+    c = over(c, r * (1.0 - gone));
+  }
+  o = vec4(c, 1.0);
+}`,
+  paper: `
+void main() {
+  vec2 uv = vUv;
+  Edge e = edgeAt(uv);
+  float heat = texture(uSim, uv).b;
+  float m = meltOf(uv);
+  vec2 q = (uv - vec2(0.0, uShift)) * vec2(aspect(), 1.0) * uP.x;
+  float nt = fbm(q + vec2(0.0, uDir * uSpeed * 0.3)) * 0.75 + vnoise(q * 6.0) * 0.25;
+  float th = m * 1.15 - 0.1;
+  float keep = smoothstep(th, th + 0.006, nt);
+  float rim = keep * (1.0 - smoothstep(th + uP.y, th + uP.y * 1.6, nt)) * step(0.02, m);
+  float s = edgeS(e, 1.0 + heat * uP.w * 0.35);
+  float keepD = smoothstep(0.5, 0.56, s);
+  float rimD = keepD * (1.0 - smoothstep(0.5 + uP.y * 5.0, 0.5 + uP.y * 5.0 + 0.06, s));
+  vec3 paper = vec3(0.93, 0.92, 0.88);
+  vec2 lift = vec2(0.0, heat * uP.w * 0.01 * (e.n.y - 0.4)) * e.band;
+  vec3 sc = sceneAt(e.src + lift, m * 2.0);
+  vec3 c = mix(sc, sc * 0.8 + paper * 0.2, m * 0.5);
+  c += (vnoise(uv * uRes / 1.3) - 0.5) * 0.07 * uP.z * (0.35 + m);
+  c = mix(c, paper, max(rim, rimD) * 0.9);
+  c = mix(uBg, c, keep * keepD);
+  if (uReelOn > 0.5) {
+    vec2 rq = (uv - uReelCenter) * vec2(aspect(), 1.0);
+    float nr = fbm(rq * uP.x * 1.2 + 3.1) * 0.75 + vnoise(rq * uP.x * 7.0) * 0.25;
+    float d = length(rq) - reelRadius(nr, 0.5);
+    float on = step(0.001, uMelt);
+    float keepR = mix(1.0, smoothstep(0.0, 0.006, d), on) * (1.0 - step(0.999, uMelt));
+    float rimR = keepR * (1.0 - smoothstep(uP.y, uP.y * 1.6, d)) * on;
+    vec4 r = reelAt(uv, 0.0);
+    r.rgb = mix(r.rgb, paper * r.a, rimR * 0.9);
+    c = over(c, r * keepR);
+  }
+  o = vec4(c, 1.0);
+}`,
+  burndeckle: `
+void main() {
+  vec2 uv = vUv;
+  Edge e = edgeAt(uv);
+  float heat = texture(uSim, uv).b;
+  float m0 = meltOf(uv);
+  float m = clamp(m0 + heat * 0.35 * (1.0 - m0), 0.0, 1.0);
+  vec2 q = (uv - vec2(0.0, uShift)) * vec2(aspect(), 1.0) * uP.y;
+  float n = fbm(q + vec2(0.0, uTime * 0.12 + uDir * uSpeed * uP.z * 0.25));
+  float fl = 1.0 + uP.z * (0.12 + uSpeed * 0.5) * (vnoise(q * 2.0 + uTime * 8.0) * 2.0 - 1.0);
+  float th = m * 1.2 - 0.12;
+  float keep = smoothstep(th, th + 0.012, n);
+  float s = edgeS(e, 0.9 + 0.35 * uP.w);
+  float keepD = smoothstep(0.5, 0.56, s);
+  float rimW = 0.04 + 0.1 * uP.w;
+  float rimD = keepD * (1.0 - smoothstep(0.5 + rimW, 0.5 + rimW + 0.06, s));
+  float scorch = 1.0 - smoothstep(th, th + 0.10, n);
+  vec3 c = sceneAt(e.src, m * 1.5) * mix(1.0, 0.25, scorch);
+  c = mix(c, c * vec3(1.12, 0.86, 0.62), clamp(m * 1.2, 0.0, 1.0) * 0.7);
+  c += vec3(0.9, 0.45, 0.15) * heat * 0.12 * smoothstep(0.02, 0.3, e.mean);
+  c = mix(c, vec3(0.93, 0.92, 0.88), rimD * 0.85);
+  c = mix(uBg, c, keep * keepD);
+  float front = (1.0 - smoothstep(0.0, uP.x, abs(n - th))) * step(0.015, m) * keepD * fl * (1.0 - smoothstep(0.9, 1.0, m));
+  c += emberCol(abs(n - th), uP.x) * front;
+  if (uReelOn > 0.5) {
+    vec2 rq = (uv - uReelCenter) * vec2(aspect(), 1.0);
+    float nr = fbm(rq * uP.y * 1.4 + uTime * 0.25);
+    float d = length(rq) - reelRadius(nr, 0.14);
+    float on = step(0.001, uMelt);
+    vec4 r = reelAt(uv, 0.0);
+    float fr = (1.0 - smoothstep(0.0, uP.x, abs(d))) * on * r.a * fl * (1.0 - smoothstep(0.92, 1.0, uMelt));
+    r.rgb *= mix(1.0, 0.3, (1.0 - smoothstep(0.0, 0.1, d)) * on);
+    r *= mix(1.0, smoothstep(0.0, 0.012, d), on) * (1.0 - step(0.999, uMelt));
+    c = over(c, r) + emberCol(abs(d), uP.x) * fr;
+  }
+  o = vec4(c, 1.0);
+}`,
+});
+/* Edge materials, batch 2. glyphs also reads uGlyph (the atlas built in JS, bound at unit 4). */
+Object.assign(VARIANT_MAIN, {
+  glyphs: `
+uniform sampler2D uGlyph;
+// One glyph cell. mp = melt progress that drives the grid and (via the cell's own melt) the vanish; the cell colour is
+// read once at the cell centre. Returns premultiplied (glyph colour, coverage).
+vec4 gmCell(vec2 uv, float mp, float cellPx, float heatV, float band, bool reel) {
+  vec2 asp = vec2(aspect(), 1.0);
+  float cell = max(cellPx * (1.0 - 0.6 * clamp(heatV * uP.w, 0.0, 1.0)), 1.5) / 900.0;
+  vec2 q = (uv - vec2(0.0, uShift)) * asp;
+  float row = floor(q.y / cell);
+  float slide = (hash12(vec2(row, 3.7)) - 0.5) * uSpeed * 0.06;
+  q.x += slide;
+  vec2 id = floor(q / cell);
+  vec2 cl = fract(q / cell);
+  float h = hash12(id);
+  vec2 cc = (id + 0.5) * cell;
+  cc += (vec2(hash12(id + 1.3), hash12(id + 2.7)) - 0.5) * cell * band * 1.0;
+  cc.x -= slide;
+  vec2 cuv = cc / asp + vec2(0.0, uShift);
+  float lod = clamp(log2(cell * uRes.y) + 0.5, 0.0, 6.0);
+  vec3 col;
+  float pres, vm;
+  if (reel) {
+    vec4 rs = reelAt(cuv, lod);
+    col = rs.a > 0.001 ? rs.rgb / rs.a : vec3(0.0);
+    pres = rs.a;
+    vm = mp * (1.0 + h * uP.z * 0.8);
+  } else {
+    col = sceneAt(cuv, lod);
+    pres = smoothstep(0.35, 0.65, cardCover(cuv));
+    vm = meltOf(cuv) * (1.0 + h * uP.z * 0.8);
+  }
+  float s = 1.0 - smoothstep(0.6, 0.9, vm);
+  float lum = dot(col, vec3(0.3, 0.59, 0.11));
+  lum = clamp(lum * 1.25 + (hash12(id + floor(uTime * 10.0)) - 0.5) * 0.3 * min(uSpeed, 1.0), 0.0, 1.0);
+  float lv = floor(uP.y + 0.5);
+  float lvl = floor(lum * lv * 0.9999);
+  float ai = floor(lvl / max(lv - 1.0, 1.0) * 7.0 + 0.5);
+  vec2 gc = (cl - 0.5) / max(s, 0.06) + 0.5;
+  float inb = step(0.0, gc.x) * step(gc.x, 1.0) * step(0.0, gc.y) * step(gc.y, 1.0);
+  float glod = clamp(log2(64.0 / max(cell * uRes.y * max(s, 0.2), 1.0)), 0.0, 4.0);
+  float g = textureLod(uGlyph, vec2((ai + clamp(gc.x, 0.0, 1.0)) / 8.0, 1.0 - clamp(gc.y, 0.0, 1.0)), glod).r * inb;
+  float a = g * pres * s;
+  return vec4(min(col * 1.3, vec3(1.0)) * a, a);
+}
+void main() {
+  vec2 uv = vUv;
+  Edge e = edgeAt(uv);
+  float heat = texture(uSim, uv).b;
+  float m = meltOf(uv);
+  float mt = clamp(m + e.band * 0.7, 0.0, 1.0);
+  float cellPx = mix(2.0, uP.x, smoothstep(0.0, 0.6, mt));
+  vec4 g = gmCell(uv, mt, cellPx, heat, e.band, false);
+  vec3 plain = mix(sceneAt(uv + e.jit * 0.5, 0.0), uBg, smoothstep(0.55, 1.0, m));
+  float k = smoothstep(0.03, 0.2, mt * (1.0 - 0.8 * clamp(heat * uP.w, 0.0, 1.0)));
+  vec3 c = mix(plain, uBg * (1.0 - g.a) + g.rgb, k);
+  if (uReelOn > 0.5) {
+    float rm = clamp((reelRadius(0.5, 0.0) - reelDist(uv)) / 0.14, 0.0, 1.0);
+    float cellPxR = mix(2.0, uP.x * 1.4, smoothstep(0.0, 0.5, rm));
+    vec4 gr = gmCell(uv, rm, cellPxR, 0.0, 0.0, true);
+    vec4 plainR = reelAt(uv, 0.0) * (1.0 - smoothstep(0.6, 1.0, rm));
+    vec4 r = mix(plainR, gr, smoothstep(0.03, 0.2, rm));
+    c = over(c, r);
+  }
+  o = vec4(c, 1.0);
+}`,
+  grain: `
+void main() {
+  vec2 uv = vUv;
+  Edge e = edgeAt(uv);
+  vec2 asp = vec2(aspect(), 1.0);
+  float heat = texture(uSim, uv).b;
+  float m = meltOf(uv);
+  float gs = uP.x / 900.0;
+  float rem = m * 1.25 - 0.1;
+  vec2 q = (uv - vec2(0.0, uShift)) * asp;
+  vec2 cell = floor(q / gs);
+  float n = fbm(q * 3.0 + vec2(0.0, uTime * 0.04));
+  float kp = smoothstep(rem, rem + 0.18, n);
+  float gh = hash12(cell);
+  float kept = step(gh, kp);
+  float s = edgeS(e, 1.1);
+  kept *= step(gh, smoothstep(0.3, 0.58, s));
+  vec2 curOff = (vec2(vnoise(q * 5.0 + uTime), vnoise(q * 5.0 + 3.3)) - 0.5) * heat * uP.w * 0.08;
+  vec3 c = sceneAt(e.src + curOff * 0.5, m * 1.5);
+  float rim = (1.0 - smoothstep(0.0, uP.z, abs(n - rem - 0.06))) * step(0.02, m) * kept;
+  c += vec3(1.0, 0.85, 0.6) * rim * 0.55;
+  c = mix(uBg, c, kept);
+  vec2 fv = vec2(vnoise(q * 2.0 + uTime * 0.1), vnoise(q * 2.0 + 7.7 + uTime * 0.1)) - 0.5;
+  vec2 off = (fv * 2.0 + vec2(0.0, 0.4)) * uP.y * m + vec2(0.0, uDir * uSpeed * uP.w * 0.15 * (0.3 + m)) + curOff;
+  vec2 sp = uv - off;
+  vec2 qs = (sp - vec2(0.0, uShift)) * asp;
+  float ns = fbm(qs * 3.0 + vec2(0.0, uTime * 0.04));
+  float kps = smoothstep(rem, rem + 0.18, ns);
+  float ghs = hash12(floor(qs / gs));
+  float dust = (1.0 - step(ghs, kps)) * cardCover(sp) * step(hash12(cell + 31.0), 0.35)
+    * (1.0 - smoothstep(0.6, 1.0, m)) * step(0.01, length(off));
+  c = mix(c, sceneAt(sp, 1.0) * 0.9, dust);
+  if (uReelOn > 0.5) {
+    vec2 rq = (uv - uReelCenter) * asp;
+    float dist = length(rq);
+    vec2 rd = rq / max(dist, 1e-4);
+    float nr = fbm(rq * 3.0 + 2.2);
+    float R = reelRadius(nr, 0.16);
+    float dsr = dist - R;
+    float on = step(0.001, uMelt);
+    float kpR = mix(1.0, smoothstep(0.0, 0.12, dsr), on);
+    float ghR = hash12(floor(rq / gs));
+    float keptR = step(ghR, kpR);
+    vec4 r = reelAt(uv, 0.0);
+    float rimR = (1.0 - smoothstep(0.0, uP.z, abs(dsr - 0.04))) * on * r.a;
+    vec4 rr = r * keptR;
+    rr.rgb += vec3(0.5, 0.4, 0.3) * rimR * 0.6 * keptR;
+    vec2 spR = uv - rd * uP.y * uMelt * 2.0 / asp;
+    float goneS = step(reelDist(spR), R + 0.04);
+    vec4 rs = reelAt(spR, 1.0);
+    float dv = goneS * step(hash12(floor(rq / gs) + 31.0), 0.4) * (1.0 - smoothstep(0.7, 1.0, uMelt)) * on;
+    rr = rr * (1.0 - dv * rs.a) + rs * dv * 0.9;
+    c = over(c, rr);
+  }
+  o = vec4(c, 1.0);
+}`,
+  ink: `
+void main() {
+  vec2 uv = vUv;
+  Edge e = edgeAt(uv);
+  vec2 asp = vec2(aspect(), 1.0);
+  float heat = texture(uSim, uv).b;
+  float m = meltOf(uv);
+  vec3 inkCol = vec3(0.045, 0.04, 0.055);
+  vec2 q = (uv - vec2(0.0, uShift)) * asp * uP.x;
+  q.y /= 1.0 + uSpeed * 0.7;
+  float field = fbm(q + fbm(q * 0.7 + uTime * 0.04) * 0.8 + vec2(0.0, uTime * 0.03)) + e.band * 0.15;
+  float inkE = clamp(m + heat * uP.w * 0.25 + e.band * 0.3, 0.0, 1.0);
+  float thr = 1.05 - inkE * 1.25;
+  float w = uP.y;
+  float stain = smoothstep(thr - w, thr + w, field) * smoothstep(0.0, 0.06, inkE);
+  vec3 c = mix(sceneAt(e.src, m * 2.0), inkCol, stain * 0.96);
+  float wick = (1.0 - smoothstep(0.0, w * 0.5, abs(field - thr))) * uP.z * step(0.03, inkE);
+  c = mix(c, c * 0.35, wick * 0.5) + vec3(0.5, 0.4, 0.3) * wick * 0.12;
+  c = mix(c, uBg, smoothstep(0.7, 1.0, m));
+  c = mix(uBg, c, smoothstep(0.46, 0.54, edgeS(e, 1.0)));
+  if (uReelOn > 0.5) {
+    vec2 rq = (uv - uReelCenter) * asp;
+    float nr = fbm(rq * uP.x * 1.2 + uTime * 0.05);
+    float d = length(rq) - reelRadius(nr, 0.3);
+    float on = step(0.001, uMelt);
+    vec4 r = reelAt(uv, 0.0);
+    float st = (1.0 - smoothstep(0.0, 0.18, d)) * on;
+    r.rgb = mix(r.rgb, inkCol * r.a, st * 0.92);
+    float wr = (1.0 - smoothstep(0.0, 0.03, abs(d))) * uP.z * on * r.a;
+    r.rgb += vec3(0.5, 0.4, 0.3) * wr * 0.12;
+    r *= mix(1.0, smoothstep(0.0, min(0.03 + w * 0.3, 0.08), d), on) * (1.0 - step(0.999, uMelt));
+    c = over(c, r);
+  }
+  o = vec4(c, 1.0);
+}`,
+  mosaic: `
+void main() {
+  vec2 uv = vUv;
+  Edge e = edgeAt(uv);
+  vec2 asp = vec2(aspect(), 1.0);
+  float heat = texture(uSim, uv).b;
+  float m = meltOf(uv);
+  float mt = clamp(m + e.band * 0.6, 0.0, 1.0);
+  float cellPx = mix(uP.x, uP.y, smoothstep(0.0, 0.8, m)) * (1.0 - 0.7 * clamp(heat, 0.0, 1.0) * uP.w);
+  float cell = max(cellPx, 1.5) / 900.0;
+  vec2 q = (uv - vec2(0.0, uShift)) * asp;
+  vec2 id = floor(q / cell);
+  float hs = hash12(id + floor(uTime * 4.0) * step(0.15, uSpeed) * 0.37);
+  vec2 cc = (id + 0.5) * cell + (vec2(hash12(id + 1.3), hash12(id + 2.7)) - 0.5) * cell * e.band * 1.2;
+  vec2 cuv = cc / asp + vec2(0.0, uShift);
+  float tm = meltOf(cuv);
+  vec3 col = sceneAt(cuv, clamp(log2(cell * uRes.y), 0.0, 6.0));
+  float alpha = 1.0 - smoothstep(0.7, 0.85, tm * (1.0 + hs * uP.z * 0.8));
+  float cov = smoothstep(0.35, 0.65, cardCover(cuv));
+  vec3 blockC = mix(uBg, col, alpha * cov);
+  vec3 plain = mix(sceneAt(uv + e.jit * 0.5, 0.0), uBg, smoothstep(0.55, 1.0, m));
+  vec3 c = mix(plain, blockC, smoothstep(0.02, 0.35, mt));
+  if (uReelOn > 0.5) {
+    float rm = clamp((reelRadius(0.5, 0.0) - reelDist(uv)) / 0.14, 0.0, 1.0);
+    float cellR = mix(uP.x, uP.y * 1.3, smoothstep(0.0, 0.6, rm)) / 900.0;
+    vec2 rq = (uv - uReelCenter) * asp;
+    vec2 idr = floor(rq / cellR);
+    float hr = hash12(idr + 4.4);
+    vec2 ruv = (idr + 0.5) * cellR / asp + uReelCenter;
+    vec4 rc = reelAt(ruv, clamp(log2(cellR * uRes.y), 0.0, 6.0));
+    float ar = 1.0 - smoothstep(0.7, 0.85, rm * (1.0 + hr * uP.z * 0.8));
+    vec4 r = mix(reelAt(uv, 0.0), rc * ar, smoothstep(0.02, 0.35, rm));
+    c = over(c, r);
+  }
+  o = vec4(c, 1.0);
+}`,
+  shards: `
+vec4 shVor(vec2 p) {
+  vec2 ip = floor(p), fp = fract(p);
+  float d1 = 8.0, d2 = 8.0;
+  vec2 best = vec2(0.0);
+  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+    vec2 g = vec2(float(i), float(j));
+    vec2 o2 = vec2(hash12(ip + g), hash12(ip + g + 17.3));
+    vec2 r = g + o2 - fp;
+    float d = dot(r, r);
+    if (d < d1) { d2 = d1; d1 = d; best = ip + g; } else if (d < d2) { d2 = d; }
+  }
+  return vec4(sqrt(d1), sqrt(d2), best);
+}
+vec2 shP(vec2 uvp) { return (uvp - vec2(0.0, uShift)) * vec2(aspect(), 1.0) * uP.x; }
+vec2 shPt(vec2 id) {
+  vec2 o2 = vec2(hash12(id), hash12(id + 17.3));
+  return (id + o2) / uP.x / vec2(aspect(), 1.0) + vec2(0.0, uShift);
+}
+// Per shard: x = how far it has dropped (0..1), yz = its offset in uv.
+vec3 shCell(vec2 id, bool reel) {
+  float h = hash12(id + 5.1), h2 = hash12(id + 9.7);
+  vec2 cp = shPt(id);
+  float lim;
+  vec2 dirv;
+  if (reel) {
+    float rmc = clamp((reelRadius(0.5, 0.0) - reelDist(cp)) / 0.14, 0.0, 1.0);
+    lim = rmc * (1.0 + h * 0.5);
+    dirv = reelDir(cp) * 0.8 + vec2(0.0, -0.4);
+  } else {
+    lim = meltOf(cp) * (1.0 + h * 0.5) + texture(uSim, cp).b * 0.15;
+    dirv = vec2((h2 - 0.5) * 0.6, mix(-1.0, uDir, clamp(uSpeed * 1.5, 0.0, 1.0)));
+  }
+  float p = smoothstep(0.7, 0.95, lim);
+  vec2 off = dirv * uP.z * p * p * (0.6 + h);
+  if (reel) off.x /= aspect();
+  return vec3(p, off);
+}
+// Finds the shard covering this pixel after the shards have moved. Returns (source uv, visibility, crack line).
+vec4 shard(vec2 uv, bool reel, out float shade, out vec2 cid) {
+  vec4 v0 = shVor(shP(uv));
+  vec3 s0 = shCell(v0.zw, reel);
+  vec4 v1 = shVor(shP(uv - s0.yz));
+  vec3 s1 = shCell(v1.zw, reel);
+  vec2 sp = uv - s1.yz;
+  vec4 v2 = shVor(shP(sp));
+  float inside = (v2.z == v1.z && v2.w == v1.w) ? 1.0 : 0.0;
+  cid = v1.zw;
+  shade = 1.0 + (hash12(v1.zw + 9.1) - 0.5) * uP.w * 0.5 * smoothstep(0.0, 0.5, s1.x);
+  return vec4(sp, inside * (1.0 - smoothstep(0.6, 1.0, s1.x)), 1.0 - smoothstep(0.0, 0.1, v2.y - v2.x));
+}
+void main() {
+  vec2 uv = vUv;
+  Edge e = edgeAt(uv);
+  float m = meltOf(uv);
+  float sh;
+  vec2 cid;
+  vec4 S = shard(uv, false, sh, cid);
+  vec3 c = sceneAt(S.xy, 0.0) * sh;
+  float crackAmt = uP.y * (smoothstep(0.02, 0.5, m) + e.band * 0.3);
+  c *= 1.0 - S.w * crackAmt * 0.8;
+  float moved = smoothstep(0.0, 0.01, length(S.xy - uv));
+  float cellMask = mix(1.0, smoothstep(0.35, 0.65, cardCover(shPt(cid))), step(hash12(cid + 3.3), 0.45) * e.band);
+  float a = S.z * smoothstep(0.35, 0.65, cardCover(S.xy)) * cellMask * mix(edgeKeep(e, 0.9), 1.0, moved);
+  c = mix(uBg, c, a);
+  c = mix(c, uBg, smoothstep(0.85, 1.0, m));
+  if (uReelOn > 0.5) {
+    float shR;
+    vec2 cidR;
+    vec4 SR = shard(uv, true, shR, cidR);
+    vec4 r = reelAt(SR.xy, 0.0);
+    r.rgb *= shR * (1.0 - SR.w * uP.y * 0.5);
+    c = over(c, r * SR.z);
+  }
+  o = vec4(c, 1.0);
+}`,
+});
+
 /* ---------------- simulations ---------------- */
 const TRAIL_FRAG = HEAD + NOISE + `
 uniform sampler2D uState;
@@ -780,7 +1533,28 @@ void main() {
 const progs = {};
 progs.card = program(CARD_VERT, CARD_FRAG, 'card');
 progs.reel = program(REEL_VERT, REEL_FRAG, 'reel');
-for (const v of VARIANTS) progs[v.key] = program(QUAD_VERT, HEAD + NOISE + MELT + COMP + VARIANT_MAIN[v.key], v.key);
+for (const v of VARIANTS) progs[v.key] = program(QUAD_VERT, HEAD + NOISE + MELT + COMP + (v.edge ? EDGE : '') + VARIANT_MAIN[v.key], v.key);
+const HEAT_SIM = (v) => v.key === 'drip' || v.key === 'blobs' || v.edge;   // variants that read the cursor's heat trail (uSim.b)
+// Glyph atlas for 'glyphs': 8 cells in a row, light to heavy, drawn with the page's own display serif.
+const glyphTex = (() => {
+  const cv = document.createElement('canvas');
+  cv.width = 512; cv.height = 64;
+  const c2 = cv.getContext('2d');
+  c2.fillStyle = '#000'; c2.fillRect(0, 0, 512, 64);
+  c2.fillStyle = '#fff'; c2.textAlign = 'center'; c2.textBaseline = 'middle';
+  const serif = getComputedStyle(document.documentElement).getPropertyValue('--serif').trim() || 'serif';
+  c2.font = `700 50px ${serif}`;
+  ['.', ':', '-', '+', 'T', 'A', 'H', 'A'].forEach((ch, i) => c2.fillText(ch, i * 64 + 32, 35));
+  const t = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, cv);
+  gl.generateMipmap(gl.TEXTURE_2D);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  return t;
+})();
 progs.trail = program(QUAD_VERT, TRAIL_FRAG, 'trail');
 progs.wave = program(QUAD_VERT, WAVE_FRAG, 'wave');
 for (const k of Object.keys(FL)) progs['fl_' + k] = program(QUAD_VERT, FL[k], 'fluid ' + k);
@@ -1037,6 +1811,10 @@ canvas.addEventListener('pointerleave', () => { ptr.x = ptr.y = -1; ptrFrame.x =
 addEventListener('keydown', (e) => {
   if (e.target.matches && e.target.matches('input, textarea, [contenteditable]')) return;
   if (e.key === 'h' || e.key === 'H') { document.documentElement.classList.toggle('bare'); return; }
+  if ((e.key === 'e' || e.key === 'E') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+    if (VARIANTS[cur].key === 'signal') { G.edgeMode = (G.edgeMode + 1) % 3; buildPanel(); toast(`Front card edge: ${EDGE_MODES[G.edgeMode]}`); }
+    return;
+  }
   if (e.key === 'ArrowLeft') { setVariant(cur - 1); e.preventDefault(); return; }
   if (e.key === 'ArrowRight') { setVariant(cur + 1); e.preventDefault(); return; }
   if (phase === 'hero') return;
@@ -1098,6 +1876,7 @@ function buildPanel() {
   const v = VARIANTS[cur];
   p.insertAdjacentHTML('beforeend', `<h3>${String.fromCharCode(65 + cur)} · ${v.name}</h3><p>${v.note}</p>`);
   v.params.forEach((q, i) => slider(p, q.label, q.min, q.max, q.step, v.values[i], (x) => { v.values[i] = x; }));
+  if (v.key === 'signal') slider(p, 'Front card edge (E key)', 0, 2, 1, G.edgeMode, (x) => { G.edgeMode = x; }, (x) => EDGE_MODES[Math.round(x)]);
   p.insertAdjacentHTML('beforeend', '<h3>Shared</h3>');
   slider(p, 'Sharp band (0 = no sharp band)', 0, 0.8, 0.01, G.band, (x) => { G.band = x; });
   slider(p, 'Far cards melt', 0, 1, 0.01, G.far, (x) => { G.far = x; });
@@ -1407,7 +2186,7 @@ function frame(now) {
   const strength = clamp(movedPx / 30, 0, 1);
   const sim = simFor(v.key);
   let simTex, simTexel = [1, 1];
-  if (v.key === 'drip' || v.key === 'blobs') {
+  if (HEAT_SIM(v)) {
     progs.trail.use().tex('uState', sim.read.tex, 0).f('uTexel', 1 / sim.w, 1 / sim.h).f('uA', ...ptrUvLast).f('uB', ...ptrUv)
       .f('uStrength', ptr.x >= 0 ? strength * 0.6 : 0).f('uRadius', 0.05).f('uDecay', 0.965).f('uAspect', asp);
     drawQuad(sim.write); sim.swap(); simTex = sim.read.tex;
@@ -1431,6 +2210,8 @@ function frame(now) {
   // --- pass 4: composite with the melt material
   const M = progs[v.key].use();
   M.tex('uScene', scene.tex, 0).tex('uMeta', scene.meta, 1).tex('uReel', reelT.tex, 2).tex('uSim', simTex, 3);
+  if (v.key === 'glyphs') M.tex('uGlyph', glyphTex, 4);
+  if (v.key === 'signal') M.f('uEdgeMode', G.edgeMode);
   meltUniforms(M, now, speed, dir, shift);
   M.f('uSimTexel', simTexel[0], simTexel[1]).f('uBg', bg[0], bg[1], bg[2]).f('uMelt', phase === 'melt' ? meltP : phase === 'helix' ? 1 : 0)
     .f('uReelOn', phase === 'helix' ? 0 : 1).f('uP', P[0], P[1], P[2], P[3]);
