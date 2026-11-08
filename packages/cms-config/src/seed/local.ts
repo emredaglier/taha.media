@@ -27,6 +27,7 @@ type DemoWork = {
   role?: string
   /** Position on Home; the Work is not featured when absent. */
   featuredOrder?: number
+  /** A 16:9 loop; every featured Work needs one (ADR-0008, issue #43). */
   previewLoop?: boolean
   main: MainMedia
   stills?: number
@@ -71,6 +72,7 @@ const DEMO_WORKS: DemoWork[] = [
     disciplines: ['kurgu'],
     client: 'Ege Turizm',
     featuredOrder: 3,
+    previewLoop: true,
     main: { kind: 'external', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
   },
   {
@@ -80,6 +82,7 @@ const DEMO_WORKS: DemoWork[] = [
     client: 'Çarşı Festivali',
     role: 'Afiş tasarımı',
     featuredOrder: 4,
+    previewLoop: true,
     main: { kind: 'image' },
     stills: 4,
   },

@@ -2,6 +2,7 @@ import { handleEndpoints } from 'payload'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { FEATURED_MAX, FEATURED_MIN } from '../featured'
+import { isSixteenByNine } from '../featured-loop'
 import { createTestSite, type TestSite } from '../testing'
 import { VIDEO_USES } from '../video-limits'
 import { lexical } from './lexical'
@@ -43,6 +44,12 @@ describe('the local seed', () => {
     expect(featured.length).toBeLessThanOrEqual(FEATURED_MAX)
     expect(works.every((w) => typeof w.cover === 'object' && w.cover !== null)).toBe(true)
     expect(works.some((w) => w.previewLoop)).toBe(true)
+    for (const work of featured) {
+      const loop = work.previewLoop
+      expect(
+        typeof loop === 'object' && loop !== null && isSixteenByNine(loop.width!, loop.height!),
+      ).toBe(true)
+    }
   }, 60_000)
 
   it('uploads Videos of every use (the caps accepted them)', async () => {

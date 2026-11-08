@@ -7,12 +7,15 @@ import { getFeaturedWorks, getWorks } from './works'
 let site: TestSite
 let editor: Awaited<ReturnType<TestSite['createEditor']>>
 let coverId: number
+let loopId: number
 
 beforeAll(async () => {
   site = await createTestSite()
   Object.assign(process.env, site.webEnv)
   editor = await site.createEditor()
   coverId = (await site.uploadImage(editor)).id
+  // Publishing a featured Work needs a 16:9 Preview loop (#43).
+  loopId = (await site.uploadVideo(editor, { use: 'previewLoop' })).id
 }, 30_000)
 
 afterAll(async () => {
@@ -36,6 +39,7 @@ const save = (data: Fields, status: 'draft' | 'published' = 'published') =>
       year: 2025,
       cover: coverId,
       mainMedia: { kind: 'image', image: coverId },
+      ...(data.featured ? { previewLoop: loopId } : {}),
       slug: data.title.toLowerCase().replaceAll(' ', '-'),
       ...data,
       _status: status,

@@ -42,6 +42,10 @@ async function createWork(status: 'draft' | 'published', extra: Partial<Work> = 
       year: 2025,
       cover,
       mainMedia: { kind: 'image', image: cover },
+      // Publishing a featured Work needs a 16:9 Preview loop (#43).
+      ...(extra.featured && !extra.previewLoop
+        ? { previewLoop: (await site.uploadVideo(editor, { use: 'previewLoop' })).id }
+        : {}),
       ...extra,
       _status: status,
     },

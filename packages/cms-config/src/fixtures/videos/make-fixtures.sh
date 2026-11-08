@@ -10,6 +10,10 @@ v() { # name size seconds fps extra...
 }
 v loop-ok.mp4 640x360 2 10 -c:v libx264 -g 10
 v portrait.mp4 360x640 2 10 -c:v libx264 -g 10
+v loop-720.mp4 1280x720 2 10 -c:v libx264 -g 10
+v loop-638.mp4 638x360 2 10 -c:v libx264 -g 10
+v loop-636.mp4 636x360 2 10 -c:v libx264 -g 10
+v square.mp4 360x360 2 10 -c:v libx264 -g 10
 v long-12s.mp4 160x90 12 1 -c:v libx264 -g 12
 v long-35s.mp4 160x90 35 1 -c:v libx264 -g 35
 v long-200s.mp4 160x90 200 1 -c:v libx264 -g 200

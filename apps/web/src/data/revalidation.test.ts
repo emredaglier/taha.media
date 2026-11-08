@@ -15,6 +15,7 @@ import { getFeaturedWorks, getPublishedWorkSlugs, getWorkBySlug, getWorks } from
 let site: TestSite
 let editor: User
 let coverId: number
+let loopId: number
 
 beforeAll(async () => {
   process.env.REVALIDATE_SECRET = 'shared-secret'
@@ -28,6 +29,8 @@ beforeAll(async () => {
   Object.assign(process.env, site.webEnv)
   editor = await site.createEditor()
   coverId = (await site.uploadImage(editor)).id
+  // Publishing a featured Work needs a 16:9 Preview loop (#43).
+  loopId = (await site.uploadVideo(editor, { use: 'previewLoop' })).id
 }, 30_000)
 
 afterAll(async () => {
@@ -51,6 +54,7 @@ const createWork = (data: Partial<WorkDoc> & { title: string; slug: string }) =>
       year: 2025,
       cover: coverId,
       mainMedia: { kind: 'image', image: coverId },
+      ...(data.featured ? { previewLoop: loopId } : {}),
       _status: 'published',
       ...data,
     },
@@ -58,7 +62,12 @@ const createWork = (data: Partial<WorkDoc> & { title: string; slug: string }) =>
   })
 
 const publish = (id: number, data: Partial<WorkDoc>) =>
-  site.cms.update({ collection: 'works', id, data: { ...data, _status: 'published' }, ...as() })
+  site.cms.update({
+    collection: 'works',
+    id,
+    data: { ...(data.featured ? { previewLoop: loopId } : {}), ...data, _status: 'published' },
+    ...as(),
+  })
 
 const titles = (works: { title: string }[]) => works.map((work) => work.title)
 
