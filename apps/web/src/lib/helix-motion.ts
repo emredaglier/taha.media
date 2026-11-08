@@ -1,3 +1,4 @@
+import { cardOnScreen } from './helix-geometry'
 import { HELIX_TUNING } from './helix-tuning'
 
 /**
@@ -444,6 +445,52 @@ export const visibleCards = (state: HelixState): number[] =>
   Array.from({ length: state.cards }, (_, card) => card).filter(
     (card) => Math.abs(slotOf(state, card)) < visibleSlots(state),
   )
+
+/**
+ * The cards in the sharp middle band (#55): those whose picture reaches within `band` of the
+ * middle of the screen, top to bottom (0 to 1 of the half-height; the tuned sharp band), where the
+ * liquid glass doesn't melt it. `focal` is the screen's focal length: where cards are smaller on
+ * screen (phones), more of them reach in. None while the zoom runs: the Showreel has the middle.
+ */
+export function sharpCards(
+  state: HelixState,
+  focal: number,
+  band: number = HELIX_TUNING.sharpBand,
+): number[] {
+  if (state.phase.kind === 'hero') return []
+  return visibleCards(state).filter((card) => {
+    // The screen's shape only moves cards sideways; 1 stands in for it.
+    const box = cardOnScreen(slotOf(state, card), focal, 1)
+    return box !== null && Math.abs(box.y) - box.halfHeight <= band
+  })
+}
+
+/**
+ * The cards that show their Work's Preview loop (#55): those in the sharp band (`sharpCards`,
+ * `band` as there), and the card the pointer rests on (`hovered`, if any). Every other card shows
+ * its poster as a still frame.
+ */
+export function liveCards(
+  state: HelixState,
+  focal: number,
+  hovered: number | null,
+  band: number = HELIX_TUNING.sharpBand,
+): number[] {
+  const cards = sharpCards(state, focal, band)
+  return hovered === null || cards.includes(hovered) ? cards : [...cards, hovered]
+}
+
+/**
+ * The Featured Works whose Preview loops play: the Works of the live cards (`liveCards`). Repeated
+ * cards share their Work's one loop, so this never holds more Works than there are.
+ */
+export const playingWorks = (
+  state: HelixState,
+  focal: number,
+  hovered: number | null,
+  band: number = HELIX_TUNING.sharpBand,
+): Set<number> =>
+  new Set(liveCards(state, focal, hovered, band).map((card) => workOfCard(state, card)))
 
 /** What the opening looks like now: what the renderer, the overlays and the page read. */
 export type Opening = {

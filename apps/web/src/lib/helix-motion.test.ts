@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { HELIX_TUNING } from './helix-tuning'
+import { focalFor } from './helix-geometry'
 import {
   cardPresence,
   counter,
@@ -9,21 +9,27 @@ import {
   frontCard,
   frontWork,
   isResting,
+  liveCards,
   liveRegionAfter,
   openingOf,
+  playingWorks,
+  sharpCards,
   slotOf,
   startHelix,
   stepHelix,
   visibleCards,
+  visibleSlots,
   workOfCard,
   type HelixInput,
   type HelixState,
 } from './helix-motion'
+import { HELIX_TUNING } from './helix-tuning'
 
 /** Featured Work counts to check properties over: one, a few, around the minimum, many. */
 const WORK_COUNTS = [1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 17]
 
 const range = (length: number) => Array.from({ length }, (_, index) => index)
+const mod = (value: number, by: number) => ((value % by) + by) % by
 
 /** An input at a wall-clock time (ms). */
 type Timed = { at: number; input: HelixInput }
@@ -366,6 +372,249 @@ describe('endless', () => {
     expect(frontCard(back)).toBe(frontCard(start))
     expect(back.progress).toBe(start.progress)
   })
+})
+
+describe('the sharp band', () => {
+  /** Screens from a tall phone to an ultrawide monitor, as their focal lengths. */
+  const FOCALS = [390 / 844, 3 / 4, 16 / 9, 21 / 9].map(focalFor)
+  /** Bands from none at all to the whole screen height, around the tuned one. */
+  const BANDS = [0, HELIX_TUNING.sharpBand / 2, HELIX_TUNING.sharpBand, 0.5, 1]
+
+  /** The Helix turned to `progress` cards, with the opening behind it. */
+  const turnedTo = (n: number, progress: number): HelixState => ({
+    ...createHelix(n),
+    progress,
+  })
+
+  /** Every place to check: each card in front, at rest and between cards. */
+  const places = (n: number) =>
+    range(createHelix(n).cards).flatMap((front) =>
+      [0, 0.25, 0.5, 0.75].map((offset) => turnedTo(n, front + offset)),
+    )
+
+  it.each(WORK_COUNTS)('with %i Works: the card nearest the middle is always sharp', (n) => {
+    for (const helix of places(n)) {
+      const middle = mod(Math.round(helix.progress), helix.cards)
+      for (const focal of FOCALS) {
+        for (const band of BANDS) expect(sharpCards(helix, focal, band)).toContain(middle)
+      }
+    }
+  })
+
+  it.each(WORK_COUNTS)('with %i Works: a wider band never holds fewer cards', (n) => {
+    for (const helix of places(n)) {
+      for (const focal of FOCALS) {
+        for (const [narrow, wide] of BANDS.slice(1).map((band, index) => [BANDS[index]!, band])) {
+          const inWide = sharpCards(helix, focal, wide!)
+          for (const card of sharpCards(helix, focal, narrow)) expect(inWide).toContain(card)
+        }
+      }
+    }
+  })
+
+  it.each(WORK_COUNTS)(
+    'with %i Works: a screen whose cards are smaller never holds fewer cards',
+    (n) => {
+      const shortest = Math.min(...FOCALS)
+      for (const helix of places(n)) {
+        const onSmall = sharpCards(helix, shortest)
+        for (const focal of FOCALS) {
+          for (const card of sharpCards(helix, focal)) expect(onSmall).toContain(card)
+        }
+      }
+    },
+  )
+
+  it.each(WORK_COUNTS)(
+    'with %i Works: sharp cards are visible cards, in one unbroken run around the middle',
+    (n) => {
+      for (const helix of places(n)) {
+        for (const focal of FOCALS) {
+          for (const band of BANDS) {
+            const sharp = sharpCards(helix, focal, band)
+            const visible = visibleCards(helix)
+            for (const card of sharp) expect(visible).toContain(card)
+            const slots = sharp.map((card) => slotOf(helix, card)).sort((a, b) => a - b)
+            for (const [index, slot] of slots.slice(1).entries()) {
+              expect(slot - slots[index]!).toBeCloseTo(1, 9)
+            }
+          }
+        }
+      }
+    },
+  )
+
+  it.each(WORK_COUNTS)('with %i Works: turning a whole lap gives the same cards', (n) => {
+    for (const helix of places(n)) {
+      const lapped = { ...helix, progress: helix.progress + helix.cards }
+      const back = { ...helix, progress: helix.progress - 3 * helix.cards }
+      for (const focal of FOCALS) {
+        expect(sharpCards(lapped, focal)).toEqual(sharpCards(helix, focal))
+        expect(sharpCards(back, focal)).toEqual(sharpCards(helix, focal))
+      }
+    }
+  })
+
+  it('at rest, with a band of nothing, only the card in the middle is sharp', () => {
+    for (const focal of FOCALS) expect(sharpCards(turnedTo(6, 2), focal, 0)).toEqual([2])
+  })
+
+  it('at rest on a wide screen, with a quarter band, the front card and its neighbours are sharp', () => {
+    // Worked by hand (focal 3.5): the next card down reaches to 0.22 of the half-height from the
+    // middle, the one after it only to 0.60.
+    expect(sharpCards(turnedTo(12, 0), 3.5, 0.25).sort((a, b) => a - b)).toEqual([0, 1, 11])
+  })
+
+  it.each(WORK_COUNTS)(
+    'with %i Works: none while the zoom runs: the Showreel has the middle',
+    (n) => {
+      for (const focal of FOCALS) expect(sharpCards(createOpening(n), focal)).toEqual([])
+    },
+  )
+})
+
+describe('Preview loops', () => {
+  const FOCALS = [390 / 844, 16 / 9].map(focalFor)
+
+  /** States to check: turned anywhere, at rest, mid-turn, mid-melt. */
+  const states = (n: number): HelixState[] => {
+    const cards = createHelix(n).cards
+    return [0, 0.5, 1.3, cards / 2, cards - 0.25, -2.6].flatMap((progress) => [
+      { ...createHelix(n), progress },
+      {
+        ...createHelix(n),
+        progress,
+        speed: 9,
+        goal: progress + 2,
+        phase: { kind: 'melt', startedAt: 0 },
+      },
+    ])
+  }
+
+  /** No card hovered, or each card in turn. */
+  const hovers = (state: HelixState): (number | null)[] => [null, ...range(state.cards)]
+
+  it.each(WORK_COUNTS)(
+    'with %i Works: the Works that play are those of the sharp cards and the hovered card',
+    (n) => {
+      for (const state of states(n)) {
+        for (const focal of FOCALS) {
+          const sharp = sharpCards(state, focal)
+          for (const hovered of hovers(state)) {
+            const playing = playingWorks(state, focal, hovered)
+            const shown = [...sharp, ...(hovered === null ? [] : [hovered])]
+            // Every one of those cards plays its Work...
+            for (const card of shown) expect(playing.has(workOfCard(state, card))).toBe(true)
+            // ...and no other Work plays.
+            for (const work of playing) {
+              expect(shown.some((card) => workOfCard(state, card) === work)).toBe(true)
+            }
+          }
+        }
+      }
+    },
+  )
+
+  it.each(WORK_COUNTS)(
+    'with %i Works: nothing else changes the set (speed, goal, motion, clock, melt)',
+    (n) => {
+      for (const state of states(n)) {
+        const other: HelixState = {
+          ...state,
+          speed: -state.speed - 4,
+          goal: state.goal + 7,
+          motion: { kind: 'settle', to: 3 },
+          time: 12_345,
+          open: 1 % n,
+          announced: (state.announced + 1) % n,
+          phase: state.phase.kind === 'melt' ? { kind: 'helix' } : { kind: 'melt', startedAt: 9 },
+        }
+        for (const focal of FOCALS) {
+          for (const hovered of hovers(state)) {
+            expect(playingWorks(other, focal, hovered)).toEqual(playingWorks(state, focal, hovered))
+          }
+        }
+      }
+    },
+  )
+
+  it.each(WORK_COUNTS)('with %i Works: never more Works than there are', (n) => {
+    for (const state of states(n)) {
+      for (const hovered of hovers(state)) {
+        // The whole screen as the band: as many cards as can ever count.
+        for (const focal of FOCALS) {
+          expect(playingWorks(state, focal, hovered, 1).size).toBeLessThanOrEqual(n)
+          for (const work of playingWorks(state, focal, hovered, 1)) {
+            expect(work).toBeGreaterThanOrEqual(0)
+            expect(work).toBeLessThan(n)
+          }
+        }
+      }
+    }
+  })
+
+  it.each(WORK_COUNTS)('with %i Works: turning a whole lap gives the same set', (n) => {
+    for (const state of states(n)) {
+      for (const laps of [1, -1, 3]) {
+        const lapped = { ...state, progress: state.progress + laps * state.cards }
+        for (const focal of FOCALS) {
+          for (const hovered of hovers(state)) {
+            expect(playingWorks(lapped, focal, hovered)).toEqual(
+              playingWorks(state, focal, hovered),
+            )
+          }
+        }
+      }
+    }
+  })
+
+  it.each(WORK_COUNTS.filter((n) => n >= 6))(
+    'with %i Works: at rest, a hovered side card adds its own Work',
+    (n) => {
+      const state = createHelix(n, 0)
+      const [focal] = FOCALS
+      const resting = playingWorks(state, focal!, null)
+      const side = mod(visibleSlots(state) - 1, state.cards)
+      expect(resting.has(workOfCard(state, side))).toBe(false)
+      expect(playingWorks(state, focal!, side)).toEqual(
+        new Set([...resting, workOfCard(state, side)]),
+      )
+    },
+  )
+
+  it.each(WORK_COUNTS)(
+    'with %i Works: a card shows its loop only in the sharp band or pointed at, listed once',
+    (n) => {
+      for (const state of states(n)) {
+        for (const focal of FOCALS) {
+          const sharp = sharpCards(state, focal)
+          for (const hovered of hovers(state)) {
+            const live = liveCards(state, focal, hovered)
+            expect(new Set(live).size).toBe(live.length)
+            expect(new Set(live)).toEqual(
+              new Set([...sharp, ...(hovered === null ? [] : [hovered])]),
+            )
+          }
+        }
+      }
+    },
+  )
+
+  it('with few Works, a repeat of a playing Work outside the band shows its poster', () => {
+    // Two Works make ten cards; at rest on the first, the second Work plays on the card below it.
+    const state = createHelix(2, 0)
+    const [focal] = FOCALS
+    expect(playingWorks(state, focal!, null).has(1)).toBe(true)
+    expect(workOfCard(state, 3)).toBe(1)
+    expect(liveCards(state, focal!, null)).not.toContain(3)
+  })
+
+  it.each(WORK_COUNTS)(
+    'with %i Works: nothing plays while the zoom runs and nothing is hovered',
+    (n) => {
+      for (const focal of FOCALS) expect(playingWorks(createOpening(n), focal, null).size).toBe(0)
+    },
+  )
 })
 
 describe('focus', () => {

@@ -29,8 +29,47 @@ export const HELIX_TUNING = {
   minCards: 10,
   /** Below either value the device is weak and gets the static Home (a value not reported passes). */
   weakDevice: { minMemoryGb: 4, minCores: 4 },
-  /** Distance from the middle (0 to 1 of the half-height) where the top and bottom fade begins. */
+  /**
+   * The sharp middle band (#55): within this distance of the middle of the screen (0 to 1 of the
+   * half-height) nothing melts. Beyond it the top and bottom melt away, and only the cards that
+   * reach into it play their Preview loops (0: only the card in the middle).
+   */
   sharpBand: 0.25,
+  /**
+   * The liquid glass (#55), the material that melts the Helix: how strongly ripples bend the
+   * picture (`rippleStrength`), how fast the heat haze drifts (`hazeSpeed`), how much the cursor
+   * stirs up ripples as it moves (`cursorRipples`), and how far the colours split where the
+   * picture bends (`colourSplit`).
+   */
+  glass: { rippleStrength: 1, hazeSpeed: 0.6, cursorRipples: 0.35, colourSplit: 0.7 },
+  /**
+   * The water under the glass, where the ripples run: how wide a drop is (`dropRadius`, in screen
+   * heights), how much of a ripple is left after each of the `stepsPerSecond` steps (`damping`),
+   * how hard the moving cursor pushes it (`cursorPush`, before `glass.cursorRipples`, reached at
+   * `cursorFullSpeed` CSS px per second), the drop as the Showreel starts to melt (`meltDrop`),
+   * and, while the Helix turns at full speed, the chance per step of a drop near the top or bottom
+   * (`stirChance`) and how hard it is (`stirDrop`).
+   */
+  water: {
+    dropRadius: 0.018,
+    damping: 0.975,
+    stepsPerSecond: 120,
+    cursorPush: 0.12,
+    cursorFullSpeed: 1800,
+    meltDrop: 0.8,
+    stirChance: 0.6,
+    stirDrop: 0.08,
+  },
+  /** How far the cards deep in the Helix melt (0 not at all, 1 fully at the far end). */
+  farCards: 0.7,
+  /** How far the cards you aren't pointing at melt while the pointer rests on a card (0 to 1). */
+  notPointedAt: 0.55,
+  /**
+   * Pointing at a card: the pointer counts as resting once it moves slower than `restSpeed` (CSS
+   * px per second; its measured speed falls away at `speedFade` per second once it stops); a card
+   * then comes into focus at `inRate` and leaves it at `outRate` (per second, time-based easing).
+   */
+  pointer: { restSpeed: 480, speedFade: 13.4, inRate: 6, outRate: 4.4 },
   /**
    * The Helix's size: the share of the screen height the front card takes (the prototype had
    * about 0.29). Where that would be too wide (phones), the card fits the width instead.
