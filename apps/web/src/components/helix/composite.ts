@@ -6,8 +6,9 @@ import { createTarget, float, link, QUAD_VERTEX, screenQuad, uniforms, type Targ
  * drawn into its own screen-sized target, put together on the canvas through the analogue signal
  * (#64), the one melt material that does every job:
  * - A signal failing: rows of the picture jump sideways, the colours bleed apart, a tracking band
- *   rolls down the screen and tape noise comes up. Turning raises the jitter, and the cursor's
- *   heat trail (`HeatTrail`) bumps the tracking where it passes.
+ *   rolls down the screen. There is no static: the owner removed it on 2026-11-09 (#65). Turning
+ *   raises the jitter, and the cursor's heat trail (`HeatTrail`) bumps the tracking where it
+ *   passes.
  * - How melted each pixel is comes from one measure (`meltAt`): the top and bottom of the screen
  *   beyond the sharp band, cards deep in the Helix, cards not hovered, and cards that haven't
  *   appeared yet (or are leaving the visible band). The more melted, the more it tears, until it
@@ -139,7 +140,6 @@ const float FAR_CARDS = ${float(HELIX_TUNING.farCards)};
 const float NOT_HOVERED = ${float(HELIX_TUNING.notHovered)};
 const float LINE_JITTER = ${float(SIGNAL.lineJitter)};
 const float CHROMA_BLEED = ${float(SIGNAL.chromaBleed)};
-const float TAPE_NOISE = ${float(SIGNAL.tapeNoise)};
 const float CURSOR_BUMP = ${float(SIGNAL.cursorBump)};
 const float SCANLINE_EDGE = ${float(SIGNAL.scanlineEdge)};
 const float DEEP_FADE = ${float(DEEP_FADE)};
@@ -199,19 +199,14 @@ void main() {
   float cover = coverAt(pos);
   float deep = clamp(textureLod(uMeltInputs, pos, 0.0).a / max(cover, 1e-3), 0.0, 1.0);
   c *= 1.0 - DEEP_FADE * deep;
-  // Scanlines darken as it melts; tape noise comes up, then grey static, then it is gone.
+  // Scanlines darken as it melts, and from 0.55 the picture fades out until it is gone.
   c.rgb *= 1.0 - 0.18 * m * step(0.5, fract(uv.y * uRes.y / 3.0));
-  float nz = hash12(uv * uRes + uTime);
-  float pres = smoothstep(0.02, 0.35, e.mean);
-  c.rgb += (nz - 0.5) * 0.12 * TAPE_NOISE * (m + eb * 0.5) * pres * c.a;
-  float grey = smoothstep(0.55, 0.85, m) * min(TAPE_NOISE, 1.0) * pres;
-  c.rgb = mix(c.rgb, vec3(nz) * 0.85 * c.a, grey);
-  c *= 1.0 - smoothstep(0.85, 1.0, m);
+  c *= 1.0 - smoothstep(0.55, 1.0, m);
   // A crisp outline where the shifted picture's card ends (the prototype mixes towards the
   // background by coverage there): alpha follows smoothstep(coverage), keeping the depth fade.
   c *= smoothstep(0.35, 0.65, cover) / max(cover, 0.35);
   c.a = min(c.a, 1.0);
-  // Premultiplied: the noise may not push a channel past alpha.
+  // Premultiplied: a channel may not exceed alpha.
   c.rgb = clamp(c.rgb, 0.0, c.a);
   if (uShowreelOn > 0.5) {
     vec4 r;
@@ -233,8 +228,6 @@ void main() {
       vec4 rg = showreelAt(uv + vec2(rjj, 0.0), 0.0);
       vec4 rb = showreelAt(uv + vec2(rjj - rca, 0.0), 0.0);
       r = vec4(ra.r, rg.g, rb.b, max(max(ra.a, rg.a), rb.a));
-      float snow = smoothstep(0.1, 0.5, rm) * 0.7 * min(TAPE_NOISE + 0.3, 1.0);
-      r.rgb = mix(r.rgb, vec3(nz) * r.a, snow);
       r *= 1.0 - smoothstep(0.0, 0.35, rm - hash12(vec2(row, 7.0)) * 0.6);
     }
     c = r + c * (1.0 - r.a);

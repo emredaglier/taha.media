@@ -38,12 +38,13 @@ export const HELIX_TUNING = {
   /**
    * The analogue signal (#64), the material that melts the Helix: a signal failing. How far rows
    * of the picture jump sideways (`lineJitter`), how far its colours bleed apart (`chromaBleed`),
-   * how much tape noise shows as it melts (`tapeNoise`), and how strongly the cursor's heat trail
-   * bumps the tracking (`cursorBump`). The sharp cards keep straight top and bottom edges, while
-   * their left and right edges shift row by row (Scanline edges) by `scanlineEdge` (1: about 2
-   * px at rest, more as the Helix turns or the cursor passes, and with `lineJitter`).
+   * and how strongly the cursor's heat trail bumps the tracking (`cursorBump`). There is no tape
+   * noise or snow: the owner removed the static on 2026-11-09 (#65). The sharp cards keep
+   * straight top and bottom edges, while their left and right edges shift row by row (Scanline
+   * edges) by `scanlineEdge` (1: about 2 px at rest, more as the Helix turns or the cursor
+   * passes, and with `lineJitter`).
    */
-  signal: { lineJitter: 1, chromaBleed: 1, tapeNoise: 1, cursorBump: 1, scanlineEdge: 1 },
+  signal: { lineJitter: 1, chromaBleed: 1, cursorBump: 1, scanlineEdge: 1 },
   /**
    * The cursor's heat trail the signal reads (#64): the moving cursor (on phones, the finger)
    * leaves heat along its path, which spreads and fades. How wide the path is (`radius`, in screen
