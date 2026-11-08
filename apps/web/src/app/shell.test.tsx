@@ -70,7 +70,7 @@ describe('the footer', () => {
     expect(html).toMatch(/<main[^>]*id="main"/)
   })
 
-  it.each(['/isler', '/isler/bir-is', '/hakkimda', '/gizlilik'])(
+  it.each(['/isler', '/isler/bir-is', '/galeri', '/hakkimda', '/gizlilik'])(
     'follows the main content of %s, with the year and the Gizlilik link',
     async (url) => {
       const html = await htmlOf(url)

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 
-import { GalleryGrid } from '../../components/GalleryGrid'
-import { getGalleryItems } from '../../data/gallery'
+import { GalleryGrid } from '../../../components/GalleryGrid'
+import { getGalleryItems } from '../../../data/gallery'
 
 export const metadata: Metadata = { title: 'Galeri' }
 

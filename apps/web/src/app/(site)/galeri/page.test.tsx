@@ -1,10 +1,10 @@
 import { revalidateTag } from 'next/cache'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { getGalleryItems } from '../../data/gallery'
-import { fullSizeFile } from '../../lib/gallery-item'
-import { nextCache } from '../../test/next-cache-fake'
-import { startPageSite, type PageSite } from '../../test/page-html'
+import { getGalleryItems } from '../../../data/gallery'
+import { fullSizeFile } from '../../../lib/gallery-item'
+import { nextCache } from '../../../test/next-cache-fake'
+import { startPageSite, type PageSite } from '../../../test/page-html'
 import { metadata } from './page'
 
 let pages: PageSite
