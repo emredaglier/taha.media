@@ -30,6 +30,8 @@
 /*
  * `over-hero:` applies on the static Home: its hero is full-bleed, so the header sits over it
  * rather than above it, as it sits over the Helix's Showreel (`helix:`), and the two match.
+ * `[data-home-hero]` is `HERO_SELECTOR` in `lib/home-marks.ts`: CSS can't import it, so keep the
+ * two spellings in step.
  */
 @custom-variant over-hero (html:not([data-home='helix']) body:has([data-home-hero]) &);
 

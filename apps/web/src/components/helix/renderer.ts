@@ -4,18 +4,19 @@ import {
   cropToCard,
   focalFor,
   HELIX_SHAPE,
-  SLOT_PITCH,
 } from '../../lib/helix-geometry'
 import { HELIX_TUNING } from '../../lib/helix-tuning'
 import type { HelixWork } from '../FeaturedWorks'
 import type { HelixShowreel } from '../Hero'
 import { createComposite } from './composite'
+import { CYLINDER_GLSL } from './cylinder'
 import {
   colourTexture,
   cssColour,
   float,
   HelixUnavailable,
   link,
+  MAX_PIXEL_RATIO,
   uniforms,
   vertexArray,
 } from './gl'
@@ -54,7 +55,6 @@ export type HelixRenderer = {
   destroy(): void
 }
 
-const MAX_PIXEL_RATIO = 2
 /** The card mesh: enough columns to curve around the cylinder, rows to bend with the speed. */
 const COLUMNS = 40
 const ROWS = 8
@@ -64,23 +64,15 @@ in vec2 aPos;
 uniform float uSlot, uFocal, uAspect, uBend, uScale;
 out vec2 vUv;
 out float vDepth;
-const vec2 CARD = vec2(${float(HELIX_SHAPE.cardHeight * HELIX_SHAPE.cardRatio)}, ${float(HELIX_SHAPE.cardHeight)});
-const float RADIUS = ${float(HELIX_SHAPE.radius)};
-const float RADIUS_STEP = ${float(HELIX_SHAPE.radiusStep)};
-const float CAMERA_Z = ${float(HELIX_SHAPE.cameraZ)};
+${CYLINDER_GLSL}
 const float NEAR = ${float(HELIX_SHAPE.near)};
 const float FAR = ${float(HELIX_SHAPE.far)};
-const float TWIST = ${float(HELIX_SHAPE.twist)};
-const float PITCH = ${float(SLOT_PITCH)};
 const float BEND = ${float(HELIX_SHAPE.bend)};
 void main() {
   vUv = aPos;
-  vec2 local = (aPos - 0.5) * CARD;
   float ty = (aPos.y - 0.5) * 2.0;
   float angle = uSlot * TWIST + uBend * BEND * ty * ty * TWIST * 0.5;
-  float r = RADIUS + uSlot * RADIUS_STEP;
-  float theta = angle + local.x / r;
-  vec3 p = vec3(sin(theta) * r, local.y - uSlot * PITCH, cos(theta) * r);
+  vec3 p = cardPoint(aPos, uSlot, angle);
   float vz = p.z - CAMERA_Z;
   vDepth = -vz;
   // uScale: the opening's camera, pulled in until the front card covers the screen, then back.

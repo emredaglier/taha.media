@@ -1,6 +1,8 @@
-import { cropToCard, cropToFill, HELIX_SHAPE, SLOT_PITCH } from '../../lib/helix-geometry'
+import { cropToCard, cropToFill } from '../../lib/helix-geometry'
+import { HELIX_TUNING } from '../../lib/helix-tuning'
 import type { HelixShowreel } from '../Hero'
-import { colourTexture, float, link, uniforms, uploadPicture } from './gl'
+import { CYLINDER_GLSL } from './cylinder'
+import { colourTexture, link, MAX_PIXEL_RATIO, uniforms, uploadPicture } from './gl'
 
 /**
  * The Showreel layer of the opening (#54, pass 2): the Showreel loop as a video texture, else its
@@ -12,7 +14,7 @@ export type ShowreelLayer = {
   /**
    * Resolves once the layer shows what the static hero shows: its playing loop at the same moment,
    * or its poster. The Helix takes over from the static hero then, under a matching picture.
-   * Never waits longer than `HAND_OVER_MS`.
+   * Never waits longer than `HELIX_TUNING.handOverMs`.
    */
   handOver(shown: HTMLVideoElement | null): Promise<void>
   /** Draws it into the bound target, as the front card at `slot`, `zoom` of the way (eased). */
@@ -32,8 +34,6 @@ export type ShowreelFrame = {
   aspect: number
 }
 
-/** The longest the Helix waits for the Showreel before taking over from the static hero anyway. */
-const HAND_OVER_MS = 2500
 /** Close enough to the static loop's moment to call the frames the same (one frame at 30 fps). */
 const IN_STEP_SECONDS = 1 / 30
 const CENTRE = { x: 50, y: 50 }
@@ -42,19 +42,11 @@ const VERTEX = `#version 300 es
 in vec2 aPos;
 uniform float uSlot, uFocal, uAspect, uScale, uZoom;
 out vec2 vUv;
-const vec2 CARD = vec2(${float(HELIX_SHAPE.cardHeight * HELIX_SHAPE.cardRatio)}, ${float(HELIX_SHAPE.cardHeight)});
-const float RADIUS = ${float(HELIX_SHAPE.radius)};
-const float RADIUS_STEP = ${float(HELIX_SHAPE.radiusStep)};
-const float CAMERA_Z = ${float(HELIX_SHAPE.cameraZ)};
-const float TWIST = ${float(HELIX_SHAPE.twist)};
-const float PITCH = ${float(SLOT_PITCH)};
+${CYLINDER_GLSL}
 void main() {
   vUv = aPos;
   // The card at uSlot on the cylinder, as the card pass places it (scaled by the camera)...
-  vec2 local = (aPos - 0.5) * CARD;
-  float r = RADIUS + uSlot * RADIUS_STEP;
-  float theta = uSlot * TWIST + local.x / r;
-  vec3 p = vec3(sin(theta) * r, local.y - uSlot * PITCH, cos(theta) * r);
+  vec3 p = cardPoint(aPos, uSlot, uSlot * TWIST);
   vec2 card = vec2(p.x * uFocal / uAspect, p.y * uFocal) / (CAMERA_Z - p.z) * uScale;
   // ...reached from the whole screen as the zoom runs.
   gl_Position = vec4(mix(aPos * 2.0 - 1.0, card, uZoom), 0.0, 1.0);
@@ -144,7 +136,10 @@ export function createShowreelLayer(
     // WebGL can only read media served with CORS (production: the bucket rule, #50).
     image.crossOrigin = 'anonymous'
     image.decoding = 'async'
-    image.src = sourceFor(media.poster, Math.min(window.devicePixelRatio || 1, 2) * innerWidth)
+    image.src = sourceFor(
+      media.poster,
+      Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO) * innerWidth,
+    )
     posterLoaded = image.decode().then(
       () => {
         if (!destroyed) poster = image
@@ -245,7 +240,7 @@ export function createShowreelLayer(
         }
         await loadPoster()
       })()
-      const late = new Promise<void>((resolve) => setTimeout(resolve, HAND_OVER_MS))
+      const late = new Promise<void>((resolve) => setTimeout(resolve, HELIX_TUNING.handOverMs))
       return Promise.race([matching, late])
     },
 

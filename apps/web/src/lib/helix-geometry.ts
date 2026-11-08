@@ -45,9 +45,6 @@ export function focalFor(aspect: number): number {
   return Math.min(byHeight, byWidth)
 }
 
-/** How much more than just covering the screen the opening's zoom starts from. */
-const COVER_SPARE = 1.02
-
 /**
  * Where the opening's camera starts (#54): how much the Helix is scaled up so that the front card
  * covers the whole screen, with a little to spare. The zoom pulls back from here to 1.
@@ -60,7 +57,7 @@ export function coverScale(focal: number, aspect: number): number {
   const sideDepth = cameraZ - Math.cos(edge) * radius
   const halfWidth = (Math.sin(edge) * radius * focal) / aspect / sideDepth
   const halfHeight = ((cardHeight / 2) * focal) / sideDepth
-  return Math.max(1 / halfWidth, 1 / halfHeight) * COVER_SPARE
+  return Math.max(1 / halfWidth, 1 / halfHeight) * HELIX_TUNING.coverSpare
 }
 
 /** Where the card at `slot` shows, as a box around its centre; null when behind the camera. */

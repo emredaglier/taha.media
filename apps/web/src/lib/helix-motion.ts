@@ -109,23 +109,10 @@ const REST_SPEED = 2e-2
 const WHEEL_LINE_PX = 40
 const WHEEL_PAGE_PX = 800
 /**
- * The melt starts once the page has scrolled to the end of the zoom (this close) and the eased
- * zoom is nearly done: then the zoom lands on the front card and the Showreel melts.
+ * Scatters the cards' appearing: the stride through them is about this share of their count (the
+ * golden ratio's conjugate, which spreads a stride's steps most evenly).
  */
-const MELT_SCROLL = 0.995
-const MELT_ZOOM = 0.95
-/** The hero's overlays have left by this much of the zoom. */
-const HERO_LEAVES_BY = 0.35
-/**
- * The cards appear during the zoom: the first (the Showreel's own) as the zoom begins, the others
- * from this much of the zoom, spread over the next part of it in a scattered order, each taking a
- * span of the zoom to fade in.
- */
-const APPEAR_FROM = 0.08
-const APPEAR_SPREAD = 0.55
-const APPEAR_SPAN = 0.35
-/** The front Work's overlay comes in halfway through the melt. */
-const FRONT_SHOWS_AT = 0.5
+const SCATTER_STRIDE = 0.618
 
 const mod = (value: number, by: number) => ((value % by) + by) % by
 const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, value))
@@ -298,7 +285,7 @@ function unfold(state: HelixState, dt: number, at: number): HelixState {
     case 'hero': {
       const zoom =
         phase.zoom + (phase.scroll - phase.zoom) * (1 - Math.exp(-dt * HELIX_TUNING.zoomRate))
-      if (phase.scroll >= MELT_SCROLL && zoom > MELT_ZOOM) {
+      if (phase.scroll >= HELIX_TUNING.meltStartScroll && zoom > HELIX_TUNING.meltStartZoom) {
         // The point of no return: the Showreel sits on the first card in front, and melts.
         return { ...state, progress: 0, speed: 0, phase: { kind: 'melt', startedAt: at } }
       }
@@ -428,6 +415,21 @@ export const counter = (state: HelixState) => ({
   total: state.works,
 })
 
+/** What the front Work's live region does after a step. */
+export type LiveRegion = { speak: number } | 'clear' | 'keep'
+
+/**
+ * What the front Work's live region should do after a step from `before` to `after`: speak the
+ * Work the Helix came to rest on (`arrived`), clear what it said when the model forgot it without
+ * a new stop (a reset, or a focus that skipped the opening), or leave it. Without the clearing, a
+ * later stop on the same Work would set the same words, which changes nothing in the page, and a
+ * screen reader would stay silent.
+ */
+export function liveRegionAfter(before: HelixState, after: HelixState): LiveRegion {
+  if (after.arrived !== null) return { speak: after.arrived }
+  return after.announced !== before.announced ? 'clear' : 'keep'
+}
+
 /**
  * How many slots either side of the front the Helix shows (the renderer fades cards out towards
  * it, and the place where the cards wrap is always outside it). As wide as it can be with no Work
@@ -471,7 +473,7 @@ export function openingOf(state: HelixState): Opening {
         zoom: smoothstep(phase.zoom),
         melt: 0,
         showreelSlot: 0,
-        heroGone: smoothstep(clamp(phase.zoom / HERO_LEAVES_BY, 0, 1)),
+        heroGone: smoothstep(clamp(phase.zoom / HELIX_TUNING.heroLeavesBy, 0, 1)),
         frontShown: false,
         locked: false,
       }
@@ -486,7 +488,7 @@ export function openingOf(state: HelixState): Opening {
         melt,
         showreelSlot: slotOf(state, 0),
         heroGone: 1,
-        frontShown: melt > FRONT_SHOWS_AT,
+        frontShown: melt > HELIX_TUNING.frontShowsAt,
         locked: true,
       }
     }
@@ -504,10 +506,10 @@ function appearsAt(state: HelixState, card: number): number {
   const index = mod(card, state.cards)
   const others = state.cards - 1
   if (index === 0 || others < 1) return 0
-  let stride = Math.max(1, Math.round(others * 0.618))
+  let stride = Math.max(1, Math.round(others * SCATTER_STRIDE))
   while (gcd(stride, others) !== 1) stride++
   const rank = ((index - 1) * stride) % others
-  return APPEAR_FROM + (rank / state.cards) * APPEAR_SPREAD
+  return HELIX_TUNING.appearFrom + (rank / state.cards) * HELIX_TUNING.appearSpread
 }
 
 /**
@@ -516,5 +518,5 @@ function appearsAt(state: HelixState, card: number): number {
  */
 export function cardPresence(state: HelixState, card: number): number {
   if (state.phase.kind !== 'hero') return 1
-  return clamp((state.phase.zoom - appearsAt(state, card)) / APPEAR_SPAN, 0, 1)
+  return clamp((state.phase.zoom - appearsAt(state, card)) / HELIX_TUNING.appearSpan, 0, 1)
 }

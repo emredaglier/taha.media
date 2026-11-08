@@ -1,4 +1,5 @@
-import { createTarget, link, QUAD_VERTEX, uniforms, vertexArray, type Target } from './gl'
+import { HELIX_TUNING } from '../../lib/helix-tuning'
+import { createTarget, float, link, QUAD_VERTEX, uniforms, vertexArray, type Target } from './gl'
 
 /**
  * The composite (#45 "pass 4"; #54): the cards (`scene`) and the Showreel layer (`showreel`), each
@@ -50,6 +51,9 @@ float fbm(vec2 p) {
   return s;
 }`
 
+// The ring's look is in the tuning object (`meltRing`).
+const RING = HELIX_TUNING.meltRing
+
 // Everything is premultiplied: where nothing is drawn, the page colour shows through the canvas
 // (playbook: canvas-colours).
 const FRAGMENT = `#version 300 es
@@ -59,6 +63,11 @@ uniform sampler2D uScene, uShowreel;
 uniform float uShowreelOn, uMelt, uReach, uAspect, uTime;
 uniform vec2 uCentre;
 out vec4 outColor;
+const float RING_WIDTH = ${float(RING.width)};
+const float RING_PUSH = ${float(RING.push)};
+const float RING_RIM = ${float(RING.rim)};
+const float RING_WOBBLE = ${float(RING.wobble)};
+const float RING_REACH_MARGIN = ${float(RING.reachMargin)};
 ${NOISE}
 vec4 showreelAt(vec2 uv) {
   if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return vec4(0.0);
@@ -74,14 +83,14 @@ void main() {
       // The ring grows from the centre past the corners; inside it the Showreel is gone.
       vec2 q = (vUv - uCentre) * vec2(uAspect, 1.0);
       float dist = length(q);
-      float radius = uMelt * (uReach + 0.1) - 0.06;
-      float wobble = (fbm(q * 8.0 + uTime) - 0.47) * 0.08;
-      float off = (dist - radius - wobble) / 0.035;   // (pow() is undefined below 0)
+      float radius = uMelt * (uReach + RING_REACH_MARGIN) - 0.06;
+      float wobble = (fbm(q * 8.0 + uTime) - 0.47) * RING_WOBBLE;
+      float off = (dist - radius - wobble) / RING_WIDTH;   // (pow() is undefined below 0)
       float ring = exp(-off * off);
       vec2 outward = q / max(dist, 1e-4);
-      r = showreelAt(vUv - outward * ring * 0.035);
+      r = showreelAt(vUv - outward * ring * RING_PUSH);
       r *= smoothstep(radius - 0.01, radius + 0.03, dist + wobble);
-      r.rgb += ring * r.a * 0.25;   // the rim catches the light
+      r.rgb += ring * r.a * RING_RIM;   // the rim catches the light
     }
     c = r + c * (1.0 - r.a);
   }

@@ -177,8 +177,8 @@ describe('coverScale', () => {
       }
       expect(narrowest * scale).toBeGreaterThanOrEqual(1)
       expect(shortest * scale).toBeGreaterThanOrEqual(1)
-      // ...and not much further than needed on the tighter side.
-      expect(Math.min(narrowest, shortest) * scale).toBeLessThan(1.1)
+      // ...and no further than the spare the tuning allows, on the tighter side.
+      expect(Math.min(narrowest, shortest) * scale).toBeCloseTo(HELIX_TUNING.coverSpare, 9)
     },
   )
 })

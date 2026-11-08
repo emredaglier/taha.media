@@ -1,6 +1,9 @@
 /** WebGL2 isn't there, a shader didn't compile, or the context was lost: show the static Home. */
 export class HelixUnavailable extends Error {}
 
+/** The drawing buffers and the Showreel's textures are sized for at most this device pixel ratio. */
+export const MAX_PIXEL_RATIO = 2
+
 /** A number as a GLSL float literal. */
 export const float = (value: number) => value.toFixed(4)
 

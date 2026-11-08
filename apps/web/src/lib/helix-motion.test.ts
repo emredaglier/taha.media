@@ -9,6 +9,7 @@ import {
   frontCard,
   frontWork,
   isResting,
+  liveRegionAfter,
   openingOf,
   slotOf,
   startHelix,
@@ -51,6 +52,25 @@ function simulate(
 
 /** Long enough for any move in these tests to come to rest. */
 const LATER = HELIX_TUNING.tweenMs + 4 * HELIX_TUNING.settleSeconds * 1000
+
+/**
+ * `input` arrives at `state` as it is, five milliseconds after its last step (a state that is
+ * mid-turn, or mid-melt), then frames run until everything has come to rest.
+ */
+function inputThenRest(state: HelixState, input: HelixInput): HelixState {
+  const at = state.time! + 5
+  let next = stepHelix(state, input, at)
+  for (let time = at + 1000 / 60; time <= at + LATER; time += 1000 / 60) {
+    next = stepHelix(next, { kind: 'frame' }, time)
+  }
+  return next
+}
+
+/** Long enough for the zoom to catch up with a scroll that has stopped (to within e^-10). */
+const CAUGHT_UP = 10_000 / HELIX_TUNING.zoomRate
+const MELT_MS = HELIX_TUNING.meltSeconds * 1000
+/** From a scroll to the end of the page to the end of the melt. */
+const OPENING_MS = CAUGHT_UP + MELT_MS
 
 /** `count` presses of one arrow key, `gap` ms apart, from `from` ms. */
 const presses = (count: number, step: 1 | -1, from = 0, gap = 60): Timed[] =>
@@ -373,6 +393,30 @@ describe('focus', () => {
     },
   )
 
+  /** Turns that are under way a moment after they start: an arrow, a wheel nudge, a drag held. */
+  const MID_TURN: [string, Timed[], number][] = [
+    ['an arrow', presses(1, 1), HELIX_TUNING.tweenMs / 3],
+    ['a wheel nudge', wheel([300, 300]), HELIX_TUNING.wheelIdleMs / 2],
+    ['a held drag', drag(1.4, 100, 10 * LATER), 150],
+  ]
+
+  it.each(MID_TURN)(
+    'focusing Work k in the middle of %s still ends with it in front, at rest, the short way',
+    (_name, turn, until) => {
+      for (const n of WORK_COUNTS) {
+        const mid = simulate(createHelix(n), turn, { until })
+        expect(isResting(mid)).toBe(false)
+        for (const work of range(n)) {
+          const after = inputThenRest(mid, { kind: 'focus', work })
+          expect(frontWork(after)).toBe(work)
+          expect(isResting(after)).toBe(true)
+          // From where the Helix was heading, never round more than half the Works.
+          expect(Math.abs(after.progress - mid.progress)).toBeLessThanOrEqual(n / 2 + 2)
+        }
+      }
+    },
+  )
+
   it('works from far round the endless Helix', () => {
     const start = { ...createHelix(5), progress: 123, goal: 123 }
     const after = simulate(start, focus(2), { until: LATER })
@@ -382,7 +426,7 @@ describe('focus', () => {
 
   it('leaves the Helix alone when the Work is already in front', () => {
     const start = createHelix(6, 3)
-    expect(stepHelix(start, { kind: 'focus', work: 3 }, 0).motion).toEqual({ kind: 'rest' })
+    expect(isResting(stepHelix(start, { kind: 'focus', work: 3 }, 0))).toBe(true)
   })
 })
 
@@ -417,7 +461,7 @@ describe('the rest signal', () => {
   })
 
   it('does not fire when it rests on the Work it last announced', () => {
-    const there = [...presses(1, 1), ...presses(1, -1, 2500)]
+    const there = [...presses(1, 1), ...presses(1, -1, LATER)]
     // Forward to Work 1 (announced), back to Work 0 (announced), nothing more.
     expect(announcements(createHelix(6), there, 2 * LATER)).toEqual([1, 0])
     // Away and back before it stops: it rests on Work 0 again.
@@ -441,7 +485,7 @@ describe('the rest signal', () => {
 
   it('does not fire through the opening: the zoom, the melt and the hand-over to turning', () => {
     const toTheEnd: Timed[] = [{ at: 0, input: { kind: 'scroll', fraction: 1 } }]
-    expect(announcements(createOpening(6), toTheEnd, LATER + 2000)).toEqual([])
+    expect(announcements(createOpening(6), toTheEnd, LATER + OPENING_MS)).toEqual([])
   })
 
   it('does not fire for a reset, and speaks again for the next new stop after it', () => {
@@ -450,9 +494,44 @@ describe('the rest signal', () => {
       { at: LATER, input: { kind: 'reset' } },
       { at: LATER + 10, input: { kind: 'scroll', fraction: 1 } },
       // After the opening the first Work is in front again, unannounced: turning to Work 2 speaks.
-      ...presses(2, 1, 2 * LATER + 2000),
+      ...presses(2, 1, 2 * LATER + OPENING_MS),
     ]
-    expect(announcements(createHelix(6), timeline, 3 * LATER + 2000)).toEqual([2, 2])
+    expect(announcements(createHelix(6), timeline, 3 * LATER + OPENING_MS)).toEqual([2, 2])
+  })
+
+  /** What the live region is written with over a run, the stale words cleared (null) included. */
+  function regionWrites(start: HelixState, timeline: Timed[], until: number): (number | null)[] {
+    const events = [...timeline].sort((a, b) => a.at - b.at)
+    const writes: (number | null)[] = []
+    let state = stepHelix(start, { kind: 'frame' }, 0)
+    const step = (input: HelixInput, now: number) => {
+      const before = state
+      state = stepHelix(state, input, now)
+      const region = liveRegionAfter(before, state)
+      if (region === 'clear') writes.push(null)
+      else if (region !== 'keep') writes.push(region.speak)
+    }
+    for (let frame = 1; frame * (1000 / 60) <= until; frame++) {
+      const now = frame * (1000 / 60)
+      while (events.length > 0 && events[0]!.at <= now) {
+        const { at, input } = events.shift()!
+        step(input, at)
+      }
+      step({ kind: 'frame' }, now)
+    }
+    return writes
+  }
+
+  it('clears the live region when the model forgets what it said, so the same stop is heard again', () => {
+    // Work 3 is heard; a reset, then a focus that skips the opening onto Work 5; turning back to
+    // Work 3 would set the very words already in the region unless they were cleared in between.
+    const timeline: Timed[] = [
+      { at: 0, input: { kind: 'focus', work: 3 } },
+      { at: LATER, input: { kind: 'reset' } },
+      { at: LATER + 50, input: { kind: 'focus', work: 5 } },
+      ...presses(2, -1, LATER + 100),
+    ]
+    expect(regionWrites(createHelix(6), timeline, 2 * LATER + 100)).toEqual([3, null, null, 3])
   })
 
   it('does not fire when focus skips the opening: the focused link speaks for itself', () => {
@@ -474,10 +553,6 @@ describe('the opening', () => {
 
   /** The zoom as the scroll left it (1 once the zoom has landed). */
   const zoomOf = (state: HelixState) => (state.phase.kind === 'hero' ? state.phase.zoom : 1)
-
-  /** Long enough for the zoom to catch up with a scroll that has stopped (to within e^-10). */
-  const CAUGHT_UP = 10_000 / HELIX_TUNING.zoomRate
-  const MELT_MS = HELIX_TUNING.meltSeconds * 1000
 
   /** Every frame of a run, 60 a second, as a browser steps it. */
   function frames(start: HelixState, timeline: Timed[], until: number): HelixState[] {
@@ -560,7 +635,11 @@ describe('the opening', () => {
   })
 
   it('melts only at the end of the scroll, then hands over to turning after the melt time', () => {
-    const short = frames(createOpening(6), [scroll(0.97, 0)], CAUGHT_UP * 2)
+    const short = frames(
+      createOpening(6),
+      [scroll(HELIX_TUNING.meltStartScroll - 0.01, 0)],
+      CAUGHT_UP * 2,
+    )
     expect(short.every((state) => state.phase.kind === 'hero')).toBe(true)
 
     const start = melting(6)
@@ -630,8 +709,8 @@ describe('the opening', () => {
     expect(state.phase.kind).toBe('hero')
     expect(zoomOf(state)).toBeCloseTo(zoomOf(untouched), 12)
     expect(state.progress).toBeCloseTo(untouched.progress, 12)
-    expect(state.goal).toBe(untouched.goal)
-    expect(state.motion).toEqual({ kind: 'rest' })
+    expect(isResting(state)).toBe(true)
+    expect(frontWork(state)).toBe(frontWork(untouched))
     expect(state.open).toBeNull()
   })
 
@@ -686,6 +765,21 @@ describe('the opening', () => {
     expect(openingOf(midMelt).showreelSlot).toBe(slotOf(midMelt, 0))
     expect(openingOf(midMelt).showreelSlot).toBeLessThan(0)
   })
+
+  it.each(WORK_COUNTS)(
+    'with %i Works: focusing a Work during the melt brings it to the front and rests there',
+    (n) => {
+      const start = melting(n)
+      const midMelt = stepHelix(start, { kind: 'frame' }, meltStart(start) + MELT_MS / 3)
+      expect(midMelt.phase.kind).toBe('melt')
+      for (const work of range(n)) {
+        const after = inputThenRest(midMelt, { kind: 'focus', work })
+        expect(frontWork(after)).toBe(work)
+        expect(isResting(after)).toBe(true)
+        expect(after.phase.kind).toBe('helix')
+      }
+    },
+  )
 
   it('gives the same zoom for the same wall-clock scroll at 30, 60 and 120 frames a second', () => {
     const timeline = [

@@ -2,6 +2,7 @@ import { DISCIPLINE_LABELS, type VideoRead } from '@taha/cms-config'
 import Link from 'next/link'
 
 import type { Work } from '../data/works'
+import { WORK_LINK_ATTRIBUTE } from '../lib/home-marks'
 import { LoopVideo } from './LoopVideo'
 
 /** A Featured Work Home can show: it has the Preview loop its card plays over its poster. */
@@ -46,7 +47,11 @@ const SIZES = '(min-width: 1100px) 33vw, (min-width: 700px) 50vw, 100vw'
 function FeaturedCard({ work }: { work: FeaturedWork }) {
   return (
     <li>
-      <Link href={`/isler/${work.slug}`} className="group block" data-work-slug={work.slug}>
+      <Link
+        href={`/isler/${work.slug}`}
+        className="group block"
+        {...{ [WORK_LINK_ATTRIBUTE]: work.slug }}
+      >
         {/* The loop fills a 16:9 box, so media that isn't quite 16:9 is cropped, never stretched. */}
         <div className="relative aspect-video overflow-hidden bg-placeholder">
           <LoopVideo video={work.previewLoop} sizes={SIZES} hoverToPlay fill />
