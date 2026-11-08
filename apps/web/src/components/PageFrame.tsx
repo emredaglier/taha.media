@@ -6,9 +6,9 @@ import { SiteFooter } from './SiteFooter'
  * The page's `main`, the target of the skip link. The root layout leaves it to each route,
  * because Home is full-bleed and has no footer, while the other pages are padded and have one.
  */
-export function PageMain({ children }: { children: ReactNode }) {
+export function PageMain({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <main id="main" className="flex-1 px-6">
+    <main id="main" className={`flex-1 px-6 ${className ?? ''}`.trimEnd()}>
       {children}
     </main>
   )
