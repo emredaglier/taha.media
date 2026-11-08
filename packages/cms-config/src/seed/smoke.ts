@@ -19,6 +19,8 @@ export type SmokeManifest = {
   /** The start of the first paragraph of the About and Privacy pages. */
   about: { text: string }
   privacy: { text: string }
+  /** The caption of each Gallery item that has one, in the order Galeri shows them. */
+  gallery: { captions: string[] }
 }
 
 type Block = { children?: unknown[] }
@@ -70,9 +72,18 @@ export async function prepareSmokeContent(payload: Payload): Promise<SmokeManife
     featured: Boolean(work.featured),
   }))
 
-  const [about, privacy] = await Promise.all([
+  const [about, privacy, gallery] = await Promise.all([
     payload.findGlobal({ slug: 'about', draft: false, overrideAccess: false }),
     payload.findGlobal({ slug: 'privacy', draft: false, overrideAccess: false }),
+    // Gallery items have no drafts, so every item is live. `_order` is the order Galeri shows.
+    payload.find({
+      collection: 'gallery',
+      overrideAccess: false,
+      sort: '_order',
+      limit: 0,
+      pagination: false,
+      depth: 0,
+    }),
   ])
 
   return {
@@ -86,6 +97,9 @@ export async function prepareSmokeContent(payload: Payload): Promise<SmokeManife
     },
     about: { text: firstBlockText(about.bio, 40) },
     privacy: { text: firstBlockText(privacy.body, 25) },
+    gallery: {
+      captions: gallery.docs.flatMap((item) => (item.caption?.trim() ? [item.caption.trim()] : [])),
+    },
   }
 }
 

@@ -77,6 +77,21 @@ describe('prepareSmokeContent', () => {
     expect(manifest.privacy.text.length).toBeGreaterThan(5)
   })
 
+  it('lists the captions of the Gallery items in the order Galeri shows them', async () => {
+    const { docs } = await site.cms.find({
+      collection: 'gallery',
+      sort: '_order',
+      limit: 0,
+      pagination: false,
+      depth: 0,
+    })
+    expect(docs.length).toBeGreaterThanOrEqual(2)
+    expect(manifest.gallery.captions.length).toBeGreaterThanOrEqual(1)
+    expect(manifest.gallery.captions).toEqual(
+      docs.flatMap((item) => (item.caption ? [item.caption] : [])),
+    )
+  })
+
   it('is plain JSON, so the spec can read it from a file', () => {
     expect(JSON.parse(JSON.stringify(manifest))).toEqual(manifest)
   })
