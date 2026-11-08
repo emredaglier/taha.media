@@ -8,6 +8,7 @@ import {
   cropToFill,
   focalFor,
   HELIX_SHAPE,
+  turnOnScreen,
 } from './helix-geometry'
 import { HELIX_TUNING } from './helix-tuning'
 
@@ -181,4 +182,27 @@ describe('coverScale', () => {
       expect(Math.min(narrowest, shortest) * scale).toBeCloseTo(HELIX_TUNING.coverSpare, 9)
     },
   )
+})
+
+describe('turnOnScreen', () => {
+  it.each(ASPECTS)(
+    'at aspect %f, matches how far a small turn moves the front card up the screen',
+    (aspect) => {
+      const focal = focalFor(aspect)
+      for (const turn of [1e-4, -1e-4, 1e-3]) {
+        // Turning by `turn` puts the front card at slot -turn; its centre moves up by y / 2 of
+        // the screen's height.
+        const moved = cardOnScreen(-turn, focal, aspect)!.y / 2
+        expect(turnOnScreen(turn, focal) / moved).toBeCloseTo(1, 4)
+      }
+    },
+  )
+
+  it('grows evenly with the turn and with the focal length', () => {
+    const focal = focalFor(16 / 9)
+    expect(turnOnScreen(0, focal)).toBe(0)
+    expect(turnOnScreen(3, focal)).toBeCloseTo(3 * turnOnScreen(1, focal), 12)
+    expect(turnOnScreen(-2, focal)).toBeCloseTo(-2 * turnOnScreen(1, focal), 12)
+    expect(turnOnScreen(1, 2 * focal)).toBeCloseTo(2 * turnOnScreen(1, focal), 12)
+  })
 })

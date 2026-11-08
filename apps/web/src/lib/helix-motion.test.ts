@@ -13,12 +13,13 @@ import {
   liveRegionAfter,
   openingOf,
   playingWorks,
+  previewLoops,
   sharpCards,
+  showsLoop,
   slotOf,
   startHelix,
   stepHelix,
   visibleCards,
-  visibleSlots,
   workOfCard,
   type HelixInput,
   type HelixState,
@@ -378,7 +379,9 @@ describe('the sharp band', () => {
   /** Screens from a tall phone to an ultrawide monitor, as their focal lengths. */
   const FOCALS = [390 / 844, 3 / 4, 16 / 9, 21 / 9].map(focalFor)
   /** Bands from none at all to the whole screen height, around the tuned one. */
-  const BANDS = [0, HELIX_TUNING.sharpBand / 2, HELIX_TUNING.sharpBand, 0.5, 1]
+  const BANDS = [0, HELIX_TUNING.sharpBand / 2, HELIX_TUNING.sharpBand, 0.5, 1].sort(
+    (a, b) => a - b,
+  )
 
   /** The Helix turned to `progress` cards, with the opening behind it. */
   const turnedTo = (n: number, progress: number): HelixState => ({
@@ -475,6 +478,11 @@ describe('the sharp band', () => {
 
 describe('Preview loops', () => {
   const FOCALS = [390 / 844, 16 / 9].map(focalFor)
+  /**
+   * A wide screen and a quarter band, worked by hand (see "the sharp band"): at rest the front card
+   * and its two neighbours are sharp, the cards two away are not.
+   */
+  const WIDE = { focal: 3.5, band: 0.25 }
 
   /** States to check: turned anywhere, at rest, mid-turn, mid-melt. */
   const states = (n: number): HelixState[] => {
@@ -491,8 +499,12 @@ describe('Preview loops', () => {
     ])
   }
 
-  /** No card hovered, or each card in turn. */
-  const hovers = (state: HelixState): (number | null)[] => [null, ...range(state.cards)]
+  /** No card hovered, or each card on screen in turn (the pointer can only rest on those). */
+  const hovers = (state: HelixState): (number | null)[] => [null, ...visibleCards(state)]
+
+  /** Cards off screen: a pointer can't rest on one, though the Helix may turn it away. */
+  const offScreen = (state: HelixState) =>
+    range(state.cards).filter((card) => !visibleCards(state).includes(card))
 
   it.each(WORK_COUNTS)(
     'with %i Works: the Works that play are those of the sharp cards and the hovered card',
@@ -514,6 +526,16 @@ describe('Preview loops', () => {
       }
     },
   )
+
+  it.each(WORK_COUNTS)('with %i Works: a hovered card turned off screen adds nothing', (n) => {
+    for (const state of states(n)) {
+      for (const focal of FOCALS) {
+        for (const hovered of offScreen(state)) {
+          expect(playingWorks(state, focal, hovered)).toEqual(playingWorks(state, focal, null))
+        }
+      }
+    }
+  })
 
   it.each(WORK_COUNTS)(
     'with %i Works: nothing else changes the set (speed, goal, motion, clock, melt)',
@@ -540,7 +562,7 @@ describe('Preview loops', () => {
 
   it.each(WORK_COUNTS)('with %i Works: never more Works than there are', (n) => {
     for (const state of states(n)) {
-      for (const hovered of hovers(state)) {
+      for (const hovered of [...hovers(state), ...offScreen(state)]) {
         // The whole screen as the band: as many cards as can ever count.
         for (const focal of FOCALS) {
           expect(playingWorks(state, focal, hovered, 1).size).toBeLessThanOrEqual(n)
@@ -572,18 +594,18 @@ describe('Preview loops', () => {
     'with %i Works: at rest, a hovered side card adds its own Work',
     (n) => {
       const state = createHelix(n, 0)
-      const [focal] = FOCALS
-      const resting = playingWorks(state, focal!, null)
-      const side = mod(visibleSlots(state) - 1, state.cards)
+      const resting = playingWorks(state, WIDE.focal, null, WIDE.band)
+      // Two slots below the front: on screen, and outside the band.
+      const side = 2
       expect(resting.has(workOfCard(state, side))).toBe(false)
-      expect(playingWorks(state, focal!, side)).toEqual(
+      expect(playingWorks(state, WIDE.focal, side, WIDE.band)).toEqual(
         new Set([...resting, workOfCard(state, side)]),
       )
     },
   )
 
   it.each(WORK_COUNTS)(
-    'with %i Works: a card shows its loop only in the sharp band or pointed at, listed once',
+    'with %i Works: a card plays its loop only in the sharp band or hovered, listed once',
     (n) => {
       for (const state of states(n)) {
         for (const focal of FOCALS) {
@@ -600,21 +622,153 @@ describe('Preview loops', () => {
     },
   )
 
-  it('with few Works, a repeat of a playing Work outside the band shows its poster', () => {
-    // Two Works make ten cards; at rest on the first, the second Work plays on the card below it.
-    const state = createHelix(2, 0)
-    const [focal] = FOCALS
-    expect(playingWorks(state, focal!, null).has(1)).toBe(true)
-    expect(workOfCard(state, 3)).toBe(1)
-    expect(liveCards(state, focal!, null)).not.toContain(3)
+  it.each(WORK_COUNTS)('with %i Works: nothing plays while the zoom runs', (n) => {
+    const opening = createOpening(n)
+    for (const focal of FOCALS) {
+      for (const hovered of [null, ...range(opening.cards)]) {
+        expect(playingWorks(opening, focal, hovered).size).toBe(0)
+      }
+    }
+  })
+})
+
+describe('held frames', () => {
+  const FOCALS = [390 / 844, 16 / 9].map(focalFor)
+  const WIDE = { focal: 3.5, band: 0.25 }
+
+  const states = (n: number): HelixState[] => {
+    const cards = createHelix(n).cards
+    return [0, 0.5, 1.3, cards / 2, cards - 0.25, -2.6].flatMap((progress) => [
+      { ...createHelix(n), progress },
+      { ...createHelix(n), progress, phase: { kind: 'melt', startedAt: 0 } },
+    ])
+  }
+
+  /** What was held a frame before: nothing, every Work, or every other one. */
+  const before = (n: number): Set<number>[] => [
+    new Set(),
+    new Set(range(n)),
+    new Set(range(n).filter((work) => work % 2 === 0)),
+  ]
+
+  /** Every combination to check for `n` Works: state, screen, hovered card, held before. */
+  function* cases(n: number) {
+    for (const state of states(n)) {
+      for (const focal of FOCALS) {
+        for (const hovered of [null, ...range(state.cards)]) {
+          for (const held of before(n)) yield { state, focal, hovered, held }
+        }
+      }
+    }
+  }
+
+  /** The Works with a card on screen. */
+  const onScreen = (state: HelixState) =>
+    new Set(visibleCards(state).map((card) => workOfCard(state, card)))
+
+  it.each(WORK_COUNTS)('with %i Works: a held Work always has a card on screen', (n) => {
+    for (const { state, focal, hovered, held } of cases(n)) {
+      const screen = onScreen(state)
+      for (const work of previewLoops(state, focal, hovered, held).held) {
+        expect(screen.has(work)).toBe(true)
+      }
+    }
+  })
+
+  it.each(WORK_COUNTS)('with %i Works: every Work that plays keeps its frame', (n) => {
+    for (const { state, focal, hovered, held } of cases(n)) {
+      const loops = previewLoops(state, focal, hovered, held)
+      expect(loops.playing).toEqual(playingWorks(state, focal, hovered))
+      for (const work of loops.playing) expect(loops.held.has(work)).toBe(true)
+    }
   })
 
   it.each(WORK_COUNTS)(
-    'with %i Works: nothing plays while the zoom runs and nothing is hovered',
+    'with %i Works: a Work that stops playing keeps its frame while a card of it is on screen',
     (n) => {
-      for (const focal of FOCALS) expect(playingWorks(createOpening(n), focal, null).size).toBe(0)
+      for (const { state, focal, hovered, held } of cases(n)) {
+        const screen = onScreen(state)
+        const now = previewLoops(state, focal, hovered, held).held
+        for (const work of held) if (screen.has(work)) expect(now.has(work)).toBe(true)
+      }
     },
   )
+
+  it.each(WORK_COUNTS)('with %i Works: a Work that never played holds no frame', (n) => {
+    for (const { state, focal, hovered, held } of cases(n)) {
+      const loops = previewLoops(state, focal, hovered, held)
+      for (const work of loops.held) {
+        expect(held.has(work) || loops.playing.has(work)).toBe(true)
+      }
+    }
+  })
+
+  it.each(WORK_COUNTS)('with %i Works: turning a whole lap gives the same', (n) => {
+    for (const { state, focal, hovered, held } of cases(n)) {
+      const lapped = { ...state, progress: state.progress + state.cards }
+      expect(previewLoops(lapped, focal, hovered, held)).toEqual(
+        previewLoops(state, focal, hovered, held),
+      )
+    }
+  })
+
+  it.each(WORK_COUNTS)('with %i Works: nothing is held while the zoom runs', (n) => {
+    for (const focal of FOCALS) {
+      for (const held of before(n)) {
+        expect(previewLoops(createOpening(n), focal, null, held).held.size).toBe(0)
+      }
+    }
+  })
+
+  it('a card turned out of the band freezes, and lets go once its Work is off screen', () => {
+    // Six Works make twelve cards, five of them on screen (slots -2 to 2).
+    const at = (front: number, held: Set<number>) =>
+      previewLoops(createHelix(6, front), WIDE.focal, null, held, WIDE.band)
+    const first = at(0, new Set())
+    expect(first.playing).toEqual(new Set([5, 0, 1]))
+    // One card down: card 11 (Work 5) is two slots up, out of the band, still on screen.
+    const second = at(1, first.held)
+    expect(second.playing).toEqual(new Set([0, 1, 2]))
+    expect(second.held).toEqual(new Set([5, 0, 1, 2]))
+    expect(showsLoop(createHelix(6, 1), second, 11)).toBe(true)
+    // One more: card 11 has left the screen, and Work 5 lets its frame go.
+    const third = at(2, second.held)
+    expect(third.held).toEqual(new Set([0, 1, 2, 3]))
+  })
+})
+
+describe('what a card shows', () => {
+  const WIDE = { focal: 3.5, band: 0.25 }
+
+  it.each(WORK_COUNTS)(
+    'with %i Works: a live card shows its loop, a card that never played its poster',
+    (n) => {
+      for (const front of range(createHelix(n).cards)) {
+        const state = createHelix(n, front)
+        const loops = previewLoops(state, WIDE.focal, null, new Set(), WIDE.band)
+        for (const card of visibleCards(state)) {
+          expect(showsLoop(state, loops, card)).toBe(loops.live.includes(card))
+        }
+      }
+    },
+  )
+
+  it('with few Works, a repeat of a playing Work outside the band shows its poster', () => {
+    // Two Works make ten cards; at rest on the first, the second Work plays on the card below it.
+    const state = createHelix(2, 0)
+    const loops = previewLoops(state, WIDE.focal, null, new Set(), WIDE.band)
+    expect(loops.playing.has(1)).toBe(true)
+    expect(workOfCard(state, 3)).toBe(1)
+    expect(showsLoop(state, loops, 3)).toBe(false)
+  })
+
+  it('a card of a Work that stopped playing shows its frozen frame', () => {
+    // Work 4 played before; at rest on card 0 its card is two slots up, on screen, out of the band.
+    const state = createHelix(6, 0)
+    const loops = previewLoops(state, WIDE.focal, null, new Set([4]), WIDE.band)
+    expect(loops.playing.has(4)).toBe(false)
+    expect(showsLoop(state, loops, 10)).toBe(true)
+  })
 })
 
 describe('focus', () => {

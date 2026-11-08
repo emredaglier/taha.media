@@ -447,6 +447,17 @@ export const visibleCards = (state: HelixState): number[] =>
   )
 
 /**
+ * The cards on screen, as far as the Preview loops go: the visible band, once the zoom is done.
+ * While it runs, the Showreel has the screen and the opening starts from the posters.
+ */
+const onScreenCards = (state: HelixState): number[] =>
+  state.phase.kind === 'hero' ? [] : visibleCards(state)
+
+/** The Works of `cards`, each once. */
+const worksOf = (state: HelixState, cards: readonly number[]): Set<number> =>
+  new Set(cards.map((card) => workOfCard(state, card)))
+
+/**
  * The cards in the sharp middle band (#55): those whose picture reaches within `band` of the
  * middle of the screen, top to bottom (0 to 1 of the half-height; the tuned sharp band), where the
  * liquid glass doesn't melt it. `focal` is the screen's focal length: where cards are smaller on
@@ -457,8 +468,7 @@ export function sharpCards(
   focal: number,
   band: number = HELIX_TUNING.sharpBand,
 ): number[] {
-  if (state.phase.kind === 'hero') return []
-  return visibleCards(state).filter((card) => {
+  return onScreenCards(state).filter((card) => {
     // The screen's shape only moves cards sideways; 1 stands in for it.
     const box = cardOnScreen(slotOf(state, card), focal, 1)
     return box !== null && Math.abs(box.y) - box.halfHeight <= band
@@ -466,9 +476,8 @@ export function sharpCards(
 }
 
 /**
- * The cards that show their Work's Preview loop (#55): those in the sharp band (`sharpCards`,
- * `band` as there), and the card the pointer rests on (`hovered`, if any). Every other card shows
- * its poster as a still frame.
+ * The cards that play their Work's Preview loop (#55): those in the sharp band (`sharpCards`,
+ * `band` as there), and the hovered card (the one the pointer rests on) while it is on screen.
  */
 export function liveCards(
   state: HelixState,
@@ -477,7 +486,9 @@ export function liveCards(
   band: number = HELIX_TUNING.sharpBand,
 ): number[] {
   const cards = sharpCards(state, focal, band)
-  return hovered === null || cards.includes(hovered) ? cards : [...cards, hovered]
+  return hovered === null || cards.includes(hovered) || !onScreenCards(state).includes(hovered)
+    ? cards
+    : [...cards, hovered]
 }
 
 /**
@@ -489,8 +500,53 @@ export const playingWorks = (
   focal: number,
   hovered: number | null,
   band: number = HELIX_TUNING.sharpBand,
-): Set<number> =>
-  new Set(liveCards(state, focal, hovered, band).map((card) => workOfCard(state, card)))
+): Set<number> => worksOf(state, liveCards(state, focal, hovered, band))
+
+/** The Preview loops after a step: which cards play, which Works play, and whose frame is held. */
+export type PreviewLoops = {
+  /** The cards that play their Work's loop (`liveCards`). */
+  live: number[]
+  /** The Works whose loops play (`playingWorks`). */
+  playing: Set<number>
+  /**
+   * The Works whose loop frame is kept: those that play, and those that stopped but still have a
+   * card on screen. A card of a Work that stopped shows its loop's last frame, frozen; once none of
+   * its cards is on screen the frame goes, and its cards show the poster again. So the frames held
+   * never outnumber the cards on screen.
+   */
+  held: Set<number>
+}
+
+/**
+ * The Preview loops for the Helix now (#55), from the hovered card and the Works whose frames were
+ * held after the last step (`held`; none at first). See `PreviewLoops`.
+ */
+export function previewLoops(
+  state: HelixState,
+  focal: number,
+  hovered: number | null,
+  held: ReadonlySet<number>,
+  band: number = HELIX_TUNING.sharpBand,
+): PreviewLoops {
+  const live = liveCards(state, focal, hovered, band)
+  const playing = worksOf(state, live)
+  const onScreen = worksOf(state, onScreenCards(state))
+  return {
+    live,
+    playing,
+    held: new Set([...playing, ...[...held].filter((work) => onScreen.has(work))]),
+  }
+}
+
+/**
+ * Whether card `card` shows its Work's loop (playing, or frozen on its last frame) rather than its
+ * poster: a live card does, and so does a card of a Work that stopped and whose frame is held. A
+ * repeat of a Work that plays on another card shows the poster: the loop is moving there.
+ */
+export function showsLoop(state: HelixState, loops: PreviewLoops, card: number): boolean {
+  const work = workOfCard(state, card)
+  return loops.live.includes(card) || (!loops.playing.has(work) && loops.held.has(work))
+}
 
 /** What the opening looks like now: what the renderer, the overlays and the page read. */
 export type Opening = {

@@ -45,6 +45,19 @@ export function focalFor(aspect: number): number {
   return Math.min(byHeight, byWidth)
 }
 
+/** A screen of `width` by `height` (any unit): its shape (width / height) and its focal length. */
+export function lensFor(width: number, height: number) {
+  const aspect = width / Math.max(1, height)
+  return { aspect, focal: focalFor(aspect) }
+}
+
+/**
+ * How far turning the Helix by `turn` cards moves the front of it up the screen, in screen
+ * heights: one slot's height where the front card sits. The liquid glass's haze rides with it.
+ */
+export const turnOnScreen = (turn: number, focal: number): number =>
+  (turn * SLOT_PITCH * focal) / (HELIX_SHAPE.cameraZ - HELIX_SHAPE.radius) / 2
+
 /**
  * Where the opening's camera starts (#54): how much the Helix is scaled up so that the front card
  * covers the whole screen, with a little to spare. The zoom pulls back from here to 1.
@@ -84,6 +97,9 @@ export function cardOnScreen(slot: number, focal: number, aspect: number) {
  */
 export const cropToCard = (width: number, height: number, focalPoint: { x: number; y: number }) =>
   cropToFill(width, height, HELIX_SHAPE.cardRatio, focalPoint)
+
+/** The part of a picture a card or the screen shows (`cropToCard`, `cropToFill`). */
+export type PictureCrop = ReturnType<typeof cropToFill>
 
 /**
  * The part of a picture a box of aspect `ratio` (width / height) shows when the picture fills it,
