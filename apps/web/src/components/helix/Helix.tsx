@@ -10,6 +10,7 @@ import {
   createHelix,
   frontWork,
   isResting,
+  liveRegionAfter,
   openingOf,
   slotOf,
   startHelix,
@@ -24,9 +25,10 @@ import { HELIX_TUNING } from '../../lib/helix-tuning'
 import { isMenuOpen } from '../../lib/menu-a11y'
 import type { HelixWork } from '../FeaturedWorks'
 import type { HelixShowreel } from '../Hero'
-import { FrontWork, watchWorkLinks } from './FrontWork'
+import { followFocus, FrontWork, watchWorkLinks } from './FrontWork'
 import {
   forgetWork,
+  handOverFadeMs,
   heroLoop,
   pageMarks,
   rememberedWork,
@@ -106,9 +108,15 @@ export function Helix({
     router.push(`/isler/${target.slug}`)
   })
 
-  const announce = useEffectEvent((work: number) => {
-    const target = works[work]
-    if (target) setAnnouncement(`${target.title}, ${work + 1} / ${works.length}`)
+  // What the live region does after a step: speaks a stop on a new Work, or clears what it said
+  // when the model forgot it (a reset, a skipped opening), so the same words can be heard again.
+  const speak = useEffectEvent((before: HelixState, after: HelixState) => {
+    const region = liveRegionAfter(before, after)
+    if (region === 'clear') setAnnouncement('')
+    else if (region !== 'keep') {
+      const target = works[region.speak]
+      if (target) setAnnouncement(`${target.title}, ${region.speak + 1} / ${works.length}`)
+    }
   })
 
   // A layout effect: coming back to a remembered Work, the Helix is on screen from the first paint,
@@ -137,9 +145,10 @@ export function Helix({
 
     let state: HelixState = startHelix(works.length, rememberedWork(works))
     const apply = (input: HelixInput) => {
+      const before = state
       state = stepHelix(state, input, performance.now())
       if (state.open !== null) open(state.open)
-      if (state.arrived !== null) announce(state.arrived)
+      speak(before, state)
     }
     const locked = () => openingOf(state).locked
 
@@ -148,13 +157,17 @@ export function Helix({
     let ready = false
     let handedOver = false
     if (state.phase.kind === 'hero') {
-      void renderer.handOver(heroLoop()).then(() => (ready = true))
+      const shown = heroLoop()
+      // The phone variant isn't the Helix's picture: its static picture fades out, not cuts.
+      marks.fade(handOverFadeMs(shown))
+      void renderer.handOver(shown).then(() => (ready = true))
     }
 
     // --- drawing: every frame while the tab is visible, skipped while nothing moves
     const { bendEase, bendMax } = HELIX_SHAPE
     let bend = 0
     let shown = -1
+    let drawnPhase: HelixState['phase']['kind'] | null = null
     let frontIn = false
     let frameId = 0
     let lastFrame = 0
@@ -163,8 +176,9 @@ export function Helix({
       const now = performance.now()
       const dt = Math.min((now - lastFrame) / 1000, 0.1)
       lastFrame = now
+      const before = state
       state = stepHelix(state, { kind: 'frame' }, now)
-      if (state.arrived !== null) announce(state.arrived)
+      speak(before, state)
       if (!handedOver && state.phase.kind === 'hero' && !ready) return
       const opening = openingOf(state)
       // Fast turning bends the cards; the bend follows the speed with time-based easing.
@@ -175,8 +189,12 @@ export function Helix({
         !isResting(state) ||
         Math.abs(bend) > 1e-4 ||
         renderer.stale ||
-        opening.showreelSlot !== null
+        opening.showreelSlot !== null ||
+        // The opening's last frame: with the Showreel gone, and the Helix at rest, nothing else
+        // would draw it (and the Showreel's loop would never be stopped).
+        state.phase.kind !== drawnPhase
       ) {
+        drawnPhase = state.phase.kind
         renderer.draw({
           cards: shownCards(state),
           band: visibleSlots(state),
@@ -197,6 +215,8 @@ export function Helix({
       if (frontWork(state) !== shown) {
         shown = frontWork(state)
         setFront(frontOf(state))
+        // Focus stays with what is in front when the wheel or the arrow keys turn the Helix.
+        followFocus(works, shown)
       }
       if (opening.frontShown !== frontIn) {
         frontIn = opening.frontShown
@@ -323,19 +343,20 @@ export function Helix({
     <>
       {/* The page's height while the Helix runs: one screen plus the zoom's scroll length. */}
       <div aria-hidden="true" className="hidden helix:block" style={{ height: SPACER_HEIGHT }} />
-      <div
-        role="region"
-        aria-label="Öne çıkan işler"
-        className="helix:visible invisible fixed inset-0 z-0"
-      >
+      {/* No landmark of its own: the static section of Work links is "Öne çıkan işler". */}
+      <div className="helix:visible invisible fixed inset-0 z-0">
         <canvas
           ref={canvasRef}
           aria-hidden="true"
           className="absolute inset-0 size-full cursor-grab touch-none select-none active:cursor-grabbing helix-hero:cursor-auto helix-hero:touch-pan-y"
         />
+        {/* Shown at once while a Work link has focus: the ring is never hidden (WCAG 2.4.7). */}
         <div
-          className="transition-opacity duration-[600ms]"
-          style={{ opacity: frontShown ? 1 : 0 }}
+          className="transition-opacity"
+          style={{
+            opacity: frontShown || focusedWork !== null ? 1 : 0,
+            transitionDuration: focusedWork !== null ? '0ms' : `${HELIX_TUNING.frontFadeMs}ms`,
+          }}
         >
           <FrontWork
             work={works[front.work]}

@@ -1,7 +1,11 @@
+import { WORK_LINK_ATTRIBUTE } from '../../lib/home-marks'
 import type { HelixWork } from '../FeaturedWorks'
 
-/** The attribute on a static Home Work link that names its Work's slug, for the Helix to find. */
-export const WORK_LINK_ATTRIBUTE = 'data-work-slug'
+/** The place among `works` of the static Home Work link `target` is in or is, or -1. */
+function workOfLink(works: HelixWork[], target: EventTarget | null): number {
+  const link = target instanceof Element ? target.closest(`[${WORK_LINK_ATTRIBUTE}]`) : null
+  return link ? works.findIndex((work) => work.slug === link.getAttribute(WORK_LINK_ATTRIBUTE)) : -1
+}
 
 /**
  * Calls `onFocus(k, focused)` when keyboard or screen-reader focus enters (`true`) or leaves
@@ -12,14 +16,8 @@ export function watchWorkLinks(
   works: HelixWork[],
   onFocus: (work: number, focused: boolean) => void,
 ): () => void {
-  const workOf = (target: EventTarget | null) => {
-    const link = target instanceof Element ? target.closest(`[${WORK_LINK_ATTRIBUTE}]`) : null
-    return link
-      ? works.findIndex((work) => work.slug === link.getAttribute(WORK_LINK_ATTRIBUTE))
-      : -1
-  }
   const on = (focused: boolean) => (event: FocusEvent) => {
-    const work = workOf(event.target)
+    const work = workOfLink(works, event.target)
     if (work >= 0) onFocus(work, focused)
   }
   const focusIn = on(true)
@@ -30,6 +28,21 @@ export function watchWorkLinks(
     document.removeEventListener('focusin', focusIn)
     document.removeEventListener('focusout', focusOut)
   }
+}
+
+/**
+ * When the link of some Work has focus and a different Work is now in front (an arrow key or the
+ * wheel turned the Helix), moves focus to the front Work's link, so the ring and Enter follow what
+ * is on screen. Its `focusin` then asks for the Work already in front, which changes nothing.
+ */
+export function followFocus(works: HelixWork[], front: number): void {
+  const focused = workOfLink(works, document.activeElement)
+  if (focused < 0 || focused === front) return
+  const slug = works[front]?.slug
+  if (slug === undefined) return
+  const links = document.querySelectorAll<HTMLElement>(`[${WORK_LINK_ATTRIBUTE}]`)
+  const link = [...links].find((each) => each.getAttribute(WORK_LINK_ATTRIBUTE) === slug)
+  link?.focus({ preventScroll: true })
 }
 
 /**

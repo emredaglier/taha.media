@@ -1,7 +1,12 @@
 import type { HelixPhase, Opening } from '../../lib/helix-motion'
 import { HELIX_TUNING } from '../../lib/helix-tuning'
+import {
+  HERO_GONE_ATTRIBUTE,
+  HERO_PHONE_ATTRIBUTE,
+  HERO_SELECTOR,
+  WORK_LINK_ATTRIBUTE,
+} from '../../lib/home-marks'
 import type { HelixWork } from '../FeaturedWorks'
-import { WORK_LINK_ATTRIBUTE } from './FrontWork'
 
 /**
  * The page around the Helix's opening (#54): the scroll that drives the zoom, the marks the CSS
@@ -18,12 +23,17 @@ export const SPACER_HEIGHT = `calc(100vh + ${HELIX_TUNING.zoomScrollVh}vh)`
 /**
  * Writes the marks the CSS keys to on `<html>`: `data-home="helix"` (the Helix runs),
  * `data-helix-phase` (the opening's phase: the page scrolls in `hero` and is locked after), and
- * how far the hero's overlays have left. Writes only what changed.
+ * how far the hero's overlays have left (and whether they all have: `HERO_GONE_ATTRIBUTE`). Writes
+ * only what changed.
  */
 export function pageMarks(root: HTMLElement) {
   let phase = ''
   let gone = -1
   return {
+    /** How long the static hero's media fades out when the marks first show the Helix (ms). */
+    fade(ms: number) {
+      root.style.setProperty('--helix-handover-fade', `${ms}ms`)
+    },
     show(next: HelixPhase['kind'], opening: Opening) {
       if (next !== phase) {
         phase = next
@@ -35,6 +45,7 @@ export function pageMarks(root: HTMLElement) {
         gone = heroGone
         root.style.setProperty('--helix-hero-gone', String(heroGone))
         root.style.setProperty('--helix-hero-visibility', heroGone >= 1 ? 'hidden' : 'visible')
+        root.toggleAttribute(HERO_GONE_ATTRIBUTE, heroGone >= 1)
       }
     },
     clear() {
@@ -42,6 +53,8 @@ export function pageMarks(root: HTMLElement) {
       delete root.dataset.helixPhase
       root.style.removeProperty('--helix-hero-gone')
       root.style.removeProperty('--helix-hero-visibility')
+      root.removeAttribute(HERO_GONE_ATTRIBUTE)
+      root.style.removeProperty('--helix-handover-fade')
     },
   }
 }
@@ -132,6 +145,14 @@ export function watchLinks({
  * shows): the picture the Helix's Showreel layer takes over from.
  */
 export function heroLoop(): HTMLVideoElement | null {
-  const videos = document.querySelectorAll<HTMLVideoElement>('[data-home-hero] video')
+  const videos = document.querySelectorAll<HTMLVideoElement>(`${HERO_SELECTOR} video`)
   return [...videos].find((video) => video.getClientRects().length > 0) ?? null
 }
+
+/**
+ * How long the static hero's picture fades out as the Helix takes over (ms): `HELIX_TUNING.
+ * phoneFadeMs` when it is the phone variant, which the Helix doesn't use (its Showreel layer shows
+ * the 16:9 loop), otherwise none, as the pictures match.
+ */
+export const handOverFadeMs = (shown: HTMLVideoElement | null): number =>
+  shown?.closest(`[${HERO_PHONE_ATTRIBUTE}]`) ? HELIX_TUNING.phoneFadeMs : 0

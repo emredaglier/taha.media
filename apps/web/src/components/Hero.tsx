@@ -1,4 +1,5 @@
 import type { Site } from '../data/pages'
+import { HERO_ATTRIBUTE, HERO_PHONE_ATTRIBUTE } from '../lib/home-marks'
 import { copyrightNotice, OWNER_NAME } from '../lib/site'
 import { LoopVideo } from './LoopVideo'
 import { Picture } from './Picture'
@@ -49,7 +50,7 @@ function HeroMedia({ site }: { site: Site }) {
     return (
       <>
         {showreelPhone ? (
-          <div className={`absolute inset-0 ${PHONE}`}>
+          <div className={`absolute inset-0 ${PHONE}`} {...{ [HERO_PHONE_ATTRIBUTE]: '' }}>
             <LoopVideo video={showreelPhone} sizes={SIZES} fill />
           </div>
         ) : null}
@@ -82,8 +83,10 @@ function HeroMedia({ site }: { site: Site }) {
  * While the Helix runs (#54) this same hero is the opening's overlay: during the zoom it stays where
  * it is on screen (fixed, as the page scrolls under it), its media gives way to the Helix's
  * Showreel layer, which shows the same picture in the same place, and its text leaves with the
- * zoom (`--helix-hero-gone`, set by the Helix). From the melt on it is visually hidden, the name
- * still the page's heading for screen readers. `data-home-hero` is how the Helix and the header
+ * zoom (`--helix-hero-gone`, set by the Helix). From the melt on it is visually hidden, with only the name
+ * left, the page's heading for screen readers (its controls are out of the tab order). The static
+ * picture of the phone variant, which the Helix doesn't use, fades out over the Helix's first
+ * frames instead of cutting (`--helix-handover-fade`). `data-home-hero` is how the Helix and the header
  * find it.
  */
 export function Hero({ site }: { site: Site | null }) {
@@ -91,11 +94,13 @@ export function Hero({ site }: { site: Site | null }) {
   const link = site?.showreelLink ?? null
   return (
     <section
-      data-home-hero=""
+      {...{ [HERO_ATTRIBUTE]: '' }}
       className="relative -mx-6 flex min-h-svh flex-1 flex-col justify-end bg-background-raised helix:bg-transparent helix-hero:fixed helix-hero:inset-0 helix-hero:z-[1] helix-hero:mx-0 helix-hero:[visibility:var(--helix-hero-visibility,visible)] helix-locked:sr-only helix-locked:min-h-0"
     >
       {site ? (
-        <div className="helix:hidden">
+        // Out of sight once the Helix runs, at once, or fading out over `--helix-handover-fade`
+        // when the static picture is the phone variant (the visibility flips at the fade's end).
+        <div className="helix:invisible helix:opacity-0 [transition-duration:var(--helix-handover-fade,0ms)] [transition-property:opacity,visibility]">
           <HeroMedia site={site} />
         </div>
       ) : null}
@@ -110,7 +115,9 @@ export function Hero({ site }: { site: Site | null }) {
           ) : null}
         </div>
         {link ? (
-          <div className="mt-4">
+          // Nothing to see or reach once the hero is hidden for screen readers (the melt on): the
+          // link would be an invisible Tab stop. The heading stays.
+          <div className="mt-4 helix-locked:invisible">
             {poster ? (
               <WatchWithSound
                 provider={link.provider}
