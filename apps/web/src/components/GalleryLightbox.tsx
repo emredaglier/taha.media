@@ -15,7 +15,7 @@ import { Picture } from './Picture'
  * A Gallery item full-screen over the page: a modal dialog with the item large (a loop plays,
  * under the usual loop rules), previous and next that wrap, arrow keys, swipe, Escape and a
  * Kapat button. The page behind can't scroll, focus is trapped (every Tab step is picked by
- * `nextFocus`, for Safari: webkit-focus lesson 12), and the dialog is named for a screen reader.
+ * `nextFocus`, because Safari's Tab skips links: see `lib/menu-a11y.ts`), and the dialog is named for a screen reader.
  * Modelled on SiteMenu. Stepping, key and swipe decisions are pure functions in `lib/`; this
  * component only wires them to the DOM. The grid owns which item is open, and gives focus back
  * to the item it opened when `onClose` runs.
