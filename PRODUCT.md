@@ -33,7 +33,7 @@ taha.media is the portfolio of Taha, a video editor, motion designer and graphic
 - Turkish only for now (`lang="tr"`; fonts must cover ı İ ğ ş ç ö ü). English could come later under `/en`.
 - The design is drawn in Figma first, through the Figma MCP. Code follows the approved Figma.
 - Quality floor (ADR-0101): WCAG 2.2 AA, content readable without JS, Safari/iOS. Motion and 3D are enhancements, off under reduced motion or Save-Data.
-- Nothing is collected from visitors. Contact is `mailto:` plus social links. Analytics is cookieless Cloudflare Web Analytics, and errors go to Sentry.
+- Nothing is collected from visitors. Contact is `mailto:` plus social links. Analytics is cookieless Cloudflare Web Analytics, and errors go to Sentry. The only outbound hosts in the built client output are our own origins, those two and the click-to-load Vimeo and YouTube players; the build fails on any other (`infra/client-hosts-allowlist.ts`, #80).
 - Open: social profile list and contact email (filled in later), and how far the 3D/scroll ambition goes (parked until the design exists).
 
 ## Brand Commitments
