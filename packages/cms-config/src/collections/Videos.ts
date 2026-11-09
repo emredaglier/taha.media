@@ -112,7 +112,7 @@ const keepUseWhileReferenced: CollectionBeforeValidateHook = async ({
   throw new ValidationError(
     {
       collection: collection.slug,
-      errors: [{ path: 'use', label: 'Kullanım', message: lockedUseMessage(places) }],
+      errors: [{ ...USE_FIELD, message: lockedUseMessage(places) }],
       req,
     },
     req.t,
