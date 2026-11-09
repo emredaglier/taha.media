@@ -46,15 +46,27 @@ export type Observation = {
 
 const NO_ERROR = 0
 
+/**
+ * The least share of the card frame's pixels that must have coverage. The real run draws about 28%
+ * at 1280x800, so 5% fails a drawing that is nearly gone (cards pushed off screen, a pass leaving a
+ * sliver) without breaking when the cards are reshaped or the scene resized a little.
+ */
+export const MIN_CARD_COVERAGE = 0.05
+
 /** The reasons the run fails, none if it passes. */
 export function judge({ glErrors, cards, empty }: Observation): string[] {
   const failures: string[] = []
+  const percent = (share: number) => `${(share * 100).toFixed(1)}%`
   const hex = (error: number) => `0x${error.toString(16)}`
   if (glErrors.frames !== NO_ERROR)
     failures.push(`gl.getError() is ${hex(glErrors.frames)} after drawing the frames`)
   if (glErrors.empty !== NO_ERROR)
     failures.push(`gl.getError() is ${hex(glErrors.empty)} after drawing the empty scene`)
-  if (cards.opaque === 0) failures.push('the card frame has no opaque pixel: nothing was drawn')
+  const coverage = cards.total === 0 ? 0 : cards.opaque / cards.total
+  if (coverage < MIN_CARD_COVERAGE)
+    failures.push(
+      `the card frame covers ${percent(coverage)} of its pixels (${cards.opaque} of ${cards.total}), at least ${percent(MIN_CARD_COVERAGE)} expected: the cards were barely drawn`,
+    )
   if (cards.invalidPremultiplied > 0)
     failures.push(
       `invalid premultiplied output: ${cards.invalidPremultiplied} of ${cards.total} pixels have a colour channel above their alpha`,

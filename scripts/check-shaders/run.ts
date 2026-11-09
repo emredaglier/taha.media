@@ -9,13 +9,13 @@
 // Needs Chromium for Playwright once: `pnpm exec playwright install chromium`. It starts a
 // browser, so run it once, not in parallel with other heavy work (CLAUDE.md, "Memory-heavy
 // commands"). Screenshots of the two judged frames go to scripts/check-shaders/.output/.
-import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { chromium } from '@playwright/test'
 import { build } from 'esbuild'
 
+import { clearOutput, saveShots } from './output.ts'
 import { judge, summary, type Report } from './pixels.ts'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -58,17 +58,8 @@ async function observe(script: string): Promise<Report> {
   }
 }
 
-function saveShots(shots: { cards: string; empty: string }) {
-  fs.mkdirSync(outputDir, { recursive: true })
-  for (const [name, dataUrl] of Object.entries(shots))
-    fs.writeFileSync(
-      path.join(outputDir, `${name}.png`),
-      Buffer.from(dataUrl.slice(dataUrl.indexOf(',') + 1), 'base64'),
-    )
-}
-
 async function main(): Promise<number> {
-  fs.rmSync(outputDir, { recursive: true, force: true })
+  clearOutput(outputDir)
   const report = await observe(await bundle())
   if ('error' in report) {
     // `createHelixRenderer` threw: a shader didn't compile or link (the message is the GL info
@@ -76,7 +67,7 @@ async function main(): Promise<number> {
     console.error(`check:shaders FAILED: the Helix renderer did not run.\n${report.error}`)
     return 1
   }
-  saveShots(report.shots)
+  saveShots(outputDir, report.shots)
   const failures = judge(report.observation)
   if (failures.length > 0) {
     console.error(

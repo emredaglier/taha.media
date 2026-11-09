@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { judge, pixelStats, summary, type Observation } from './pixels.ts'
+import { judge, MIN_CARD_COVERAGE, pixelStats, summary, type Observation } from './pixels.ts'
 
 /** RGBA bytes from pixels written as [r, g, b, a]. */
 const rgba = (...pixels: [number, number, number, number][]) => new Uint8Array(pixels.flat())
@@ -53,7 +53,21 @@ describe('judge', () => {
 
   it('fails when the card frame has no opaque pixel', () => {
     const cards = { ...GOOD.cards, opaque: 0 }
-    expect(judge({ ...GOOD, cards })[0]).toMatch(/no opaque/i)
+    const failures = judge({ ...GOOD, cards })
+    expect(failures).toHaveLength(1)
+    expect(failures[0]).toMatch(/covers 0\.0%/)
+  })
+
+  it('passes a card frame exactly at the coverage floor and fails one pixel below it', () => {
+    const at = { ...GOOD.cards, total: 1000, opaque: MIN_CARD_COVERAGE * 1000 }
+    expect(judge({ ...GOOD, cards: at })).toEqual([])
+    const below = { ...at, opaque: at.opaque - 1 }
+    expect(judge({ ...GOOD, cards: below })[0]).toMatch(/covers 4\.9%.*at least 5\.0%/)
+  })
+
+  it('fails a frame that drew only a sliver, which is not nothing', () => {
+    const cards = { ...GOOD.cards, total: 1_024_000, opaque: 3_000 }
+    expect(judge({ ...GOOD, cards })[0]).toMatch(/covers 0\.3%/)
   })
 
   it('fails on invalid premultiplied output, with how many pixels', () => {

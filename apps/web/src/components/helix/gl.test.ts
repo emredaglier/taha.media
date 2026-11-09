@@ -37,7 +37,8 @@ function fakeGl(failing: 'vertex' | 'fragment' | 'link' | null, log: string) {
   return gl as unknown as WebGL2RenderingContext
 }
 
-const attempt = (gl: WebGL2RenderingContext) => () => link(gl, 'vertex source', 'fragment source')
+const attempt = (gl: WebGL2RenderingContext) => () =>
+  link(gl, 'card', 'vertex source', 'fragment source')
 
 describe('link', () => {
   it('returns the program when both shaders compile and it links', () => {
@@ -54,10 +55,20 @@ describe('link', () => {
     }
   })
 
+  it('names the program in a compile failure, stage included', () => {
+    const run = attempt(fakeGl('fragment', 'log'))
+    expect(run).toThrow('Shader card (fragment): log')
+    expect(attempt(fakeGl('vertex', 'log'))).toThrow('Shader card (vertex): log')
+  })
+
   it('throws HelixUnavailable with the link log', () => {
     const log = 'ERROR: varying vDepth is not written by the vertex shader'
     const run = attempt(fakeGl('link', log))
     expect(run).toThrow(HelixUnavailable)
     expect(run).toThrow(log)
+  })
+
+  it('names the program in a link failure', () => {
+    expect(attempt(fakeGl('link', 'log'))).toThrow('Program card: log')
   })
 })

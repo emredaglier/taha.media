@@ -92,7 +92,7 @@ export function createHeatTrail(gl: WebGL2RenderingContext): HeatTrail {
   const canFloat =
     gl.getExtension('EXT_color_buffer_float') !== null ||
     gl.getExtension('EXT_color_buffer_half_float') !== null
-  const program = link(gl, QUAD_VERTEX, FRAGMENT)
+  const program = link(gl, 'heat trail', QUAD_VERTEX, FRAGMENT)
   const at = uniforms(gl, program, ['uState', 'uTexel', 'uFrom', 'uTo', 'uStrength', 'uAspect'])
   const quad = screenQuad(gl)
   const cold = colourTexture(gl, new Uint8Array([0, 0, 0, 0]))
