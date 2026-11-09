@@ -20,7 +20,15 @@ count=0
 for loop in videos/demo-previewloop-*.mp4; do
   [ -e "$loop" ] || continue
   n=$(basename "$loop" | sed -E 's/demo-previewloop-([0-9]+)-.*/\1/')
-  poster=$(ls images/demo-"$n"-*-1280x853.webp | head -1)
+  poster=""
+  for candidate in images/demo-"$n"-*-1280x853.webp; do
+    [ -e "$candidate" ] && poster=$candidate
+    break
+  done
+  if [ -z "$poster" ]; then
+    echo "make-loops.sh: no poster images/demo-$n-*-1280x853.webp for $loop; was the dev seed run in $1?" >&2
+    exit 1
+  fi
   ffmpeg -v error -y -loop 1 -framerate 25 -i "$poster" -t 4 \
     -vf "crop=1280:720,zoompan=z='1+0.0012*on':d=1:s=1280x720:fps=25,drawbox=x='mod(t*320\,1280)':y=0:w=28:h=ih:color=white@0.85:t=fill" \
     -c:v libx264 -pix_fmt yuv420p -movflags +faststart "$loop.new.mp4"

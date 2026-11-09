@@ -24,6 +24,9 @@ beforeAll(async () => {
   fs.writeFileSync(path.join(tmp, 'videos', 'loop.mp4'), VIDEO)
   fs.writeFileSync(path.join(tmp, 'qa.db'), 'database')
   fs.writeFileSync(path.join(tmp, 'secret.txt'), 'outside the media folders')
+  fs.symlinkSync('../qa.db', path.join(tmp, 'images', 'db.webp'))
+  fs.symlinkSync('..', path.join(tmp, 'images', 'up'))
+  fs.symlinkSync('poster.webp', path.join(tmp, 'images', 'alias.webp'))
   server = createMediaServer(tmp)
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
   port = (server.address() as AddressInfo).port
@@ -54,6 +57,23 @@ const request = (
     req.on('error', reject)
     req.end()
   })
+
+describe('symlinks', () => {
+  it('refuses a link that leads out of the media folder, even though its path looks inside', async () => {
+    const file = await request('GET', '/db.webp')
+    expect(file.status).toBe(403)
+    expect(file.body.toString()).not.toContain('database')
+    const folder = await request('GET', '/up/secret.txt')
+    expect(folder.status).toBe(403)
+    expect(folder.body.toString()).not.toContain('outside')
+  })
+
+  it('serves a link that stays inside its media folder', async () => {
+    const answer = await request('GET', '/alias.webp')
+    expect(answer.status).toBe(200)
+    expect(answer.body.equals(IMAGE)).toBe(true)
+  })
+})
 
 describe('serving files', () => {
   it('serves an image and a video by their key, from either folder', async () => {

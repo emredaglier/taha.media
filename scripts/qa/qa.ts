@@ -10,7 +10,8 @@
 //   4. builds web with the QA database, throwaway secrets and MEDIA_ORIGIN pointing at the stand-in
 //   5. starts the media stand-in (scripts/qa/media.ts) and `next start`, and prints the URLs
 //
-// Ctrl-C stops both. Options: `pnpm qa --help`.
+// Ctrl-C stops both. Options: `pnpm qa --help`. TAHA_QA_DRY_RUN=1 (the tests set it) stops after
+// the argument, reset and port checks, before anything is deleted, seeded or built.
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -18,8 +19,10 @@ import { fileURLToPath } from 'node:url'
 
 import { createMediaServer } from './media.ts'
 import {
+  assertReusable,
   assertSafeToReset,
   lanAddress,
+  markQaFolder,
   parseArgs,
   seedEnv,
   USAGE,
@@ -48,9 +51,10 @@ function run(command: string, args: string[], env: NodeJS.ProcessEnv): Promise<v
 /** The steps below are the ones that touch the database and Next; tests never call them. */
 
 async function seedQaFolder(config: QaConfig) {
-  assertSafeToReset(config.qaDir)
+  assertSafeToReset(config.qaDir, repoRoot)
   fs.rmSync(config.qaDir, { recursive: true, force: true })
   fs.mkdirSync(config.qaDir, { recursive: true })
+  markQaFolder(config.qaDir)
   const env = seedEnv(config, process.env)
   log(`migrating and seeding ${config.qaDir}/qa.db (Media goes to images/ and videos/ beside it)`)
   await run('pnpm', ['--filter', '@taha/cms', 'migrate'], env)
@@ -107,11 +111,9 @@ async function main(): Promise<number> {
 
   try {
     if (config.reuse) {
-      if (!fs.existsSync(path.join(config.qaDir, 'qa.db'))) {
-        throw new UsageError(`--reuse: ${config.qaDir} has no qa.db. Run without --reuse first.`)
-      }
+      assertReusable(config.qaDir, repoRoot)
     } else {
-      assertSafeToReset(config.qaDir)
+      assertSafeToReset(config.qaDir, repoRoot)
       if (spawnSync('ffmpeg', ['-version'], { stdio: 'ignore' }).error) {
         throw new UsageError(
           'ffmpeg is not installed (brew install ffmpeg); the loop maker needs it.',
@@ -133,6 +135,13 @@ async function main(): Promise<number> {
       `${formatPortConflicts(conflicts)}\nStop them, or pick other ports (--web-port, --media-port).`,
     )
     return 1
+  }
+
+  if (process.env.TAHA_QA_DRY_RUN === '1') {
+    // Set by qa.test.ts, which spawns this file: everything above only reads. Nothing below may
+    // run in a test, because it deletes, seeds and builds.
+    log('dry run: the checks passed, nothing was deleted, seeded or built')
+    return 0
   }
 
   if (!config.reuse) {

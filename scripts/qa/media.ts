@@ -1,9 +1,10 @@
 // QA stand-in for the R2 media bucket: serves a QA folder's images/ and videos/ at <origin>/<key>,
 // with CORS (*) and byte ranges, so WebGL can read loops and posters (#50, #55). Files are looked
-// up by key in `images/` first, then `videos/`; nothing outside those two folders is served.
+// up by key in `images/` first, then `videos/`; nothing outside those two folders is served,
+// and a symlink that leads out of them is refused (real paths are compared).
 //
 //   node scripts/qa/media.ts <qa dir> <port> [host, default 127.0.0.1]
-import { createReadStream, statSync } from 'node:fs'
+import fs, { createReadStream } from 'node:fs'
 import http from 'node:http'
 import path from 'node:path'
 import { pipeline } from 'node:stream'
@@ -26,18 +27,29 @@ const TYPES: Record<string, string> = {
 
 type Hit = { file: string; size: number }
 
-function find(roots: string[], key: string): Hit | null {
+/**
+ * The file a key names, `null` when no folder has it, `'outside'` when it is there but a symlink
+ * leads out of its media folder. The check is on real paths: the text of `images/db.webp` looks
+ * inside `images/` even when it is a link to `../qa.db`.
+ */
+function find(roots: string[], key: string): Hit | 'outside' | null {
+  let outside = false
   for (const root of roots) {
-    const file = path.resolve(root, key)
-    if (!file.startsWith(root + path.sep)) continue
     try {
-      const stat = statSync(file)
+      const realRoot = fs.realpathSync(root)
+      const file = fs.realpathSync(path.resolve(root, key))
+      if (file === realRoot) continue // the folder itself is not a file
+      if (!file.startsWith(realRoot + path.sep)) {
+        outside = true
+        continue
+      }
+      const stat = fs.statSync(file)
       if (stat.isFile()) return { file, size: stat.size }
     } catch {
       // not in this folder
     }
   }
-  return null
+  return outside ? 'outside' : null
 }
 
 /**
@@ -96,6 +108,7 @@ export function createMediaServer(qaDir: string): http.Server {
     const target = keyFromRequestPath(req.url ?? '/')
     if ('status' in target) return void res.writeHead(target.status).end('Refused')
     const hit = find(roots, target.key)
+    if (hit === 'outside') return void res.writeHead(403).end('Refused')
     if (!hit) return void res.writeHead(404).end('Not found')
 
     const type = TYPES[path.extname(hit.file).toLowerCase()] ?? 'application/octet-stream'
