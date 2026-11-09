@@ -52,7 +52,7 @@ describe('the command', () => {
 
   it('passes a folder that names only allowlisted hosts', () => {
     write(
-      'chunks/app.js',
+      'static/chunks/app.js',
       'const a="https://cdn.taha.media/media/a.jpg",b="http://www.w3.org/2000/svg",c="https://react.dev/errors/"',
     )
     write('css/app.css', '@font-face{src:url(https://cdn.taha.media/f.woff2)}')
@@ -69,6 +69,29 @@ describe('the command', () => {
     expect(run.status).toBe(1)
     expect(run.out).toContain('tracker.example.net')
     expect(run.out).not.toContain('taha.media')
+  })
+
+  it('skips a folder that does not exist when another given folder has files (apps/web/public has none)', () => {
+    write('static/a.js', '"https://taha.media/"')
+    const run = cli(path.join(dir, 'static'), path.join(dir, 'public'))
+    expect(run.status).toBe(0)
+    expect(run.out).toContain('ok: 1 files scanned')
+    expect(run.out).toContain(path.join(dir, 'public'))
+    // Order does not matter, and what the other folder holds is still checked.
+    write('static/b.js', '"https://tracker.example.net/"')
+    expect(cli(path.join(dir, 'public'), path.join(dir, 'static')).status).toBe(1)
+  })
+
+  it('still fails when every folder is missing or empty, with or without --allow-empty', () => {
+    const gone = path.join(dir, 'gone')
+    fs.mkdirSync(path.join(dir, 'empty'))
+    for (const args of [
+      [gone],
+      [gone, path.join(dir, 'gone-too')],
+      [gone, path.join(dir, 'empty')],
+      ['--allow-empty', gone, path.join(dir, 'empty')],
+    ])
+      expect(cli(...args).status, args.join(' ')).toBe(1)
   })
 
   it('fails on a folder that is missing or holds nothing to scan, so a wrong path cannot pass', () => {
@@ -94,6 +117,15 @@ describe('the command', () => {
     write('app/index.html', '<a href="https://taha.media/">')
     expect(cli('--ext', 'html,rsc', dir).status).toBe(0)
     expect(cli(dir).status).toBe(1)
+  })
+
+  it('scans prerendered route-handler output (.body: robots.txt, sitemap.xml, manifest) with --ext html,rsc,body', () => {
+    write('app/robots.txt.body', 'Sitemap: https://tracker.example.net/sitemap.xml')
+    write('app/index.html', '<a href="https://taha.media/">')
+    expect(cli('--ext', 'html,rsc', dir).status).toBe(0)
+    const run = cli('--ext', 'html,rsc,body', dir)
+    expect(run.status).toBe(1)
+    expect(run.out).toContain('tracker.example.net')
   })
 
   it('prints each host once with its places, and how many more there are', () => {
@@ -136,6 +168,30 @@ describe('what counts as a host', () => {
     expect(
       hostsOf('{"u":"https:\\/\\/a.example.com\\/x","v":"https:\\u002F\\u002Fb.example.com"}'),
     ).toEqual(['a.example.com', 'b.example.com'])
+  })
+
+  it('reads hosts whose slashes are written as hex escapes (\\x2f), any case, as minifiers emit', () => {
+    expect(
+      hostsOf('a("https:\\x2f\\x2fa.example.com\\x2fx") b("https:\\x2F\\x2Fb.example.com")'),
+    ).toEqual(['a.example.com', 'b.example.com'])
+    expect(hostsOf('c("\\x2f\\x2fcdn.example.org\\x2fx.js")')).toEqual(['cdn.example.org'])
+  })
+
+  it("reads .md, Moldova's top-level domain, as a host, not as a file name", () => {
+    expect(hostsOf('s.src="//cdn.example.md/x.js"')).toEqual(['cdn.example.md'])
+    expect(hostsOf('x = "https://cdn.example.md/"')).toEqual(['cdn.example.md'])
+    expect(hostsOf('x = "//README.md"')).toEqual(['readme.md'])
+  })
+
+  it('reads bracketed IPv6 hosts, with or without a port, and not a regex class', () => {
+    expect(
+      hostsOf(
+        'a("wss://[2001:db8::1]/") b("http://[2001:DB8::2]:8080/x") c("https://user@[::ffff:192.0.2.1]/")',
+      ),
+    ).toEqual(['[2001:db8::1]', '[2001:db8::2]', '[::ffff:192.0.2.1]'])
+    expect(
+      hostsOf('re = /https?:\\/\\/[abc]+\\//; u = "http://[a-z]+"; v = "https://[${host}]/"'),
+    ).toEqual([])
   })
 
   it('reads hosts out of a binary file such as a WASM binary', () => {
@@ -203,6 +259,66 @@ describe('the allowlist', () => {
     expect(finding!.excerpt.length).toBeLessThan(200)
   })
 
+  it('allows what a real Next build holds, only in the files that hold it (licence banners, error text)', () => {
+    const banner = '/*! tailwindcss v4.3.3 | MIT License | https://tailwindcss.com */'
+    const corejs = 'license:"https://github.com/zloirock/core-js/blob/v3.38.1/LICENSE"'
+    const sentry = 'see: https://docs.sentry.io/platforms/javascript/best-practices/x/'
+    const w3 = 'createElementNS("http://www.w3.org/2000/svg")'
+    write('static/css/fb988b5576109cf5.css', banner)
+    write('static/chunks/polyfills-42372ed130431b0a.js', corejs)
+    write('static/chunks/366-5e07b84dd5bc02fb.js', `${sentry} ${w3} "https://react.dev/errors/1"`)
+    write('server/app/index.html', '<svg xmlns="http://www.w3.org/2000/svg">')
+    expect(scanFolders([dir], ALLOWLIST).findings).toEqual([])
+
+    // The same names anywhere else are findings: our own code may not hide behind a licence banner.
+    const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), 'taha-hosts-else-'))
+    try {
+      for (const [rel, body] of [
+        ['static/chunks/app.js', banner],
+        ['static/chunks/main-abc.js', corejs],
+        ['static/css/app.css', sentry],
+        ['static/media/other.js', `${sentry} ${w3} https://react.dev/errors/1`],
+        ['static/chunks/pages/x.js', 'https://docs.sentry.io/'],
+      ] as const) {
+        const file = path.join(elsewhere, rel)
+        fs.mkdirSync(path.dirname(file), { recursive: true })
+        fs.writeFileSync(file, body)
+      }
+      expect(
+        scanFolders([elsewhere], ALLOWLIST)
+          .findings.map((f) => `${path.relative(elsewhere, f.file)} ${f.host}`)
+          .sort(),
+      ).toEqual([
+        'static/chunks/app.js tailwindcss.com',
+        'static/chunks/main-abc.js github.com',
+        'static/chunks/pages/x.js docs.sentry.io',
+        'static/css/app.css docs.sentry.io',
+        'static/media/other.js docs.sentry.io',
+        'static/media/other.js react.dev',
+        'static/media/other.js www.w3.org',
+      ])
+    } finally {
+      fs.rmSync(elsewhere, { recursive: true, force: true })
+    }
+  })
+
+  it('scopes every host that is only a name in text, so the same host in other files still fails', () => {
+    // The header of the allowlist says so; own origins, analytics, errors and players are the
+    // only entries that may apply anywhere.
+    for (const host of [
+      'www.w3.org',
+      'react.dev',
+      'nextjs.org',
+      'github.com',
+      'tailwindcss.com',
+      'docs.sentry.io',
+    ]) {
+      const entries = ALLOWLIST.filter((entry) => entry.host === host)
+      expect(entries.length, host).toBeGreaterThan(0)
+      for (const entry of entries) expect(entry.in, host).toBeInstanceOf(RegExp)
+    }
+  })
+
   it('every entry of the real allowlist says why it is allowed', () => {
     expect(allowlistProblems(ALLOWLIST)).toEqual([])
     expect(ALLOWLIST.length).toBeGreaterThan(0)
@@ -222,8 +338,15 @@ describe('the allowlist', () => {
     // The Sentry ingest hosts of both regions (a DSN reads `https://<key>@o1.ingest.de.sentry.io/2`).
     expect(hosts.some((host) => host.endsWith('.ingest.sentry.io'))).toBe(true)
     expect(hosts.some((host) => host.endsWith('.ingest.de.sentry.io'))).toBe(true)
-    // And never the host MediaPipe logged to (#56).
-    expect(hosts.some((host) => host.includes('googleapis.com'))).toBe(false)
+    // And never the host MediaPipe logged to (#56). `storage.googleapis.com` is only a comment in
+    // tracker.ts, scoped to that file.
+    expect(hosts).not.toContain('odml.pa.googleapis.com')
+    expect(hosts.filter((host) => host.endsWith('googleapis.com'))).toEqual([
+      'storage.googleapis.com',
+    ])
+    expect(ALLOWLIST.find((entry) => entry.host === 'storage.googleapis.com')?.in).toBeInstanceOf(
+      RegExp,
+    )
   })
 })
 
