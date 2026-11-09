@@ -4,7 +4,14 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { isRunning, type HandControlEffect } from '../../lib/hand-control'
 import { initialGestureState, readGesture, type HandFrame } from '../../lib/hand-gesture'
-import { HINT_TEXT, initialHints, meanLuma, readHints, type HandHint } from '../../lib/hand-hints'
+import {
+  HINT_TEXT,
+  HINTS,
+  initialHints,
+  meanLuma,
+  readHints,
+  type HandHint,
+} from '../../lib/hand-hints'
 import {
   startFrameRateWatch,
   startHandWatch,
@@ -17,11 +24,12 @@ import {
   coachSeen,
   forgetOn,
   markCoachSeen,
+  markHiddenWhileOn,
   mayResume,
-  rememberOn,
   storageOf,
 } from '../../lib/hand-session'
 import { HAND_TUNING } from '../../lib/hand-tuning'
+import { isMenuOpen } from '../../lib/menu-a11y'
 import { createExplorer, type Explorer } from './explore'
 import { createGrabScroller, handGrabSink } from './grab'
 import { HandCoach } from './HandCoach'
@@ -105,9 +113,42 @@ function createLumaReader() {
       return meanLuma(context.getImageData(0, 0, width, height).data)
     } catch {
       return null
+    } finally {
+      context.clearRect(0, 0, width, height) // nothing of the picture stays behind
     }
   }
 }
+
+/** How this page was loaded, for `mayResume`. */
+const pageLoad = () => {
+  const entry = performance.getEntriesByType?.('navigation')[0] as
+    PerformanceNavigationTiming | undefined
+  return {
+    navigation: entry?.type,
+    wasDiscarded: (document as { wasDiscarded?: boolean }).wasDiscarded === true,
+    hidden: document.hidden,
+    now: Date.now(),
+  }
+}
+
+/**
+ * Whether to come back on after a reload: one check per page load, which consumes the tab's mark.
+ * React's development double mount mounts twice in a row; the second mount shares the first's
+ * check, which would otherwise have taken the mark already.
+ */
+let resumeCheck: Promise<boolean> | null = null
+const checkResume = () => {
+  resumeCheck ??= mayResume(storageOf('sessionStorage'), pageLoad(), navigator.permissions).finally(
+    () => {
+      resumeCheck = null
+    },
+  )
+  return resumeCheck
+}
+
+/** The Elinle gez toggle in the header, which takes focus back from the coach that opened alone. */
+const headerToggle = () =>
+  document.querySelector<HTMLElement>('[data-hand-toggle-slot] button[aria-pressed]')
 
 /** Draws the hand's landmarks as dots on the preview (camera coordinates; CSS mirrors it). */
 function drawHand(canvas: HTMLCanvasElement | null, hand: HandFrame | null) {
@@ -133,11 +174,12 @@ function drawHand(canvas: HTMLCanvasElement | null, hand: HandFrame | null) {
  * glides on briefly after letting go. The ring is filled while pinched and pings on a click. A
  * hidden tab, the ×, the toggle or unmounting stops every camera track and closes the task.
  *
- * Its lifetime (#58): it turns off after a while with no hand in view (not while the coach is
- * open) and when the page can't stay smooth (`lib/hand-lifetime`). The tab remembers it is on in
- * `sessionStorage`, so a reload brings it back while the browser says the camera is granted
- * (`mayResume`, which never prompts). The coach shows once per browser on first use, and the "?"
- * on the preview replays it. The hints ("Biraz yaklaş", "Daha çok ışık") show in the preview.
+ * Its lifetime (#58): it turns off after a while with no hand in view (longer while the coach is
+ * open) and when the page can't stay smooth (`lib/hand-lifetime`). When the page hides with it on
+ * (as it does when it unloads), the tab keeps the time in `sessionStorage`, so a reload moments
+ * later brings it back while the browser says the camera is granted (`mayResume`, which never
+ * prompts). The coach shows once per browser on first use, and the "?" on the preview replays it.
+ * The hints ("Biraz yaklaş", "Daha çok ışık") show in the preview.
  */
 export function HandControl() {
   const { phase } = useHandControl()
@@ -147,9 +189,12 @@ export function HandControl() {
   const attempts = useRef(new Map<number, Attempt>())
   // The camera's own picture size: the preview and its dots follow it (4:3, 16:9, ...).
   const [picture, setPicture] = useState<{ width: number; height: number }>(HAND_TUNING.camera)
-  // The coach's step while it is open, else null; the tracking loop reads whether it is open.
-  const [coach, setCoach] = useState<number | null>(null)
+  // The coach while it is open, else null: its step, and whether the "?" opened it (focus goes
+  // back there) or it opened by itself (focus goes back to the toggle). The tracking loop reads
+  // whether it is open.
+  const [coach, setCoach] = useState<{ step: number; fromHelp: boolean } | null>(null)
   const coachOpen = useRef(false)
+  const help = useRef<HTMLButtonElement>(null)
   const [hints, setHints] = useState<readonly HandHint[]>([])
 
   useEffect(() => {
@@ -238,16 +283,21 @@ export function HandControl() {
         pageFrame = requestAnimationFrame(onPageFrame)
       }
       pageFrame = requestAnimationFrame(onPageFrame)
+      // The window's focus changed: the browser may stop drawing it meanwhile (an occluded
+      // window), so the watch starts afresh, with its grace, rather than reading that as slow.
+      const onFocusChange = () => {
+        frameRate = null
+      }
+      window.addEventListener('focus', onFocusChange)
+      window.addEventListener('blur', onFocusChange)
 
       const stopCamera = everyVideoFrame(element, (now) => {
         const at = Math.max(now, last + 1) // the tracker needs rising timestamps
         last = at
         let hand: HandFrame | null
-        let score: number | null
         try {
-          const sighting = tracker.detect(element, at)
-          hand = sighting?.hand ?? null
-          score = sighting?.score ?? null
+          // The tracker's score isn't used: "Daha çok ışık" is brightness only (owner).
+          hand = tracker.detect(element, at)?.hand ?? null
           failures = 0
         } catch (error) {
           // Logged once per run of failures; a tracker that keeps failing turns Hand control off.
@@ -261,11 +311,9 @@ export function HandControl() {
           luma = readLuma(element) ?? luma
           lumaAt = at
         }
-        const hinted = readHints(hintState, { hand, score, luma }, at)
+        const hinted = readHints(hintState, { hand, luma }, at)
         hintState = hinted.state
-        if (hinted.events.length > 0) {
-          setHints((['far', 'dark'] as const).filter((hint) => hintState[hint].on))
-        }
+        if (hinted.events.length > 0) setHints(HINTS.filter((hint) => hintState[hint].on))
         drawHand(canvas.current, hand)
         const step = readGesture(gesture, hand, at)
         gesture = step.state
@@ -306,9 +354,12 @@ export function HandControl() {
               break
           }
         }
-        // Last, since turning off stops this loop. Reading the coach counts as a hand in view.
-        const seen = hand !== null || coachOpen.current
-        const watched = watchHand(handWatch ?? startHandWatch(at), seen, at)
+        // Last, since turning off stops this loop. The coach open gives the visitor longer.
+        const watched = watchHand(
+          handWatch ?? startHandWatch(at),
+          { seen: hand !== null, coach: coachOpen.current },
+          at,
+        )
         handWatch = watched.state
         if (watched.event) dispatchHand({ kind: watched.event.reason, attempt })
       })
@@ -316,6 +367,8 @@ export function HandControl() {
         stopped = true
         stopCamera()
         cancelAnimationFrame(pageFrame)
+        window.removeEventListener('focus', onFocusChange)
+        window.removeEventListener('blur', onFocusChange)
       }
     }
 
@@ -375,10 +428,10 @@ export function HandControl() {
         case 'track':
           track(effect.attempt)
           // The coach, once per browser, the first time Hand control is on (where local storage
-          // is refused, each time it turns on).
-          if (!coachSeen(storageOf('localStorage'))) {
+          // is refused, each time it turns on). Not over the open menu: then on the next turn-on.
+          if (!coachSeen(storageOf('localStorage')) && !isMenuOpen(document)) {
             markCoachSeen(storageOf('localStorage'))
-            setCoach(0)
+            setCoach({ step: 0, fromHelp: false })
           }
           return
         case 'release':
@@ -398,9 +451,6 @@ export function HandControl() {
           setHints([])
           setCoach(null)
           return
-        case 'remember':
-          rememberOn(storageOf('sessionStorage'))
-          return
         case 'forget':
           forgetOn(storageOf('sessionStorage'))
           return
@@ -408,23 +458,36 @@ export function HandControl() {
     }
 
     const undo = setHandRunner(run)
+    /** The page is hiding: if Hand control is on, the tab keeps the time, for a reload. */
+    const markIfOn = () => {
+      if (isRunning(handState())) markHiddenWhileOn(storageOf('sessionStorage'), Date.now())
+    }
     const onVisibility = () => {
-      if (document.hidden) dispatchHand({ kind: 'hidden' })
-      // A hidden tab turned it off but kept the tab's mark (a page also hides as it unloads, on
-      // the way to a reload); shown again, the tab forgets it, so a later reload stays off.
+      if (document.hidden) {
+        markIfOn()
+        dispatchHand({ kind: 'hidden' })
+      }
+      // A hidden tab turned it off but kept the mark (a page also hides as it unloads, on the way
+      // to a reload); shown again, the tab clears it, so a later reload stays off.
       else if (!isRunning(handState())) forgetOn(storageOf('sessionStorage'))
     }
     document.addEventListener('visibilitychange', onVisibility)
+    // `pagehide` comes first as a page unloads, in case a browser hides it late or not at all.
+    window.addEventListener('pagehide', markIfOn)
 
-    // After a reload in a tab that had it on: back on, only if the browser says the camera is
-    // granted (so asking opens no prompt), and only in a tab that is shown.
-    void mayResume(storageOf('sessionStorage'), navigator.permissions).then((resume) => {
-      if (resume && !disposed && !document.hidden) dispatchHand({ kind: 'resume' })
+    // After a real reload in this tab, moments after it was on: back on, only if the browser says
+    // the camera is granted (so asking opens no prompt). Checked again once the browser answers:
+    // still shown, still mounted, and still off.
+    void checkResume().then((resume) => {
+      if (resume && !disposed && !document.hidden && handState().phase === 'off') {
+        dispatchHand({ kind: 'resume' })
+      }
     })
 
     return () => {
       disposed = true
       document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('pagehide', markIfOn)
       dispatchHand({ kind: 'unmount' })
       undo()
     }
@@ -434,6 +497,16 @@ export function HandControl() {
     coachOpen.current = coach !== null
   }, [coach])
   const closeCoach = useCallback(() => setCoach(null), [])
+  const coachStep = useCallback(
+    (step: number) => setCoach((open) => (open ? { ...open, step } : open)),
+    [],
+  )
+  // Focus goes back to the "?" that opened the coach, or else to the toggle.
+  const coachReturn = useCallback(
+    (): HTMLElement | null =>
+      coach?.fromHelp && help.current?.isConnected ? help.current : headerToggle(),
+    [coach?.fromHelp],
+  )
 
   // The preview shows the camera from the moment it is on: it is the camera-on indicator.
   const cameraOn = phase === 'loading' || phase === 'on'
@@ -474,10 +547,11 @@ export function HandControl() {
           />
         </div>
         <button
+          ref={help}
           type="button"
           aria-label="Nasıl kullanılır"
           className="pointer-events-auto absolute top-1 right-9 size-7 cursor-pointer bg-background-raised text-base leading-none"
-          onClick={() => setCoach(0)}
+          onClick={() => setCoach({ step: 0, fromHelp: true })}
         >
           ?
         </button>
@@ -499,7 +573,12 @@ export function HandControl() {
         </div>
       </div>
       {coach !== null && phase === 'on' ? (
-        <HandCoach step={coach} onStep={setCoach} onClose={closeCoach} />
+        <HandCoach
+          step={coach.step}
+          onStep={coachStep}
+          onClose={closeCoach}
+          returnFocus={coachReturn}
+        />
       ) : null}
       {phase === 'on' ? (
         <div

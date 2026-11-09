@@ -12,6 +12,7 @@ export const WRIST = 0
 export const THUMB_TIP = 4
 export const INDEX_KNUCKLE = 5
 export const INDEX_TIP = 8
+export const PINKY_KNUCKLE = 17
 
 /** A point on screen, 0 to 1 across and down the viewport. */
 export type ScreenPoint = { x: number; y: number }
@@ -133,10 +134,15 @@ const heights = (a: FramePoint, b: FramePoint) => {
 }
 
 /**
- * How big the hand is in the picture: its palm (wrist to index knuckle) in camera-frame heights.
- * A hand far from the camera has a small palm (the "Biraz yaklaş" hint, #58).
+ * How big the hand is in the picture, in camera-frame heights: the longer of its palm's length
+ * (wrist to index knuckle) and its width (index to pinky knuckle), so a hand tilted towards the
+ * camera doesn't read small. A hand far from the camera does (the "Biraz yaklaş" hint, #58).
  */
-export const palmSize = (hand: HandFrame): number => heights(hand[WRIST]!, hand[INDEX_KNUCKLE]!)
+export const palmSize = (hand: HandFrame): number =>
+  Math.max(
+    heights(hand[WRIST]!, hand[INDEX_KNUCKLE]!),
+    heights(hand[INDEX_KNUCKLE]!, hand[PINKY_KNUCKLE]!),
+  )
 
 /** Where a camera-frame point lands on screen: the middle of the frame spans the whole screen. */
 const toScreen = (point: FramePoint): ScreenPoint => {

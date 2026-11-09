@@ -57,10 +57,7 @@ describe('turning Hand control on', () => {
     const asking = run([{ kind: 'toggle' }, { kind: 'accept' }]).state
     const loading = run([{ kind: 'cameraGranted', attempt: asking.attempt }], asking)
     expect(loading.state.phase).toBe('loading')
-    expect(loading.effects).toEqual([
-      { kind: 'loadTracker', attempt: asking.attempt },
-      { kind: 'remember' },
-    ])
+    expect(loading.effects).toEqual([{ kind: 'loadTracker', attempt: asking.attempt }])
     const ready = run([{ kind: 'trackerReady', attempt: asking.attempt }], loading.state)
     expect(ready.state.phase).toBe('on')
     expect(ready.effects).toEqual([{ kind: 'track', attempt: asking.attempt }])
@@ -122,9 +119,8 @@ describe('turning off', () => {
   })
 
   it.each<[string, HandControlEvent]>([
-    // The page hides as it unloads, and a reload unmounts nothing in this tab's memory: the tab
-    // must remember Hand control was on, so a reload brings it back (#58). The controller forgets
-    // it when a hidden tab is shown again.
+    // The page hides as it unloads, and the controller marks the tab then: the mark must stay,
+    // so a reload brings it back (#58). The controller clears it when a hidden tab is shown again.
     ['a hidden tab', { kind: 'hidden' }],
     ['leaving the page', { kind: 'unmount' }],
   ])('%s turns it off and stops the camera, but the tab remembers it was on', (_, event) => {
@@ -258,7 +254,7 @@ describe('coming back on after a reload (#58)', () => {
     expect(effects).toEqual([{ kind: 'requestCamera', attempt: state.attempt }])
   })
 
-  it('then goes on like Aç, and remembers the tab is on once the camera is', () => {
+  it('then goes on like Aç', () => {
     const asking = run([{ kind: 'resume' }]).state
     const { state, effects } = run(
       [
@@ -268,7 +264,7 @@ describe('coming back on after a reload (#58)', () => {
       asking,
     )
     expect(state.phase).toBe('on')
-    expect(kinds(effects)).toEqual(['loadTracker', 'remember', 'track'])
+    expect(kinds(effects)).toEqual(['loadTracker', 'track'])
   })
 
   it.each(['consenting', 'asking', 'loading', 'on'] as const)(

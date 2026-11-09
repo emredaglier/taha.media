@@ -1,4 +1,11 @@
-import { INDEX_KNUCKLE, INDEX_TIP, THUMB_TIP, WRIST, type HandFrame } from './hand-gesture'
+import {
+  INDEX_KNUCKLE,
+  INDEX_TIP,
+  PINKY_KNUCKLE,
+  THUMB_TIP,
+  WRIST,
+  type HandFrame,
+} from './hand-gesture'
 
 /*
  * Synthetic hands for the tests of the gesture reader and the controller (test code only).
@@ -18,6 +25,8 @@ export const pose = (x: number, y: number, gap: number, palm = PALM): HandFrame 
     if (i === THUMB_TIP) return { x, y: y + gap * palm }
     if (i === INDEX_KNUCKLE) return { x, y: y + 0.2 }
     if (i === WRIST) return { x, y: y + 0.2 + palm }
+    // The knuckles span less than the palm's length, so the length is what `palmSize` reads.
+    if (i === PINKY_KNUCKLE) return { x, y: y + 0.2 + palm * 0.6 }
     return { x, y: y + 0.1 }
   })
 

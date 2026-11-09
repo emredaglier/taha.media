@@ -79,9 +79,10 @@ export type HandControlEffect =
   | { kind: 'release'; attempt: number }
   /** Stop every camera track, close the tracker, take the cursor away. */
   | { kind: 'stop' }
-  /** Mark this tab as having Hand control on (`sessionStorage`), so a reload brings it back. */
-  | { kind: 'remember' }
-  /** Clear that mark: Hand control was turned off, so a reload leaves it off. */
+  /**
+   * Clear the tab's mark (`sessionStorage`, set by the controller when the page hides with Hand
+   * control on): it was turned off, so a reload leaves it off.
+   */
   | { kind: 'forget' }
 
 export const initialHandControl: HandControlState = { phase: 'off', attempt: 0, notice: null }
@@ -95,9 +96,9 @@ type Step = { state: HandControlState; effects: HandControlEffect[] }
 const unchanged = (state: HandControlState): Step => ({ state, effects: [] })
 
 /**
- * Every way to off goes through here, so every one stops the camera, and every one forgets that
- * the tab had it on, except a hidden tab and unmounting (`keep`): a page hides as it unloads, so a
- * reload passes through there, and the controller forgets a hidden tab's mark once it is shown.
+ * Every way to off goes through here, so every one stops the camera, and every one clears the
+ * tab's mark, except a hidden tab and unmounting (`keep`): a page hides as it unloads, so a reload
+ * passes through there, and the controller clears a hidden tab's mark once it is shown again.
  */
 const turnOff = (state: HandControlState, notice: HandNotice | null, keep = false): Step => ({
   state: { ...state, phase: 'off', notice },
@@ -113,7 +114,7 @@ const late = (state: HandControlState, attempt: number, waiting: HandPhase): boo
  * camera, or a reload in a tab that had it on once the browser says the camera is granted
  * (`resume`); the toggle, the ×, a hidden tab, unmounting, no hand for a while and a page that
  * can't stay smooth turn it off; every way to off stops the camera, and a late answer from the
- * camera or the tracker is released. The tab remembers it is on from the moment the camera is.
+ * camera or the tracker is released.
  */
 export function handControl(state: HandControlState, event: HandControlEvent): Step {
   const running = isRunning(state)
@@ -146,7 +147,7 @@ export function handControl(state: HandControlState, event: HandControlEvent): S
       }
       return {
         state: { ...state, phase: 'loading', notice: 'loading' },
-        effects: [{ kind: 'loadTracker', attempt: event.attempt }, { kind: 'remember' }],
+        effects: [{ kind: 'loadTracker', attempt: event.attempt }],
       }
     case 'cameraFailed':
       return late(state, event.attempt, 'asking') ? unchanged(state) : turnOff(state, event.reason)
