@@ -5,7 +5,8 @@ import type { HandFrame } from '../../lib/hand-gesture'
 /*
  * The hand-tracking files, self-hosted (ADR-0005, #56). Each `new URL(…, import.meta.url)` makes
  * webpack emit the file into `/_next/static/media/<name>.<hash>.<ext>`, which CI uploads to R2 and
- * `cdn.taha.media` serves under the release's `assetPrefix`; the content hash is the versioned path.
+ * `cdn.taha.media` serves under the release's `assetPrefix`. The content hash versions each file;
+ * the release folder means the browser cache holds them until the next deploy (owner accepted).
  * Nothing comes from jsDelivr or Google at runtime. This module is only ever reached through the
  * controller's dynamic `import()` after Aç, so neither it nor MediaPipe is in the first load, and
  * no file is fetched before Aç.

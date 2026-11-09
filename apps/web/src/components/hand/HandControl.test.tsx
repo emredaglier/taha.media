@@ -159,21 +159,55 @@ afterEach(async () => {
 })
 
 describe('the toggle', () => {
-  it('renders nothing on the server, so it never flashes', () => {
-    expect(renderToString(<HandToggle />)).toBe('')
+  const slot = () => container.querySelector<HTMLElement>('[data-hand-toggle-slot]')
+  const placeholder = () => slot()!.querySelector<HTMLElement>('[aria-hidden="true"]')
+
+  it('server-renders only its reserved slot: shown on a desktop pointer by CSS, no button', () => {
+    const html = document.createElement('div')
+    html.innerHTML = renderToString(<HandToggle />)
+    const reserved = html.querySelector<HTMLElement>('[data-hand-toggle-slot]')!
+    expect(reserved.className).toMatch(/(^| )hidden( |$)/)
+    expect(reserved.className).toContain('fine-hover:block')
+    expect(html.querySelector('button')).toBeNull()
+    // The slot holds the label invisibly, so it is the button's size, and hides it from everyone.
+    const label = reserved.querySelector<HTMLElement>('[aria-hidden="true"]')!
+    expect(label.textContent).toBe('Elinle gez')
+    expect(label.className).toContain('invisible')
+    expect(label.matches('a, button, input, [tabindex]')).toBe(false)
   })
 
-  it('shows on a desktop with a camera, as an unpressed toggle button', async () => {
+  it('shows on a desktop with a camera, as an unpressed toggle button over its slot', async () => {
     await render()
     expect(toggle()!.textContent).toBe('Elinle gez')
     expect(toggle()!.getAttribute('aria-pressed')).toBe('false')
     expect(container.querySelector('[role="status"]')!.getAttribute('aria-live')).toBe('polite')
+    // Same slot, same placeholder sizing it; the button lies over it and adds no box of its own.
+    expect(toggle()!.parentElement).toBe(slot())
+    expect(placeholder()!.textContent).toBe(toggle()!.textContent)
+    expect(placeholder()!.className.replace('invisible', '').trim().split(/\s+/)).toEqual(
+      expect.arrayContaining(['text-sm', 'uppercase', 'whitespace-nowrap']),
+    )
+    expect(toggle()!.className.split(/\s+/)).toEqual(
+      expect.arrayContaining(['absolute', 'inset-0', 'text-sm', 'uppercase', 'whitespace-nowrap']),
+    )
   })
 
-  it('is not offered without a camera', async () => {
+  it('keeps the slot, with the same placeholder, when the button arrives', async () => {
+    const html = renderToString(<HandToggle />)
+    await render()
+    const before = document.createElement('div')
+    before.innerHTML = html
+    const serverSlot = before.querySelector<HTMLElement>('[data-hand-toggle-slot]')!
+    expect(slot()!.className).toBe(serverSlot.className)
+    expect(placeholder()!.outerHTML).toBe(serverSlot.firstElementChild!.outerHTML)
+  })
+
+  it('is not offered without a camera: the slot stays an empty gap', async () => {
     cameras = [{ kind: 'audioinput' }]
     await render()
     expect(toggle()).toBeNull()
+    expect(slot()).not.toBeNull()
+    expect(slot()!.querySelector('button, [role="status"]')).toBeNull()
   })
 })
 

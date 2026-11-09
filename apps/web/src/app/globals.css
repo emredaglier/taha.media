@@ -15,6 +15,15 @@
   /* Stand-ins until the Figma fonts exist. System stacks cover ı İ ğ ş ç ö ü. */
   --font-serif: ui-serif, Georgia, 'Times New Roman', serif;
   --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+  /* Hand control's toggle fades into its reserved slot (only with motion allowed). */
+  --animate-hand-in: hand-in 200ms ease-out;
+
+  @keyframes hand-in {
+    from {
+      opacity: 0;
+    }
+  }
 }
 
 /*
@@ -41,6 +50,13 @@
  * is `HAND_HOVER_ATTR` in `components/hand/explore.ts`: keep the two spellings in step.
  */
 @custom-variant hand-hover (&[data-hand-hover]);
+
+/*
+ * `fine-hover:` applies on a desktop pointer (a mouse or trackpad that hovers), the only devices
+ * that may get Hand control: the header reserves its toggle's slot there from the first paint.
+ * The same query as `POINTER_FINE` and `CAN_HOVER` in `lib/loop-mode.ts`.
+ */
+@custom-variant fine-hover (@media (hover: hover) and (pointer: fine));
 
 @layer base {
   html {

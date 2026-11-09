@@ -8,12 +8,21 @@ import { HAND_TUNING } from '../../lib/hand-tuning'
 import { ConsentNote } from './ConsentNote'
 import { dispatchHand, useHandControl } from './store'
 
+/** The toggle's label and type: the reserved slot is sized by the same text in the same type. */
+const LABEL = 'Elinle gez'
+const TYPE = 'text-sm uppercase'
+
 /**
  * "Elinle gez" next to MENU (#56): a toggle button (`aria-pressed`) with the status line in a
- * polite live region, in Turkish. The first press opens the consent note. It renders nothing on
- * the server or where Hand control isn't offered (`showHandToggle`), so nobody sees it flash and
- * no other visitor's header shifts; while Hand control runs it stays, so it can always be turned
- * off.
+ * polite live region, in Turkish. The first press opens the consent note.
+ *
+ * Its slot is reserved from the first paint on a desktop pointer (owner, 2026-11-09): the server
+ * can't know the pointer, so it renders the slot for everyone, holding the label invisibly
+ * (`aria-hidden`, not focusable), and CSS shows it only under `fine-hover:` (`globals.css`); other
+ * devices get no slot and no gap. Once `showHandToggle` passes, the button fades in over that
+ * placeholder, so nothing in the header moves. Where it doesn't pass (no camera, Save-Data, a weak
+ * device), the slot stays an empty gap. While Hand control runs, the button stays, so it can
+ * always be turned off.
  */
 export function HandToggle() {
   const shown = useHandToggleShown()
@@ -40,27 +49,34 @@ export function HandToggle() {
   const accept = useCallback(() => dispatchHand({ kind: 'accept' }), [])
   const decline = useCallback(() => dispatchHand({ kind: 'decline' }), [])
 
-  if (!shown && state.phase === 'off') return null
+  const offered = shown || state.phase !== 'off'
   return (
-    <div ref={wrapper} className="relative">
-      <button
-        ref={button}
-        type="button"
-        aria-pressed={running}
-        className="cursor-pointer text-sm uppercase"
-        onClick={() => dispatchHand({ kind: 'toggle' })}
-      >
-        Elinle gez
-      </button>
-      <p
-        role="status"
-        aria-live="polite"
-        className="pointer-events-none absolute top-full right-0 mt-1 text-xs whitespace-nowrap text-text-muted"
-      >
-        {status}
-      </p>
-      {state.phase === 'consenting' ? (
-        <ConsentNote onAccept={accept} onDecline={decline} within={wrapper} />
+    <div ref={wrapper} data-hand-toggle-slot="" className="relative hidden fine-hover:block">
+      <span aria-hidden="true" className={`invisible whitespace-nowrap ${TYPE}`}>
+        {LABEL}
+      </span>
+      {offered ? (
+        <>
+          <button
+            ref={button}
+            type="button"
+            aria-pressed={running}
+            className={`absolute inset-0 cursor-pointer whitespace-nowrap motion-safe:animate-hand-in ${TYPE}`}
+            onClick={() => dispatchHand({ kind: 'toggle' })}
+          >
+            {LABEL}
+          </button>
+          <p
+            role="status"
+            aria-live="polite"
+            className="pointer-events-none absolute top-full right-0 mt-1 text-xs whitespace-nowrap text-text-muted"
+          >
+            {status}
+          </p>
+          {state.phase === 'consenting' ? (
+            <ConsentNote onAccept={accept} onDecline={decline} within={wrapper} />
+          ) : null}
+        </>
       ) : null}
     </div>
   )
