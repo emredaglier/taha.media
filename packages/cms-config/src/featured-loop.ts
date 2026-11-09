@@ -112,7 +112,7 @@ export const keepFeaturedLoopSixteenByNine: CollectionBeforeValidateHook = async
       collection: collection.slug,
       errors: [
         {
-          path: 'filename',
+          path: 'file',
           label: 'Dosya',
           message: replacedLoopMessage(
             docs.map((doc) => `“${doc.title}” işi`),
