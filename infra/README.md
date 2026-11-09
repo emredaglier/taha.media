@@ -113,7 +113,41 @@ The post-deploy check on the server (`infra/smoke.sh`, [CI and deploy](#ci-and-d
 
 ### ARM runner and the QEMU fallback
 
-`build` runs on GitHub's native arm64 runner `ubuntu-24.04-arm` (ADR-0010; it works in private repositories and uses the plan's included minutes). If a run stays queued with no runner matching `ubuntu-24.04-arm`, the plan does not offer it. The fallback is several times slower for the Next.js builds, so tell the owner before merging it: in the `build` job set `runs-on: ubuntu-24.04` and add `- uses: docker/setup-qemu-action@v4` before `docker/setup-buildx-action`. `infra/ci.sh build` already passes `--platform linux/arm64`, so the images stay arm64, and the smoke runs the arm64 `web` image under emulation (slow, but the same test). Nothing else changes: `upload` creates (never starts) the arm64 image with `--platform linux/arm64`, and `push` and `deploy` run no images.
+`build` runs on GitHub's native arm64 runner `ubuntu-24.04-arm` (ADR-0010; it works in private repositories and uses the plan's included minutes). If a run stays queued with no runner matching `ubuntu-24.04-arm`, the plan does not offer it (or the allowance is used up: [Self-hosted fallback](#self-hosted-fallback-84)). The fallback is several times slower for the Next.js builds, so tell the owner before merging it: in the `build` job set `runs-on: ubuntu-24.04` and add `- uses: docker/setup-qemu-action@v4` before `docker/setup-buildx-action`. `infra/ci.sh build` already passes `--platform linux/arm64`, so the images stay arm64, and the smoke runs the arm64 `web` image under emulation (slow, but the same test). Nothing else changes: `upload` creates (never starts) the arm64 image with `--platform linux/arm64`, and `push` and `deploy` run no images.
+
+### Self-hosted fallback (#84)
+
+When GitHub's monthly Actions allowance is used up, jobs can run on a runner on the owner's Mac instead. GitHub-hosted stays the default: every job's `runs-on` reads a repository variable and falls back to today's label, so with both variables unset nothing differs.
+
+| Variable        | Read by                             | Unset means        |
+| --------------- | ----------------------------------- | ------------------ |
+| `CI_RUNNER`     | `check`, `upload`, `push`, `deploy` | `ubuntu-24.04`     |
+| `CI_RUNNER_ARM` | `build`                             | `ubuntu-24.04-arm` |
+
+The runner (`infra/runner/`) is GitHub's official runner in an Ubuntu 24.04 arm64 container on Docker Desktop, so the `apt` steps and the native arm64 images work unchanged. Its label is `taha-mac-arm64`.
+
+```sh
+# Once, and after a runner version bump (needs Docker Desktop):
+infra/runner/runner.sh build
+# Start (background, log in ~/.taha-ci-runner/runner.log), status, stop:
+infra/runner/runner.sh start
+infra/runner/runner.sh status
+infra/runner/runner.sh stop
+# Switch CI to the Mac (both variables, same label):
+gh variable set CI_RUNNER --body taha-mac-arm64 --repo emredaglier/taha.media
+gh variable set CI_RUNNER_ARM --body taha-mac-arm64 --repo emredaglier/taha.media
+# Switch back to GitHub-hosted:
+gh variable delete CI_RUNNER --repo emredaglier/taha.media
+gh variable delete CI_RUNNER_ARM --repo emredaglier/taha.media
+```
+
+Start the runner before setting the variables, and unset the variables before stopping it, or runs wait in the queue.
+
+- **One job at a time, ephemeral.** `runner.sh` runs one container at a time. The container registers `--ephemeral`, takes one job and exits; the loop then fetches a new registration token (`gh api --method POST repos/emredaglier/taha.media/actions/runners/registration-token`, needs `gh` logged in with admin rights) and starts the next. No token is stored in the repo, the image or a file. Jobs therefore run one after another, never two builds at once (CLAUDE.md: parallel Next builds crash this Mac). A PR run is several jobs in a row.
+- **Docker through the host socket, same path inside and out.** Jobs have the Docker CLI only; the daemon is Docker Desktop's, reached through `/var/run/docker.sock`. `infra/ci.sh smoke` runs `smoke/run.ts`, which creates `$TMPDIR/taha-smoke-*` (the seeded SQLite data) and starts containers with `--volume <path>:/data` and `--volume <repo>/infra/caddy/...`. The daemon resolves those paths on the host side, not in the runner container. So the runner's work directory (`~/.taha-ci-runner`, which holds the checkout under `_work/` and `TMPDIR`) is mounted at the same absolute path in the container; it must be under `/Users` for Docker Desktop's file sharing. `compose.yaml` and `compose.local.yaml` use relative bind mounts (`./caddy`, `./litestream`), which Compose resolves against the checkout: they work for the same reason. Without the same-path mount the daemon would silently mount empty directories.
+- **Host networking.** `smoke/run.ts` publishes `127.0.0.1::3000` and reads the port back, and Chromium opens it; both happen in the runner container. The container therefore uses `--network host` (the Docker VM's network), where those ports are reachable. `tailscale/github-action` in `deploy` starts `tailscaled`, which needs `/dev/net/tun` and `NET_ADMIN`, so the container gets both. While a `deploy` runs, `tailscale0` lives in that VM network; it goes away with the container.
+- **Not verified yet.** Nothing here ran against a real Docker Desktop: the first run after the switch is the test. Look at the smoke (published ports, bind mounts), the Playwright `--with-deps` install and the tailnet join first.
+- **Security: private repository only.** A self-hosted runner executes whatever a workflow says, with access to the Mac's Docker daemon (which can mount the Mac's files). That is acceptable only because this repository is private and only the owner opens pull requests. If the repository ever goes public: unset both variables, run `infra/runner/runner.sh stop` and remove the runner (Settings > Actions > Runners), because a fork's pull request could run code on the Mac.
 
 ### Static assets on R2 (ADR-0005)
 
@@ -180,7 +214,7 @@ GHCR needs nothing: the jobs push and pull with their own `GITHUB_TOKEN`, and th
 
 ### Not verified by tests
 
-The workflow has not run on GitHub yet. The ARM runner's availability on the plan, the GHCR push and pull, the R2 upload with a real key, the tailnet join and the SSH deploy run for the first time on the first main run with the secrets set. The scripts are tested with fakes (`infra/ci.test.ts`, `deploy.test.ts`, `smoke.test.ts`, `assets.test.ts`, `release-assets.test.ts`); the workflow is linted (actionlint) and its shape is guarded by `infra/ci.test.ts`.
+The workflow has not run on GitHub yet. The ARM runner's availability on the plan, the self-hosted runner (never started yet), the GHCR push and pull, the R2 upload with a real key, the tailnet join and the SSH deploy run for the first time on the first main run with the secrets set. The scripts are tested with fakes (`infra/ci.test.ts`, `deploy.test.ts`, `smoke.test.ts`, `assets.test.ts`, `release-assets.test.ts`); the workflow is linted (actionlint) and its shape is guarded by `infra/ci.test.ts`.
 
 ## Revalidation
 
