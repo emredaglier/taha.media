@@ -154,17 +154,27 @@ float ringAt(vec2 uv) {
   float dist = length((uv - uCentre) * vec2(uAspect, 1.0));
   return clamp((uRingRadius - dist) / RING_DEPTH, 0.0, 1.0);
 }
-// Where a cell centred at cuv reads the card it shows: its centre, or, when that is off the card,
-// the first of four points a quarter cell out (q) that is on it. Every pixel of the cell gets the
-// same point, so the cell stays one glyph; only a cell with next to no card under it falls back
-// to the pixel.
-vec2 cardPoint(vec2 cuv, vec2 q, vec2 uv) {
-  if (coverAt(cuv) > 0.5) return cuv;
-  if (coverAt(cuv + vec2(-q.x, -q.y)) > 0.5) return cuv + vec2(-q.x, -q.y);
-  if (coverAt(cuv + vec2(q.x, -q.y)) > 0.5) return cuv + vec2(q.x, -q.y);
-  if (coverAt(cuv + vec2(-q.x, q.y)) > 0.5) return cuv + vec2(-q.x, q.y);
-  if (coverAt(cuv + q) > 0.5) return cuv + q;
-  return uv;
+// How much of the layer a cell shows covers uv: a card, or the Showreel (past the screen's edge,
+// the Showreel at the edge, as it is full-bleed there).
+float presenceAt(vec2 uv, bool reel) {
+  return reel ? showreelAt(clamp(uv, 0.0, 1.0), 0.0).a : coverAt(uv);
+}
+// Where a cell centred at cuv reads what it shows (at): its centre, or, when that is off the card
+// (or the Showreel), the first of four points a quarter cell out (q) that is on it. Every pixel of
+// the cell gets the same point, so the cell stays one glyph. False when none is: the cell has next
+// to no card under it, and draws no glyph, so a sliver of a card peeking out from behind another
+// shows nothing rather than a speck.
+bool cellPoint(vec2 cuv, vec2 q, bool reel, out vec2 at) {
+  at = cuv;
+  if (presenceAt(at, reel) > 0.5) return true;
+  at = cuv + vec2(-q.x, -q.y);
+  if (presenceAt(at, reel) > 0.5) return true;
+  at = cuv + vec2(q.x, -q.y);
+  if (presenceAt(at, reel) > 0.5) return true;
+  at = cuv + vec2(-q.x, q.y);
+  if (presenceAt(at, reel) > 0.5) return true;
+  at = cuv + q;
+  return presenceAt(at, reel) > 0.5;
 }
 // One cell of the glyph grid cellPx px wide, at uv: premultiplied (glyph colour, coverage), before
 // it is clipped to what covers the pixel. The grid rides with the cards (uShift), and turning
@@ -183,17 +193,18 @@ vec4 glyphCell(vec2 uv, float cellPx, bool reel) {
   // The colour is the picture blurred over about the cell, read at its centre: unpremultiplied,
   // it is the card's (or the Showreel's) own colour wherever some of it is under the cell.
   float lod = clamp(log2(cell * uRes.y) + 0.5, 0.0, 6.0);
+  vec2 at;
+  if (!cellPoint(cuv, vec2(cell / uAspect, cell) * 0.25, reel, at)) return vec4(0.0);
   vec4 sc;
   float vm;
   float fade = 1.0;
   if (reel) {
-    // Past the screen's edge the cell reads the Showreel at the edge; off the Showreel itself
-    // (zoomed out), at the pixel.
+    // Past the screen's edge the cell reads the Showreel at the edge; with next to none of it
+    // there (zoomed out, off its outline), at the cell's point on it.
     sc = showreelAt(clamp(cuv, 0.0, 1.0), lod);
-    if (sc.a <= 0.05) sc = showreelAt(uv, lod);
+    if (sc.a <= 0.05) sc = showreelAt(clamp(at, 0.0, 1.0), lod);
     vm = ringAt(cuv);
   } else {
-    vec2 at = cardPoint(cuv, vec2(cell / uAspect, cell) * 0.25, uv);
     sc = sceneAt(cuv, lod);
     if (sc.a <= 0.05) sc = sceneAt(at, lod);
     MeltInputs mi = inputsAt(at);
