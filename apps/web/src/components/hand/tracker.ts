@@ -27,10 +27,13 @@ const WASM_LOADER = new URL('@mediapipe/tasks-vision/vision_wasm_internal.js', i
 const WASM_BINARY = new URL('@mediapipe/tasks-vision/vision_wasm_internal.wasm', import.meta.url)
 const MODEL = new URL('./models/hand_landmarker-float16-v1/hand_landmarker.task', import.meta.url)
 
+/** A hand the tracker found, and how sure it is of it (0 to 1). */
+export type Sighting = { hand: HandFrame; score: number }
+
 /** The hand tracker the controller runs on every camera frame. */
 export type HandTracker = {
   /** The hand in this frame, or null without one. `now` (ms) must rise from frame to frame. */
-  detect(video: HTMLVideoElement, now: number): HandFrame | null
+  detect(video: HTMLVideoElement, now: number): Sighting | null
   /** Frees the tracker (its WASM memory and GPU context). */
   close(): void
 }
@@ -48,7 +51,12 @@ export async function createHandTracker(): Promise<HandTracker> {
   const landmarker = await start('GPU').catch(() => start('CPU'))
   return {
     detect(video, now) {
-      return landmarker.detectForVideo(video, now).landmarks[0] ?? null
+      const result = landmarker.detectForVideo(video, now)
+      const hand = result.landmarks[0]
+      if (!hand) return null
+      // The task gives no presence score; its confidence in the handedness is the nearest it
+      // gives, and it drops when the hand is hard to make out (#58, "Daha çok ışık").
+      return { hand, score: result.handedness[0]?.[0]?.score ?? 1 }
     },
     close() {
       landmarker.close()

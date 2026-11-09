@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act } from 'react'
+import { act, StrictMode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { renderToString } from 'react-dom/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -15,8 +15,12 @@ import type { HandFrame } from '../../lib/hand-gesture'
 import { HELIX_TUNING } from '../../lib/helix-tuning'
 import { HAND_TUNING } from '../../lib/hand-tuning'
 import { lockScroll } from '../../lib/menu-a11y'
+import { HINT_TEXT } from '../../lib/hand-hints'
+import { HAND_ON_KEY, markCoachSeen } from '../../lib/hand-session'
+import { MENU_PANEL_ID } from '../../lib/menu-a11y'
 import { CONSENT_TEXT, CONSENT_TITLE } from './ConsentNote'
 import { claimHandGrab } from './grab'
+import { COACH_STEPS } from './HandCoach'
 import { HandControl } from './HandControl'
 import { HandToggle } from './HandToggle'
 import { dispatchHand } from './store'
@@ -35,9 +39,15 @@ let hidden = false
 let cameras: { kind: string }[]
 let track: EventTarget & { stop: ReturnType<typeof vi.fn> }
 let getUserMedia: ReturnType<typeof vi.fn>
-/** The animation frames waiting to run, and the camera's clock they advance. */
-let frames: ((now: number) => void)[]
+/**
+ * The callbacks waiting for the next page frame (`requestAnimationFrame`) and the next camera frame
+ * (`requestVideoFrameCallback`), by handle, and the two clocks (s), which run together.
+ */
+let frames: Map<number, (now: number) => void>
+let videoFrames: Map<number, (now: number) => void>
+let nextHandle: number
 let videoTime: number
+let pageTime: number
 /** The points the hand's hit test asked about. */
 let hits: [number, number][]
 
@@ -49,23 +59,48 @@ const device = ({ cores, memory }: { cores: number; memory?: number }) => {
   Object.defineProperty(navigator, 'deviceMemory', { configurable: true, value: memory })
 }
 
+/** How the browser says this page was loaded (`PerformanceNavigationTiming.type`). */
+let navigationType: string
+
+/** What the tracker reports for `hand`: found surely, or nothing. */
+const sighting = (hand: HandFrame | null, score = 0.95) => (hand ? { hand, score } : null)
+
 /** A camera stream with one video track. */
 const stream = () => ({ getTracks: () => [track], getVideoTracks: () => [track] })
 
-/** The camera's frame interval (s), and whether the visitor prefers reduced motion. */
+/**
+ * The camera's frame interval (s), the page's (s), and whether the visitor prefers reduced motion.
+ */
 let frameSeconds: number
+let pageSeconds: number
 let reducedMotion: boolean
 
-/** Runs `count` camera frames through the controller's tracking loop. */
+/** Runs every callback waiting in `queue` at `seconds`. */
+const due = (queue: Map<number, (now: number) => void>, seconds: number) => {
+  const waiting = [...queue.values()]
+  queue.clear()
+  for (const callback of waiting) callback(seconds * 1000)
+}
+
+/**
+ * Runs `count` camera frames through the controller's tracking loop, with the page's frames that
+ * fall between them (at `pageSeconds`).
+ */
 const runFrames = (count: number) =>
   act(() => {
     for (let i = 0; i < count; i++) {
-      videoTime += frameSeconds
-      const due = frames
-      frames = []
-      for (const frame of due) frame(videoTime * 1000)
+      const next = videoTime + frameSeconds
+      while (pageTime + pageSeconds <= next + 1e-9) {
+        pageTime += pageSeconds
+        due(frames, pageTime)
+      }
+      videoTime = next
+      due(videoFrames, videoTime)
     }
   })
+
+/** Runs camera frames for `ms`. */
+const runFor = (ms: number) => runFrames(Math.round(ms / (frameSeconds * 1000)))
 
 const DESKTOP_QUERIES = ['(pointer: fine)', '(hover: hover)', '(hover: hover) and (pointer: fine)']
 
@@ -111,13 +146,40 @@ beforeEach(() => {
   cameras = [{ kind: 'videoinput' }]
   track = Object.assign(new EventTarget(), { stop: vi.fn() })
   getUserMedia = vi.fn(async () => stream())
-  frames = []
+  frames = new Map()
+  videoFrames = new Map()
+  nextHandle = 1
   videoTime = 0
+  pageTime = 0
   frameSeconds = 1 / 30
+  pageSeconds = 1 / 60
   reducedMotion = false
   hits = []
-  vi.stubGlobal('requestAnimationFrame', (frame: (now: number) => void) => frames.push(frame))
-  vi.stubGlobal('cancelAnimationFrame', () => {})
+  localStorage.clear()
+  sessionStorage.clear()
+  const waitFor =
+    (queue: () => Map<number, (now: number) => void>) => (callback: (now: number) => void) => {
+      const handle = nextHandle++
+      queue().set(handle, callback)
+      return handle
+    }
+  vi.stubGlobal(
+    'requestAnimationFrame',
+    waitFor(() => frames),
+  )
+  vi.stubGlobal('cancelAnimationFrame', (handle: number) => frames.delete(handle))
+  Object.assign(HTMLVideoElement.prototype, {
+    requestVideoFrameCallback: waitFor(() => videoFrames),
+    cancelVideoFrameCallback: (handle: number) => videoFrames.delete(handle),
+  })
+  // A tab that has never had Hand control on, in a browser without the Permissions API (jsdom),
+  // on a page reached by a plain navigation.
+  Object.defineProperty(navigator, 'permissions', { configurable: true, value: undefined })
+  navigationType = 'navigate'
+  Object.defineProperty(performance, 'getEntriesByType', {
+    configurable: true,
+    value: (type: string) => (type === 'navigation' ? [{ type: navigationType }] : []),
+  })
   Object.defineProperty(HTMLMediaElement.prototype, 'readyState', {
     configurable: true,
     get: () => 4,
@@ -179,6 +241,12 @@ afterEach(async () => {
   // Back to jsdom's own navigator values.
   delete (navigator as { hardwareConcurrency?: number }).hardwareConcurrency
   delete (navigator as { deviceMemory?: number }).deviceMemory
+  delete (navigator as { permissions?: unknown }).permissions
+  delete (performance as { getEntriesByType?: unknown }).getEntriesByType
+  delete (document as { wasDiscarded?: boolean }).wasDiscarded
+  const video = HTMLVideoElement.prototype as unknown as Partial<Record<string, unknown>>
+  delete video.requestVideoFrameCallback
+  delete video.cancelVideoFrameCallback
   await act(() => root.unmount())
   container.remove()
   dispatchHand({ kind: 'dismissNotice' })
@@ -430,7 +498,7 @@ describe('while on', () => {
   it('the cursor at the far edge hits the last pixel, not past it (MENU sits there)', async () => {
     // The camera's left edge is the screen's right edge (mirrored); its bottom is the bottom.
     const corner = Array.from({ length: 21 }, () => ({ x: 0, y: 1 }))
-    trackerWith(() => corner)
+    trackerWith(() => sighting(corner))
     await render()
     await turnOn()
     await runFrames(1)
@@ -480,7 +548,7 @@ describe('pinching (#57)', () => {
   beforeEach(() => {
     queue = []
     tracker.createHandTracker.mockImplementation(async () => ({
-      detect: () => (queue.length > 1 ? queue.shift() : queue[0]) ?? null,
+      detect: () => sighting((queue.length > 1 ? queue.shift() : queue[0]) ?? null),
       close: tracker.close,
     }))
     link = document.createElement('a')
@@ -597,6 +665,36 @@ describe('pinching (#57)', () => {
     expect(scrolled).toEqual([])
   })
 
+  it('a sideways grab reaches its claimant (the Galeri lightbox) as horizontal moves (#59)', async () => {
+    const move = vi.fn((_up: number, _right: number) => true)
+    const unclaim = claimHandGrab({ move, end: () => true })
+    await ready()
+    // Pinched, the hand moves a tenth of the frame to the screen's left (the camera's right).
+    const steps = framesIn(200)
+    await play(
+      hold(pose(0.5, 0.5, CLOSED), pinch.confirmFrames),
+      Array.from({ length: steps }, (_, i) => pose(0.5 + (0.1 * (i + 1)) / steps, 0.5, CLOSED)),
+      hold(pose(0.6, 0.5, CLOSED), framesIn(500)),
+      hold(pose(0.6, 0.5, OPEN), pinch.confirmFrames),
+    )
+    unclaim()
+    const rights = move.mock.calls.map(([, right]) => right)
+    expect(total(rights)).toBeCloseTo(-0.1 / HAND_TUNING.frame.width, 2)
+    expect(scrolled).toEqual([])
+  })
+
+  it('an unclaimed sideways grab scrolls nothing', async () => {
+    await ready()
+    const steps = framesIn(200)
+    await play(
+      hold(pose(0.5, 0.5, CLOSED), pinch.confirmFrames),
+      Array.from({ length: steps }, (_, i) => pose(0.5 + (0.1 * (i + 1)) / steps, 0.5, CLOSED)),
+      hold(pose(0.6, 0.5, OPEN), pinch.confirmFrames),
+      hold(pose(0.6, 0.5, OPEN), framesIn(500)),
+    )
+    expect(scrolled).toEqual([])
+  })
+
   it('turning Hand control off mid-grab lets go of the claimed grab', async () => {
     const end = vi.fn(() => true)
     const unclaim = claimHandGrab({ move: () => true, end })
@@ -605,6 +703,124 @@ describe('pinching (#57)', () => {
     await click(toggle())
     unclaim()
     expect(end).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('over an external player (#59)', () => {
+  const HINT = 'Oynatıcının içinde fareyi kullan'
+  const { playerShowAfterMs, playerClearAfterMs } = HAND_TUNING.hints
+  let under: Element | null
+  let iframe: HTMLIFrameElement
+  /** The hand shows on `shown` frames, then leaves. */
+  let shown: boolean
+
+  /** Camera frames that surely span `ms`, even when the first after turning on moves nothing. */
+  const framesFor = (ms: number) => Math.ceil(ms / (frameSeconds * 1000)) + 2
+
+  beforeEach(() => {
+    // A loaded Vimeo or YouTube player, as `ExternalVideo` marks it.
+    iframe = document.createElement('iframe')
+    iframe.src = 'https://player.vimeo.com/video/1?dnt=1&autoplay=1'
+    iframe.setAttribute('data-external-player', '')
+    document.body.append(iframe)
+    under = null
+    shown = true
+    document.elementsFromPoint = () => (under ? [under] : [])
+    markCoachSeen(localStorage) // the coach would take focus and add its buttons
+    tracker.createHandTracker.mockImplementation(async () => ({
+      detect: () => sighting(shown ? pose(0.5, 0.5, 0.9) : null),
+      close: tracker.close,
+    }))
+  })
+
+  afterEach(() => iframe.remove())
+
+  /** The hints' polite live region (#58), which says this hint too. */
+  const live = () => container.querySelector('[data-hand-hints][aria-live="polite"]')!
+  const said = () => live().textContent!.includes(HINT)
+  const label = () => container.querySelector<HTMLElement>('[data-hand-ring]')!
+  const labelled = () => label().dataset.player === 'true'
+
+  it('says to use the mouse inside it once the cursor has held there, with a label by the ring', async () => {
+    await render()
+    await turnOn()
+    await runFrames(2)
+    expect(said()).toBe(false)
+    expect(labelled()).toBe(false)
+    under = iframe
+    await runFrames(1)
+    expect(labelled()).toBe(false) // a cursor passing over doesn't flash it
+    await runFrames(framesFor(playerShowAfterMs))
+    expect(said()).toBe(true)
+    expect(labelled()).toBe(true)
+    expect(label().textContent).toContain(HINT)
+  })
+
+  it('clears it once the cursor has stayed off the player, and at once when the hand leaves', async () => {
+    await render()
+    await turnOn()
+    under = iframe
+    await runFrames(framesFor(playerShowAfterMs))
+    expect(said()).toBe(true)
+    under = document.body
+    await runFrames(framesFor(playerClearAfterMs))
+    expect(said()).toBe(false)
+    expect(labelled()).toBe(false)
+    under = iframe
+    await runFrames(framesFor(playerShowAfterMs))
+    expect(labelled()).toBe(true)
+    shown = false
+    await runFrames(HAND_TUNING.lostAfterFrames)
+    expect(said()).toBe(false)
+    expect(labelled()).toBe(false)
+  })
+
+  it('moving in and out, at its edge or again later, says it only once per player', async () => {
+    await render()
+    await turnOn()
+    let announced = 0
+    let before = said()
+    /** Runs frames one by one with the cursor where `at(i)` says, counting each new announcement. */
+    const frames = async (count: number, at: (i: number) => Element | null) => {
+      for (let i = 0; i < count; i++) {
+        under = at(i)
+        await runFrames(1)
+        if (said() && !before) announced++
+        before = said()
+      }
+    }
+    // Flickering at the edge, then held over it, then away and back, then flickering again.
+    await frames(30, (i) => (i % 2 === 0 ? iframe : document.body))
+    await frames(framesFor(playerShowAfterMs), () => iframe)
+    await frames(framesFor(playerClearAfterMs), () => document.body)
+    await frames(framesFor(playerShowAfterMs), () => iframe)
+    expect(labelled()).toBe(true) // the label still shows each time
+    await frames(30, (i) => (i % 2 === 0 ? document.body : iframe))
+    expect(announced).toBe(1)
+  })
+
+  it('an iframe that is not our external player gets no hint', async () => {
+    const other = document.createElement('iframe')
+    document.body.append(other)
+    await render()
+    await turnOn()
+    under = other
+    await runFrames(framesFor(playerShowAfterMs))
+    expect(said()).toBe(false)
+    expect(labelled()).toBe(false)
+    other.remove()
+  })
+
+  it('the click-to-load poster before it is an ordinary target: no hint', async () => {
+    const poster = document.createElement('button')
+    poster.setAttribute('aria-label', 'Showreel videosunu oynat')
+    document.body.append(poster)
+    await render()
+    await turnOn()
+    under = poster
+    await runFrames(framesFor(playerShowAfterMs))
+    expect(said()).toBe(false)
+    poster.remove()
   })
 })
 
@@ -620,5 +836,545 @@ describe('after the controller is gone', () => {
     expect(track.stop).toHaveBeenCalled()
     expect(tracker.createHandTracker).not.toHaveBeenCalled()
     root = createRoot(container) // a fresh root for afterEach to unmount
+  })
+})
+
+describe('its lifetime (#58)', () => {
+  const { noHandMs, coachNoHandMs, minFps, slowMs, sampleMs, graceMs } = HAND_TUNING.lifetime
+  const pressed = () => toggle()!.getAttribute('aria-pressed')
+  /** Whether a hand is in view. */
+  let present: boolean
+
+  beforeEach(() => {
+    present = false
+    markCoachSeen(localStorage) // the coach (which pauses the count) has been seen
+    tracker.createHandTracker.mockImplementation(async () => ({
+      detect: () => sighting(present ? pose(0.5, 0.5, 0.9) : null),
+      close: tracker.close,
+    }))
+  })
+
+  it(`no hand in view for ${noHandMs / 1000} s turns it off, stops the camera and says so`, async () => {
+    await render()
+    await turnOn()
+    await runFor(noHandMs - 1000)
+    expect(pressed()).toBe('true')
+    await runFor(2000)
+    expect(pressed()).toBe('false')
+    expect(track.stop).toHaveBeenCalled()
+    expect(tracker.close).toHaveBeenCalled()
+    expect(status()).toBe('Elin görünmedi, elinle gezme kapandı')
+  })
+
+  it('a hand back in view before then starts the count afresh', async () => {
+    await render()
+    await turnOn()
+    await runFor(noHandMs - 1000)
+    present = true
+    await runFor(500)
+    present = false
+    await runFor(noHandMs - 1000)
+    expect(pressed()).toBe('true')
+  })
+
+  it(`while the coach is open it waits ${coachNoHandMs / 1000} s, not for ever`, async () => {
+    localStorage.clear()
+    await render()
+    await turnOn()
+    await runFor(coachNoHandMs - 1000)
+    expect(pressed()).toBe('true')
+    await runFor(2000)
+    expect(pressed()).toBe('false')
+  })
+
+  it('closing the coach starts the count afresh', async () => {
+    localStorage.clear()
+    await render()
+    await turnOn()
+    await runFor(coachNoHandMs - 1000)
+    await click(button('Atla'))
+    await runFor(noHandMs - 1000)
+    expect(pressed()).toBe('true')
+    await runFor(2000)
+    expect(pressed()).toBe('false')
+  })
+
+  it('a page at under 1 fps turns it off too', async () => {
+    present = true
+    pageSeconds = 1.25
+    await render()
+    await turnOn()
+    await runFor(slowMs * 4)
+    expect(pressed()).toBe('false')
+    expect(status()).toBe('Bu cihazda akıcı çalışmıyor')
+  })
+
+  it(`a page under ${minFps} fps for ${slowMs / 1000} s turns it off: "Bu cihazda akıcı çalışmıyor"`, async () => {
+    present = true
+    pageSeconds = 1 / (minFps * 0.75)
+    await render()
+    await turnOn()
+    await runFor(graceMs + slowMs - sampleMs * 2)
+    expect(pressed()).toBe('true')
+    await runFor(sampleMs * 4)
+    expect(pressed()).toBe('false')
+    expect(track.stop).toHaveBeenCalled()
+    expect(status()).toBe('Bu cihazda akıcı çalışmıyor')
+  })
+
+  it.each([30, 60, 120])('a page at %s fps stays on', async (hz) => {
+    present = true
+    pageSeconds = 1 / hz
+    await render()
+    await turnOn()
+    await runFor((graceMs + slowMs) * 2)
+    expect(pressed()).toBe('true')
+  })
+
+  it('a short dip stays on', async () => {
+    present = true
+    await render()
+    await turnOn()
+    await runFor(graceMs + 500)
+    pageSeconds = 1 / (minFps * 0.5)
+    await runFor(slowMs - sampleMs * 2)
+    pageSeconds = 1 / 60
+    await runFor(slowMs)
+    expect(pressed()).toBe('true')
+  })
+})
+
+describe('the hints (#58)', () => {
+  const { farPalm, nearPalm, darkLuma, brightLuma, showAfterMs, clearAfterMs, lumaEveryMs } =
+    HAND_TUNING.hints
+  const { width, height } = HAND_TUNING.hints.lumaSize
+  const hintsShown = () => container.querySelector('[data-hand-hints]')!.textContent
+  let palm: number
+  let score: number
+  /** A canvas context whose picture has mean luma `luma`, logging what is drawn, read and cleared. */
+  const fakeCanvas = (luma: () => number) => {
+    const log: unknown[][] = []
+    const getContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(
+      () =>
+        ({
+          clearRect: (...args: unknown[]) => log.push(['clear', ...args]),
+          beginPath: () => {},
+          arc: () => {},
+          fill: () => {},
+          drawImage: (...args: unknown[]) => log.push(['draw', ...args]),
+          getImageData: (...args: number[]) => {
+            log.push(['read', ...args])
+            return { data: new Uint8ClampedArray(args[2]! * args[3]! * 4).fill(luma()) }
+          },
+        }) as unknown as CanvasRenderingContext2D,
+    )
+    return { log, restore: () => getContext.mockRestore() }
+  }
+
+  beforeEach(() => {
+    palm = nearPalm * 1.5
+    score = 0.95
+    markCoachSeen(localStorage)
+    tracker.createHandTracker.mockImplementation(async () => ({
+      detect: () => sighting(pose(0.5, 0.5, 0.9, palm), score),
+      close: tracker.close,
+    }))
+  })
+
+  it('"Biraz yaklaş" shows, politely, for a hand too far away, and clears when it comes closer', async () => {
+    await render()
+    await turnOn()
+    const hints = container.querySelector('[data-hand-hints]')!
+    expect(hints.getAttribute('aria-live')).toBe('polite')
+    await runFor(showAfterMs * 2)
+    expect(hintsShown()).toBe('')
+    palm = farPalm * 0.8
+    await runFor(showAfterMs / 2)
+    expect(hintsShown()).toBe('')
+    await runFor(showAfterMs)
+    expect(hintsShown()).toBe(HINT_TEXT.far)
+    palm = nearPalm * 1.5
+    await runFor(clearAfterMs + 200)
+    expect(hintsShown()).toBe('')
+  })
+
+  it('"Daha çok ışık" shows for a dark picture, read from a tiny canvas a few times a second', async () => {
+    let luma = darkLuma / 2
+    const canvas = fakeCanvas(() => luma)
+    await render()
+    await turnOn()
+    await runFor(showAfterMs * 2)
+    expect(hintsShown()).toBe(HINT_TEXT.dark)
+    luma = brightLuma * 2
+    await runFor(clearAfterMs * 2)
+    expect(hintsShown()).toBe('')
+    // Only ever the shrunk picture, at most every `lumaEveryMs`, and cleared once read.
+    const reads = canvas.log.filter(([kind]) => kind === 'read')
+    const draws = canvas.log.filter(([kind]) => kind === 'draw')
+    const ms = (showAfterMs + clearAfterMs) * 2
+    expect(reads.length).toBeGreaterThan(0)
+    expect(reads.length).toBeLessThanOrEqual(Math.ceil(ms / lumaEveryMs) + 1)
+    expect(reads.every(([, , , w, h]) => w === width && h === height)).toBe(true)
+    expect(draws.every((args) => args[4] === width && args[5] === height)).toBe(true)
+    canvas.log.forEach(([kind], i) => {
+      if (kind === 'read') expect(canvas.log[i + 1]).toEqual(['clear', 0, 0, width, height])
+    })
+    canvas.restore()
+  })
+
+  it('a hand tracked unsurely in a bright picture shows nothing: brightness only', async () => {
+    score = 0.3
+    const canvas = fakeCanvas(() => brightLuma * 2)
+    await render()
+    await turnOn()
+    await runFor(showAfterMs * 3)
+    expect(hintsShown()).toBe('')
+    canvas.restore()
+  })
+
+  it('turning off clears them', async () => {
+    palm = farPalm * 0.8
+    await render()
+    await turnOn()
+    await runFor(showAfterMs * 2)
+    expect(hintsShown()).toBe(HINT_TEXT.far)
+    await click(toggle())
+    palm = nearPalm * 1.5
+    await turnOn()
+    expect(hintsShown()).toBe('')
+  })
+})
+
+describe('after a reload in the same tab (#58)', () => {
+  const pressed = () => toggle()!.getAttribute('aria-pressed')
+  /** The browser's answer for the camera's permission, without asking the visitor. */
+  const permission = (query: () => unknown) => {
+    const api = { query: vi.fn(query) }
+    Object.defineProperty(navigator, 'permissions', { configurable: true, value: api })
+    return api
+  }
+  /** The page hides as it unloads (`pagehide`, then hidden), and the old page goes away. */
+  const unload = async () => {
+    await act(() => {
+      window.dispatchEvent(new Event('pagehide'))
+      hidden = true
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    await act(() => root.unmount())
+  }
+  /** A fresh page in this tab, loaded the way `how` says (a reload by default), shown or not. */
+  const load = async ({ how = 'reload', shown = true } = {}) => {
+    navigationType = how
+    hidden = !shown
+    root = createRoot(container)
+    await render()
+    await settle()
+    await settle()
+  }
+  /** A full reload in this tab. */
+  const reload = async () => {
+    await unload()
+    await load()
+  }
+
+  beforeEach(() => {
+    markCoachSeen(localStorage)
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('the tab keeps only when the page hid with it on, and a load takes that away at once', async () => {
+    permission(async () => ({ state: 'prompt' }))
+    await render()
+    await turnOn()
+    expect(sessionStorage.getItem(HAND_ON_KEY)).toBeNull()
+    await unload()
+    expect(Number(sessionStorage.getItem(HAND_ON_KEY))).toBeGreaterThan(0)
+    await load()
+    expect(sessionStorage.getItem(HAND_ON_KEY)).toBeNull()
+  })
+
+  it.each<[string, () => unknown]>([
+    [
+      'a reload long after the page hid',
+      () => {
+        const later = Date.now() + HAND_TUNING.lifetime.resumeWindowMs + 1000
+        vi.spyOn(Date, 'now').mockReturnValue(later)
+      },
+    ],
+    [
+      'a tab the browser discarded',
+      () => {
+        Object.defineProperty(document, 'wasDiscarded', { configurable: true, value: true })
+      },
+    ],
+    [
+      'a mark copied without a time (an old or foreign flag)',
+      () => sessionStorage.setItem(HAND_ON_KEY, '1'),
+    ],
+  ])('stays off after %s, asking for nothing', async (_, before) => {
+    const api = permission(async () => ({ state: 'granted' }))
+    await render()
+    await turnOn()
+    await unload()
+    await before()
+    await load()
+    expect(pressed()).toBe('false')
+    expect(api.query).not.toHaveBeenCalled()
+    expect(getUserMedia).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    ['a duplicated or reopened tab (a new navigation)', { how: 'navigate' }],
+    ['Back or Forward to this page', { how: 'back_forward' }],
+    ['a page loaded hidden', { shown: false }],
+  ])('stays off for %s, asking for nothing', async (_, how) => {
+    const api = permission(async () => ({ state: 'granted' }))
+    await render()
+    await turnOn()
+    await unload()
+    await load(how)
+    expect(pressed()).toBe('false')
+    expect(api.query).not.toHaveBeenCalled()
+    expect(getUserMedia).toHaveBeenCalledTimes(1)
+  })
+
+  it('comes back under React’s development double mount too (one check per page load)', async () => {
+    permission(async () => ({ state: 'granted' }))
+    await render()
+    await turnOn()
+    await unload()
+    navigationType = 'reload'
+    hidden = false
+    root = createRoot(container)
+    await act(() =>
+      root.render(
+        <StrictMode>
+          <HandToggle />
+          <HandControl />
+        </StrictMode>,
+      ),
+    )
+    await settle()
+    await settle()
+    await settle()
+    expect(pressed()).toBe('true')
+    expect(getUserMedia).toHaveBeenCalledTimes(2)
+  })
+
+  it('stays off if the page is hidden while the browser answers', async () => {
+    let answer: (value: { state: string }) => void = () => {}
+    permission(() => new Promise((resolve) => (answer = resolve)))
+    await render()
+    await turnOn()
+    await unload()
+    await load()
+    hidden = true
+    await act(async () => answer({ state: 'granted' }))
+    await settle()
+    expect(getUserMedia).toHaveBeenCalledTimes(1)
+  })
+
+  it('comes back on by itself while the camera is granted, without the consent note', async () => {
+    const api = permission(async () => ({ state: 'granted' }))
+    await render()
+    await turnOn()
+    await reload()
+    expect(api.query).toHaveBeenCalledWith({ name: 'camera' })
+    expect(pressed()).toBe('true')
+    expect(getUserMedia).toHaveBeenCalledTimes(2)
+    expect(note()).toBeNull()
+    expect(button('Elinle gezmeyi kapat')).toBeDefined()
+  })
+
+  it.each<[string, () => unknown]>([
+    ['the camera would prompt', async () => ({ state: 'prompt' })],
+    ['the camera is denied', async () => ({ state: 'denied' })],
+    [
+      'the camera cannot be queried (the query throws, as in older browsers)',
+      () => {
+        throw new TypeError('camera')
+      },
+    ],
+    ['the query rejects', () => Promise.reject(new TypeError('camera'))],
+  ])('stays off, asking for nothing, when %s', async (_, query) => {
+    permission(query)
+    await render()
+    await turnOn()
+    await reload()
+    expect(pressed()).toBe('false')
+    expect(getUserMedia).toHaveBeenCalledTimes(1)
+    expect(note()).toBeNull()
+  })
+
+  it('stays off without the Permissions API, asking for nothing', async () => {
+    await render()
+    await turnOn()
+    await reload()
+    expect(pressed()).toBe('false')
+    expect(getUserMedia).toHaveBeenCalledTimes(1)
+  })
+
+  it('a new tab starts off: the browser is not even asked', async () => {
+    const api = permission(async () => ({ state: 'granted' }))
+    await render()
+    await turnOn()
+    await unload()
+    sessionStorage.clear() // a new tab has its own, empty, session storage
+    await load({ how: 'navigate' })
+    expect(pressed()).toBe('false')
+    expect(api.query).not.toHaveBeenCalled()
+    expect(getUserMedia).toHaveBeenCalledTimes(1)
+  })
+
+  it.each<[string, () => unknown]>([
+    ['the toggle', () => click(toggle())],
+    ['the ×', () => click(button('Elinle gezmeyi kapat'))],
+    ['no hand in view', () => runFor(HAND_TUNING.lifetime.noHandMs + 1000)],
+    [
+      'a page that cannot stay smooth',
+      async () => {
+        pageSeconds = 1 / (HAND_TUNING.lifetime.minFps / 2)
+        await runFor(HAND_TUNING.lifetime.graceMs + HAND_TUNING.lifetime.slowMs * 2)
+      },
+    ],
+    ['a camera that ends', () => act(() => void track.dispatchEvent(new Event('ended')))],
+    [
+      'a hidden tab, shown again',
+      () =>
+        act(() => {
+          hidden = true
+          document.dispatchEvent(new Event('visibilitychange'))
+          hidden = false
+          document.dispatchEvent(new Event('visibilitychange'))
+        }),
+    ],
+  ])('turned off by %s, a reload leaves it off', async (_, turnOff) => {
+    permission(async () => ({ state: 'granted' }))
+    await render()
+    await turnOn()
+    await turnOff()
+    expect(pressed()).toBe('false')
+    await reload()
+    expect(pressed()).toBe('false')
+    expect(getUserMedia).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('the coach (#58)', () => {
+  const coach = () => container.querySelector<HTMLElement>('[data-hand-coach]')
+  const pressed = () => toggle()!.getAttribute('aria-pressed')
+
+  it('shows once per browser, on first use: three steps, İleri, then Tamam', async () => {
+    await render()
+    await turnOn()
+    expect(coach()!.getAttribute('role')).toBe('dialog')
+    expect(coach()!.contains(document.activeElement)).toBe(true)
+    for (const [i, step] of COACH_STEPS.entries()) {
+      expect(coach()!.textContent).toContain(`${i + 1} / ${COACH_STEPS.length}`)
+      expect(coach()!.textContent).toContain(step.text)
+      await click(button(i < COACH_STEPS.length - 1 ? 'İleri' : 'Tamam'))
+    }
+    expect(coach()).toBeNull()
+    expect(pressed()).toBe('true')
+    // Off and on again, or on another visit: no coach.
+    await click(toggle())
+    await turnOn()
+    expect(pressed()).toBe('true')
+    expect(coach()).toBeNull()
+  })
+
+  it('announces each step politely', async () => {
+    await render()
+    await turnOn()
+    const description = document.getElementById(coach()!.getAttribute('aria-describedby')!)!
+    expect(description.getAttribute('aria-live')).toBe('polite')
+    expect(description.textContent).toContain(COACH_STEPS[0].text)
+  })
+
+  it.each([
+    ['Atla', () => click(button('Atla'))],
+    ['Esc', () => press('Escape')],
+  ])('%s skips it, and focus goes to the toggle, since it opened by itself', async (_, skip) => {
+    await render()
+    await turnOn()
+    expect(coach()).not.toBeNull()
+    await skip()
+    expect(coach()).toBeNull()
+    expect(document.activeElement).toBe(toggle())
+    expect(pressed()).toBe('true')
+  })
+
+  it('opened by "?", focus goes back to the "?", even when the click left none (Safari)', async () => {
+    markCoachSeen(localStorage)
+    await render()
+    await turnOn()
+    ;(document.activeElement as HTMLElement | null)?.blur() // a mouse click in Safari
+    await click(button('Nasıl kullanılır'))
+    expect(coach()).not.toBeNull()
+    await press('Escape')
+    expect(coach()).toBeNull()
+    expect(document.activeElement).toBe(button('Nasıl kullanılır'))
+  })
+
+  it('is a light, non-modal dialog', async () => {
+    await render()
+    await turnOn()
+    expect(coach()!.getAttribute('aria-modal')).toBe('false')
+  })
+
+  it('its Esc and Tab do not reach the page’s own key handlers (the menu)', async () => {
+    const menuKeys = vi.fn()
+    document.addEventListener('keydown', menuKeys)
+    await render()
+    await turnOn()
+    await press('Tab')
+    await press('Escape')
+    document.removeEventListener('keydown', menuKeys)
+    expect(coach()).toBeNull()
+    expect(menuKeys).not.toHaveBeenCalled()
+  })
+
+  it('does not open by itself over the open menu, and opens on the next turn-on', async () => {
+    const menu = document.createElement('details')
+    menu.open = true
+    menu.innerHTML = `<summary>Menü</summary><div id="${MENU_PANEL_ID}"></div>`
+    document.body.append(menu)
+    await render()
+    await turnOn()
+    expect(coach()).toBeNull()
+    await click(toggle())
+    menu.open = false
+    await turnOn()
+    expect(coach()).not.toBeNull()
+    menu.remove()
+  })
+
+  it('keeps Tab and Shift+Tab inside, step by step (Safari skips buttons)', async () => {
+    await render()
+    await turnOn()
+    const [skip, next] = [button('Atla')!, button('İleri')!]
+    expect(document.activeElement).toBe(next)
+    await press('Tab')
+    expect(document.activeElement).toBe(skip)
+    await press('Tab')
+    expect(document.activeElement).toBe(next)
+    await press('Tab', { shiftKey: true })
+    expect(document.activeElement).toBe(skip)
+  })
+
+  it('"?" next to the preview replays it from the first step', async () => {
+    markCoachSeen(localStorage)
+    await render()
+    await turnOn()
+    expect(coach()).toBeNull()
+    await click(button('Nasıl kullanılır'))
+    expect(coach()!.textContent).toContain(`1 / ${COACH_STEPS.length}`)
+    await click(button('İleri'))
+    await click(button('Atla'))
+    await click(button('Nasıl kullanılır'))
+    expect(coach()!.textContent).toContain(`1 / ${COACH_STEPS.length}`)
   })
 })

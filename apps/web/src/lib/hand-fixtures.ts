@@ -1,4 +1,11 @@
-import { INDEX_KNUCKLE, INDEX_TIP, THUMB_TIP, WRIST, type HandFrame } from './hand-gesture'
+import {
+  INDEX_KNUCKLE,
+  INDEX_TIP,
+  PINKY_KNUCKLE,
+  THUMB_TIP,
+  WRIST,
+  type HandFrame,
+} from './hand-gesture'
 
 /*
  * Synthetic hands for the tests of the gesture reader and the controller (test code only).
@@ -9,14 +16,17 @@ export const PALM = 0.15
 
 /**
  * A hand whose index fingertip is at (x, y) in the camera's own picture, with the thumb's tip
- * below it at `gap` times the palm's length: the pinch ratio the reader should measure.
+ * below it at `gap` times the palm's length: the pinch ratio the reader should measure. `palm` is
+ * the palm's length in camera-frame heights: a smaller one is a hand further from the camera.
  */
-export const pose = (x: number, y: number, gap: number): HandFrame =>
+export const pose = (x: number, y: number, gap: number, palm = PALM): HandFrame =>
   Array.from({ length: 21 }, (_, i) => {
     if (i === INDEX_TIP) return { x, y }
-    if (i === THUMB_TIP) return { x, y: y + gap * PALM }
+    if (i === THUMB_TIP) return { x, y: y + gap * palm }
     if (i === INDEX_KNUCKLE) return { x, y: y + 0.2 }
-    if (i === WRIST) return { x, y: y + 0.2 + PALM }
+    if (i === WRIST) return { x, y: y + 0.2 + palm }
+    // The knuckles span less than the palm's length, so the length is what `palmSize` reads.
+    if (i === PINKY_KNUCKLE) return { x, y: y + 0.2 + palm * 0.6 }
     return { x, y: y + 0.1 }
   })
 

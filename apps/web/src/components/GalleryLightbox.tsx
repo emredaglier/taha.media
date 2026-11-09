@@ -5,9 +5,11 @@ import { useEffect, useRef } from 'react'
 import type { GalleryItem } from '../data/gallery'
 import { captionLine, mediaSize } from '../lib/gallery-item'
 import { keyAction, lightboxLabel, positionLabel, swipeAction } from '../lib/lightbox-input'
+import { createHandStepper } from '../lib/hand-steps'
 import type { Step } from '../lib/lightbox-step'
 import { mediaFrameStyle } from '../lib/media-frame'
 import { lockScroll, nextFocus } from '../lib/menu-a11y'
+import { claimHandGrab } from './hand/grab'
 import { LoopVideo } from './LoopVideo'
 import { Picture } from './Picture'
 
@@ -16,6 +18,7 @@ import { Picture } from './Picture'
  * under the usual loop rules), previous and next that wrap, arrow keys, swipe, Escape and a
  * Kapat button. The page behind can't scroll, focus is trapped (every Tab step is picked by
  * `nextFocus`, because Safari's Tab skips links: see `lib/menu-a11y.ts`), and the dialog is named for a screen reader.
+ * Hand control's grab steps it too while it is open (#59): left for next, right for previous.
  * Modelled on SiteMenu. Stepping, key and swipe decisions are pure functions in `lib/`; this
  * component only wires them to the DOM. The grid owns which item is open, and gives focus back
  * to the item it opened when `onClose` runs.
@@ -33,6 +36,7 @@ export function GalleryLightbox({
 }) {
   const dialogRef = useRef<HTMLDivElement>(null)
   const swipeStart = useRef<{ x: number; y: number } | null>(null)
+  const stepRef = useRef(onStep)
   const item = items[index]!
   const count = items.length
   const line = captionLine(item)
@@ -43,6 +47,26 @@ export function GalleryLightbox({
     const unlock = lockScroll(document.documentElement)
     dialogRef.current!.querySelector<HTMLElement>('button')?.focus()
     return unlock
+  }, [])
+
+  useEffect(() => {
+    stepRef.current = onStep
+  }, [onStep])
+
+  // Hand control (#59): while open, the lightbox takes the whole grab (the page behind is locked),
+  // and a sideways one steps through its own stepping, one item per `HAND_TUNING.grab.stepWidths`.
+  useEffect(() => {
+    const stepper = createHandStepper((step) => stepRef.current(step))
+    return claimHandGrab({
+      move(_up, right) {
+        stepper.move(right)
+        return true
+      },
+      end() {
+        stepper.reset()
+        return true
+      },
+    })
   }, [])
 
   useEffect(() => {

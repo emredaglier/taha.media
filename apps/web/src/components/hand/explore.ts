@@ -1,3 +1,5 @@
+import { playerAt, togglePlayback } from './media'
+
 /**
  * The hand-hover marker: set on the element under the hand's cursor and on its ancestors, so CSS
  * can match it where it matches `:hover` (the `hand-hover:` and `group-hand-hover:` variants in
@@ -118,8 +120,8 @@ export function createExplorer(
      * (`pointerdown`, then `mousedown` unless the page cancelled the press) moves focus where a
      * mouse press would (the nearest focusable element, or away from whatever had it), then the
      * release (`pointerup`, `mouseup`) and the `click`, whose default follows a link or presses a
-     * button; a `target="_blank"` link opens in this tab (`navigate`). Nothing under the cursor,
-     * nothing clicked.
+     * button; a `target="_blank"` link opens in this tab (`navigate`), and our own `<video>` plays
+     * or pauses (#59). Nothing under the cursor, nothing clicked.
      */
     click() {
       const element = target
@@ -145,9 +147,15 @@ export function createExplorer(
         sameTab = newTab!.href
       }
       if (newTab) window.addEventListener('click', takeOver, { once: true })
-      mouse(element, 'click', false)
+      // Our own video, and whether it was paused before the click reached it.
+      const player = playerAt(element)
+      const wasPaused = player?.paused
+      const clicked = mouse(element, 'click', false)
       if (newTab) window.removeEventListener('click', takeOver)
       if (sameTab) navigate(sameTab)
+      // Our own video plays or pauses, unless the page took the click, or the page or the
+      // browser already played or paused it on the click (then toggling would undo that).
+      if (player && clicked && player.paused === wasPaused) togglePlayback(player)
     },
 
     /** The cursor is gone (tracking lost, or Hand control stopped): leave whatever it was over. */

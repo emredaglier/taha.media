@@ -112,9 +112,18 @@ describe('turning off', () => {
   it.each<[string, HandControlEvent]>([
     ['the toggle', { kind: 'toggle' }],
     ['the ×', { kind: 'close' }],
+  ])('%s turns it off, stops the camera and forgets the tab was on', (_, event) => {
+    const { state, effects } = run([event], on)
+    expect(state.phase).toBe('off')
+    expect(effects).toEqual([{ kind: 'stop' }, { kind: 'forget' }])
+  })
+
+  it.each<[string, HandControlEvent]>([
+    // The page hides as it unloads, and the controller marks the tab then: the mark must stay,
+    // so a reload brings it back (#58). The controller clears it when a hidden tab is shown again.
     ['a hidden tab', { kind: 'hidden' }],
     ['leaving the page', { kind: 'unmount' }],
-  ])('%s turns it off and stops the camera', (_, event) => {
+  ])('%s turns it off and stops the camera, but the tab remembers it was on', (_, event) => {
     const { state, effects } = run([event], on)
     expect(state.phase).toBe('off')
     expect(effects).toEqual([{ kind: 'stop' }])
@@ -129,7 +138,7 @@ describe('turning off', () => {
     expect(kinds(effects)).toContain('stop')
   })
 
-  it('every path that ends off stops the camera', () => {
+  it('every path that ends off stops the camera, and all but a hidden tab or unmounting forget the tab was on', () => {
     // Every sequence of up to five events from off (camera answers for the current and the
     // previous attempt): whenever one turns Hand control off, it stops the camera.
     const eventsFor = (state: HandControlState): HandControlEvent[] => {
@@ -140,10 +149,13 @@ describe('turning off', () => {
         { kind: 'trackerFailed', attempt },
         { kind: 'trackingFailed', attempt },
         { kind: 'cameraEnded', attempt },
+        { kind: 'noHand', attempt },
+        { kind: 'notSmooth', attempt },
       ])
       return [
         { kind: 'toggle' },
         { kind: 'accept' },
+        { kind: 'resume' },
         { kind: 'decline' },
         { kind: 'close' },
         { kind: 'hidden' },
@@ -160,6 +172,10 @@ describe('turning off', () => {
           const step = handControl(state, event)
           if (state.phase !== 'off' && step.state.phase === 'off') {
             expect(kinds(step.effects), `${state.phase} + ${event.kind}`).toContain('stop')
+            const keeps = event.kind === 'hidden' || event.kind === 'unmount'
+            expect(kinds(step.effects).includes('forget'), `${state.phase} + ${event.kind}`).toBe(
+              !keeps,
+            )
             checked++
           }
           next.set(JSON.stringify(step.state), step.state)
@@ -175,7 +191,7 @@ describe('failures while on', () => {
   it('a tracker that keeps failing turns it off, stops the camera and says so', () => {
     const { state, effects } = run([{ kind: 'trackingFailed', attempt: on.attempt }], on)
     expect(state.phase).toBe('off')
-    expect(effects).toEqual([{ kind: 'stop' }])
+    expect(effects).toEqual([{ kind: 'stop' }, { kind: 'forget' }])
     expect(handStatus(state)).not.toBe('')
   })
 
@@ -185,7 +201,7 @@ describe('failures while on', () => {
       const before = run(turnOn().slice(0, phase === 'loading' ? 3 : 4)).state
       const { state, effects } = run([{ kind: 'cameraEnded', attempt: before.attempt }], before)
       expect(state.phase).toBe('off')
-      expect(effects).toEqual([{ kind: 'stop' }])
+      expect(effects).toEqual([{ kind: 'stop' }, { kind: 'forget' }])
       expect(handStatus(state)).not.toBe('')
       expect(handStatus(state)).not.toBe(handStatus(run([{ kind: 'close' }], on).state))
     },
@@ -197,10 +213,73 @@ describe('failures while on', () => {
       run([{ kind: 'close' }], on).state,
     ).state
     expect(again.phase).toBe('on')
-    for (const kind of ['trackingFailed', 'cameraEnded'] as const) {
+    for (const kind of ['trackingFailed', 'cameraEnded', 'noHand', 'notSmooth'] as const) {
       expect(run([{ kind, attempt: on.attempt }], again)).toEqual({ state: again, effects: [] })
     }
   })
+})
+
+describe('its lifetime (#58)', () => {
+  it.each(['noHand', 'notSmooth'] as const)(
+    '%s turns it off, stops the camera, forgets the tab was on and says why',
+    (kind) => {
+      const { state, effects } = run([{ kind, attempt: on.attempt }], on)
+      expect(state.phase).toBe('off')
+      expect(effects).toEqual([{ kind: 'stop' }, { kind: 'forget' }])
+      expect(handStatus(state)).not.toBe('')
+      expect(handStatus(state)).not.toBe(handStatus(run([{ kind: 'close' }], on).state))
+    },
+  )
+
+  it('says a page that cannot stay smooth in the decided words', () => {
+    expect(handStatus(run([{ kind: 'notSmooth', attempt: on.attempt }], on).state)).toBe(
+      'Bu cihazda akıcı çalışmıyor',
+    )
+  })
+
+  it.each(['noHand', 'notSmooth'] as const)('%s only counts while on', (kind) => {
+    const loading = run(turnOn().slice(0, 3)).state
+    expect(run([{ kind, attempt: loading.attempt }], loading)).toEqual({
+      state: loading,
+      effects: [],
+    })
+  })
+})
+
+describe('coming back on after a reload (#58)', () => {
+  it('asks for the camera at once, without the consent note, for a new attempt', () => {
+    const { state, effects } = run([{ kind: 'resume' }])
+    expect(state.phase).toBe('asking')
+    expect(state.attempt).toBe(initialHandControl.attempt + 1)
+    expect(effects).toEqual([{ kind: 'requestCamera', attempt: state.attempt }])
+  })
+
+  it('then goes on like Aç', () => {
+    const asking = run([{ kind: 'resume' }]).state
+    const { state, effects } = run(
+      [
+        { kind: 'cameraGranted', attempt: asking.attempt },
+        { kind: 'trackerReady', attempt: asking.attempt },
+      ],
+      asking,
+    )
+    expect(state.phase).toBe('on')
+    expect(kinds(effects)).toEqual(['loadTracker', 'track'])
+  })
+
+  it.each(['consenting', 'asking', 'loading', 'on'] as const)(
+    'does nothing once the visitor has begun themself (%s)',
+    (phase) => {
+      const steps: Record<typeof phase, HandControlEvent[]> = {
+        consenting: turnOn().slice(0, 1),
+        asking: turnOn().slice(0, 2),
+        loading: turnOn().slice(0, 3),
+        on: turnOn(),
+      }
+      const before = run(steps[phase]).state
+      expect(run([{ kind: 'resume' }], before)).toEqual({ state: before, effects: [] })
+    },
+  )
 })
 
 describe('late answers', () => {

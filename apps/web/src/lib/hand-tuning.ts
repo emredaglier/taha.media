@@ -78,5 +78,69 @@ export const HAND_TUNING = {
     glideSeconds: 0.3,
     glideStopPxPerSecond: 60,
     glideFromPxPerSecond: 250,
+    /**
+     * In the Galeri lightbox (#59), a grab moving this many screen widths left or right steps to
+     * the next or previous item, once; another as far steps again (`lib/hand-steps.ts`).
+     */
+    stepWidths: 0.15,
+  },
+  /**
+   * How long Hand control lasts (#58).
+   *
+   * - **No hand:** it turns off after `noHandMs` with no hand in view, or `coachNoHandMs` while the
+   *   coach is open (owner default, 2026-11-09); closing the coach starts the count afresh.
+   * - **Not smooth:** the page's frame rate, counted over windows of `sampleMs`, stays under
+   *   `minFps` for `slowMs` in a row. A window at or above it starts the count afresh, so a short
+   *   dip never turns it off. `minFps` is 25 (owner, 2026-11-09), so a browser's 30 fps power-saving
+   *   cap (Safari's Low Power Mode, Chrome's Energy Saver) counts as smooth. The first `graceMs`
+   *   after it turns on aren't measured (the tracker's first frames stall while it warms up).
+   * - **Pauses:** a gap of `pauseMs` or more between two page frames is a pause, not a slow page
+   *   (the browser stopped drawing: a system dialog, an occluded window), and the grace starts
+   *   again after it, unless it is the `pauseRepeats`th such gap within `pauseWindowMs`: then the
+   *   page is simply that slow, and the gap counts as slow time.
+   * - **Reload:** a reload in the same tab brings it back only within `resumeWindowMs` of the page
+   *   hiding as it unloaded.
+   */
+  lifetime: {
+    noHandMs: 30_000,
+    coachNoHandMs: 60_000,
+    minFps: 25,
+    slowMs: 3000,
+    sampleMs: 500,
+    graceMs: 2000,
+    pauseMs: 1000,
+    pauseRepeats: 3,
+    pauseWindowMs: 10_000,
+    resumeWindowMs: 10_000,
+  },
+  /**
+   * The hints (#58), each with hysteresis and a debounce so it never flickers: it shows once its
+   * condition has held for `showAfterMs` without a break, and clears once the opposite has held
+   * for `clearAfterMs`. A reading between the two lines breaks either count.
+   *
+   * - "Biraz yaklaş": the palm is under `farPalm` of the camera frame's height, and clears above
+   *   `nearPalm`. The palm is the longer of wrist to index knuckle and index to pinky knuckle, so a
+   *   tilted hand doesn't read as far.
+   * - "Daha çok ışık": brightness only (owner, 2026-11-09): the camera picture's mean luma (0–255)
+   *   is under `darkLuma`, and clears above `brightLuma`. The luma is read every `lumaEveryMs` from
+   *   the picture shrunk to `lumaSize` px, never from a full frame, and only that one number is
+   *   kept.
+   */
+  hints: {
+    farPalm: 0.1,
+    nearPalm: 0.12,
+    darkLuma: 40,
+    brightLuma: 55,
+    showAfterMs: 1000,
+    clearAfterMs: 1000,
+    lumaEveryMs: 250,
+    lumaSize: { width: 32, height: 24 },
+    /**
+     * The hint over an external player (#59) follows the cursor faster: it shows once the cursor
+     * has been over the player this long (ms), and clears once it has been off it this long, so a
+     * cursor passing over or shaking at its edge doesn't flash it.
+     */
+    playerShowAfterMs: 200,
+    playerClearAfterMs: 300,
   },
 } as const

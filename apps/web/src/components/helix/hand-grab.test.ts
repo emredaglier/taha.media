@@ -45,7 +45,7 @@ describe("the hand's grab on Home", () => {
   it('leaves the grab to the page while the zoom runs, so the page scroll scrubs it', () => {
     const model = helix()
     const grab = helixGrab({ turns: () => false, apply: model.apply })
-    expect(grab.move(0.1)).toBe(false)
+    expect(grab.move(0.1, 0)).toBe(false)
     expect(grab.end()).toBe(false)
     expect(model.inputs).toEqual([])
   })
@@ -55,7 +55,7 @@ describe("the hand's grab on Home", () => {
     const grab = helixGrab({ turns: () => true, apply: model.apply })
     // Half a screen up, over a quarter of a second.
     for (let i = 0; i < 15; i++) {
-      expect(grab.move(0.5 / 15)).toBe(true)
+      expect(grab.move(0.5 / 15, 0)).toBe(true)
       model.run(FRAME_MS)
     }
     expect(model.inputs[0]).toBe('dragStart')
@@ -69,7 +69,7 @@ describe("the hand's grab on Home", () => {
     const model = helix()
     const grab = helixGrab({ turns: () => true, apply: model.apply })
     for (let i = 0; i < 10; i++) {
-      grab.move(0.03)
+      grab.move(0.03, 0)
       model.run(FRAME_MS)
     }
     expect(grab.end()).toBe(true)
@@ -84,10 +84,10 @@ describe("the hand's grab on Home", () => {
     const model = helix()
     let locked = false
     const grab = helixGrab({ turns: () => locked, apply: model.apply })
-    expect(grab.move(0.05)).toBe(false)
+    expect(grab.move(0.05, 0)).toBe(false)
     locked = true
-    expect(grab.move(0.05)).toBe(true)
-    expect(grab.move(0.05)).toBe(true)
+    expect(grab.move(0.05, 0)).toBe(true)
+    expect(grab.move(0.05, 0)).toBe(true)
     expect(grab.end()).toBe(true)
     expect(grab.end()).toBe(false)
     expect(model.inputs).toEqual(['dragStart', 'dragMove', 'dragMove', 'dragEnd'])
@@ -97,10 +97,10 @@ describe("the hand's grab on Home", () => {
     const model = helix()
     let menuOpen = false
     const grab = helixGrab({ turns: () => !menuOpen, apply: model.apply })
-    expect(grab.move(0.05)).toBe(true)
+    expect(grab.move(0.05, 0)).toBe(true)
     menuOpen = true
-    expect(grab.move(0.05)).toBe(false)
-    expect(grab.move(0.05)).toBe(false)
+    expect(grab.move(0.05, 0)).toBe(false)
+    expect(grab.move(0.05, 0)).toBe(false)
     expect(grab.end()).toBe(false)
     expect(model.inputs).toEqual(['dragStart', 'dragMove', 'dragEnd'])
   })
@@ -109,8 +109,8 @@ describe("the hand's grab on Home", () => {
     const model = helix()
     let started = 0
     const grab = helixGrab({ turns: () => true, apply: model.apply, onStart: () => started++ })
-    grab.move(0.05)
-    grab.move(0.05)
+    grab.move(0.05, 0)
+    grab.move(0.05, 0)
     expect(started).toBe(1)
     expect(grab.holding).toBe(true)
     grab.end()

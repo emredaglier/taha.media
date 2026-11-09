@@ -2,11 +2,15 @@ import { HAND_TUNING } from '../../lib/hand-tuning'
 
 /**
  * Something on the page that takes Hand control's grab instead of the page scroll: the Helix on
- * Home, which turns like a drag once Home holds the screen.
+ * Home, which turns like a drag once Home holds the screen, and the Galeri lightbox, which steps
+ * on a sideways grab (#59).
  */
 export type GrabSink = {
-  /** The grab moved `up` screen heights (negative: down). Returns whether it took the move. */
-  move(up: number): boolean
+  /**
+   * The grab moved `up` screen heights (negative: down) and `right` screen widths (negative:
+   * left). Returns whether it took the move.
+   */
+  move(up: number, right: number): boolean
   /** The grab let go. Returns whether it had taken the grab (then the page doesn't glide). */
   end(): boolean
 }
