@@ -77,8 +77,11 @@ export type HelixInput =
   | { kind: 'dragStart' }
   /** The pointer moved `up` CSS px (negative: down). Up turns forward. */
   | { kind: 'dragMove'; up: number }
-  /** The pointer let go. */
-  | { kind: 'dragEnd' }
+  /**
+   * The pointer let go. `glide: false` (a resting hand's grab, #75): settle on the nearest card,
+   * whatever the last moments' speed, so a rest never flicks a card on.
+   */
+  | { kind: 'dragEnd'; glide?: false }
   /** A click on card `card`: the front card opens its Work, any other turns to the front. */
   | { kind: 'card'; card: number }
   /** Enter: open the front Work. */
@@ -385,7 +388,10 @@ export function stepHelix(state: HelixState, input: HelixInput, now: number): He
       return nudge(current, input.up * HELIX_TUNING.dragScale, now, true)
     case 'dragEnd':
       // Letting go ends the input at once.
-      return current.motion.kind === 'follow' ? settle(current, current.motion.direction) : current
+      if (current.motion.kind !== 'follow') return current
+      return input.glide === false
+        ? settle({ ...current, speed: 0 }, 0)
+        : settle(current, current.motion.direction)
   }
 }
 

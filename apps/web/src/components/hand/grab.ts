@@ -11,8 +11,12 @@ export type GrabSink = {
    * left). Returns whether it took the move.
    */
   move(up: number, right: number): boolean
-  /** The grab let go. Returns whether it had taken the grab (then the page doesn't glide). */
-  end(): boolean
+  /**
+   * The grab let go. Returns whether it had taken the grab (then the page doesn't glide).
+   * `glide: false` (a resting hand's, #75): nothing may glide or fling on, however the hand last
+   * moved.
+   */
+  end(options?: { glide: false }): boolean
 }
 
 let sink: GrabSink | null = null

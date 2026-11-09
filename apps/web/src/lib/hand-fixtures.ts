@@ -34,8 +34,11 @@ export const pose = (x: number, y: number, gap: number, palm = PALM): HandFrame 
 export const hold = (frame: HandFrame, count: number): HandFrame[] =>
   Array<HandFrame>(count).fill(frame)
 
+/** The thumb–index gap of a hand resting in a pinch, at the chin say: the fingers touch (#75). */
+export const CHIN_GAP = 0.05
+
 /** How a resting hand moves in the camera's picture (#75): not at all, a slow drift, or a sway. */
-export type Rest = 'still' | 'drift' | 'sway'
+export type RestMotion = 'still' | 'drift' | 'sway'
 
 /**
  * `count` frames of a hand resting at (x, y) with its fingers `gap` palms apart (a hand at the
@@ -43,9 +46,9 @@ export type Rest = 'still' | 'drift' | 'sway'
  * slowly by `reach` over the whole stream, or swaying ±`reach` (a repeatable zig-zag).
  */
 export const resting = (
-  motion: Rest,
+  motion: RestMotion,
   count: number,
-  { x = 0.5, y = 0.5, gap = 0.05, reach = 0.01 } = {},
+  { x = 0.5, y = 0.5, gap = CHIN_GAP, reach = 0.01 } = {},
 ): HandFrame[] =>
   Array.from({ length: count }, (_, i) => {
     if (motion === 'drift') return pose(x, y - (reach * i) / Math.max(count - 1, 1), gap)

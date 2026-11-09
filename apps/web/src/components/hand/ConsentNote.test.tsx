@@ -3,7 +3,7 @@ import { act, createRef, useState } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { ConsentNote } from './ConsentNote'
+import { CLICK_WAIT_MS, ConsentNote, UNRELEASED_PRESS_WAIT_MS } from './ConsentNote'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -120,14 +120,39 @@ describe('a press outside the consent note (#74)', () => {
     expect(onLink).toHaveBeenCalledTimes(1)
   })
 
-  it('stops waiting for the click after a short while', () => {
+  it('stops waiting for the click a short while after the release', () => {
     vi.useFakeTimers()
     press(link())
     act(() => {
-      vi.advanceTimersByTime(2000)
+      vi.advanceTimersByTime(CLICK_WAIT_MS)
     })
     click(link())
     expect(onLink).toHaveBeenCalledTimes(1)
+  })
+
+  describe('a press that is never released', () => {
+    const unreleased = () => {
+      vi.useFakeTimers()
+      fire(link(), new PointerEvent('pointerdown', init))
+      fire(link(), new MouseEvent('mousedown', init))
+    }
+
+    it('still has its click swallowed until the longer wait is over', () => {
+      unreleased()
+      act(() => {
+        vi.advanceTimersByTime(UNRELEASED_PRESS_WAIT_MS - 1)
+      })
+      expect(click(link()).defaultPrevented).toBe(true)
+    })
+
+    it('stops waiting then', () => {
+      unreleased()
+      act(() => {
+        vi.advanceTimersByTime(UNRELEASED_PRESS_WAIT_MS)
+      })
+      expect(click(link()).defaultPrevented).toBe(false)
+      expect(onLink).toHaveBeenCalledTimes(1)
+    })
   })
 
   it('stops waiting when the next press begins', () => {

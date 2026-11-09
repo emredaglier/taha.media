@@ -62,8 +62,9 @@ export const HAND_TUNING = {
    * in a pinch (at the chin, say) never clicks or scrolls. Wide open is a thumb–index gap (÷ palm,
    * as the pinch's) of at least the larger of `gapFactor` times the calibrated threshold (above
    * the open hysteresis, `pinch.openFactor`) and `gapMin` (so a threshold clamped to its floor
-   * can't make arming trivial, yet it stays under the 0.45 open gap that calibrates to that floor),
-   * held for `ms`. That run counts as the arming until `holdMs` after it ended, measured to the
+   * can't make arming trivial, yet it stays under the smallest open gap that calibrates to that
+   * floor, `threshold.min` ÷ `calibrationShare`, so such a visitor can still arm), held for `ms`.
+   * While a first hand is still calibrating, `gapMin` also tells open fingers from closed ones. That run counts as the arming until `holdMs` after it ended, measured to the
    * first frame of the fingers closing. A pinch uses its arming up; tracking lost loses it.
    */
   arm: { gapFactor: 2, gapMin: 0.4, ms: 200, holdMs: 1000 },

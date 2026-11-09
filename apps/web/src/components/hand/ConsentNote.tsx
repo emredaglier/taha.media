@@ -10,14 +10,20 @@ export const CONSENT_TEXT = 'Kameran yalnızca elini görmek için açılır; g�
 /** The note's name for assistive technology; the sentence is its description. */
 export const CONSENT_TITLE = 'Kamera izni'
 
-/** How long a swallowed press waits for its click after the pointer is released. */
-const CLICK_WAIT_MS = 600
+/**
+ * How long a swallowed press waits for its click after the pointer is released (DOM timing, not
+ * a Hand control tuning).
+ */
+export const CLICK_WAIT_MS = 600
+
+/** How long a swallowed press waits when its pointer is never released (the tab loses it). */
+export const UNRELEASED_PRESS_WAIT_MS = 6000
 
 /**
  * Takes the press that dismissed the note away from the page: its compat `mousedown` and the
  * `click` that follows, which lands on `pressed` or an ancestor of it (the click's target is the
  * common ancestor of where the pointer went down and up). One-shot: it ends with the first click,
- * the next press, or `CLICK_WAIT_MS` after the release, so a later click is never eaten. It lives
+ * the next press, `CLICK_WAIT_MS` after the release, or `UNRELEASED_PRESS_WAIT_MS` after the press, so a later click is never eaten. It lives
  * on `window`, not in the note's effect, because Vazgeç unmounts the note before the click comes.
  */
 function swallowPress(pressed: Node) {
@@ -52,7 +58,7 @@ function swallowPress(pressed: Node) {
   window.addEventListener('pointercancel', onRelease, true)
   window.addEventListener('click', onClick, true)
   // A press that never gets released or clicked (the tab loses it) must not wait for ever.
-  timer = setTimeout(stop, 10 * CLICK_WAIT_MS)
+  timer = setTimeout(stop, UNRELEASED_PRESS_WAIT_MS)
 }
 
 /**

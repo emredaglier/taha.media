@@ -10,7 +10,7 @@ const tracker = vi.hoisted(() => ({
 }))
 vi.mock('./tracker', () => ({ createHandTracker: tracker.createHandTracker }))
 
-import { hold, pose } from '../../lib/hand-fixtures'
+import { CHIN_GAP, hold, pose } from '../../lib/hand-fixtures'
 import type { HandFrame } from '../../lib/hand-gesture'
 import { HELIX_TUNING } from '../../lib/helix-tuning'
 import { HAND_TUNING } from '../../lib/hand-tuning'
@@ -628,6 +628,42 @@ describe('pinching (#57)', () => {
     expect(scrolled.length).toBe(released)
   })
 
+  describe('a hand resting in a grab (#75)', () => {
+    /** Almost the guard's radius up from where it rests: a jump the cursor takes a moment to follow. */
+    const nudged = pose(0.5, 0.5 - HAND_TUNING.rest.radius * 0.9, CLOSED)
+    /** Held still for `holdMs` after the pinch, then the jump, held there for `frames` frames. */
+    const heldThenNudged = (holdMs: number, frames: number) => [
+      hold(pose(0.5, 0.5, CLOSED), pinch.confirmFrames + framesIn(holdMs)),
+      hold(nudged, frames),
+    ]
+    /** The jump comes four camera frames before the guard fires: the cursor is still moving then. */
+    const restingGrab = () => heldThenNudged(HAND_TUNING.rest.ms - 4 * frameSeconds * 1000, 12)
+
+    it('lets go without a glide, though the cursor was still moving', async () => {
+      await ready()
+      await play(...restingGrab())
+      const scrolledBy = scrolled.length
+      expect(scrolledBy).toBeGreaterThan(0)
+      await play(hold(nudged, framesIn(1500)))
+      expect(scrolled.length).toBe(scrolledBy)
+    })
+
+    it("tells a claimant (the Helix, the Galeri lightbox) that nothing may glide or fling on, as the guard's release does", async () => {
+      const end = vi.fn((_options?: { glide: false }) => true)
+      const unclaim = claimHandGrab({ move: () => true, end })
+      await ready()
+      await play(...restingGrab())
+      expect(end).toHaveBeenCalledTimes(1)
+      expect(end).toHaveBeenLastCalledWith({ glide: false })
+      // The usual release, by opening the fingers, says nothing of the kind.
+      await play(hold(pose(0.5, 0.5, OPEN), HAND_TUNING.arm.ms / (frameSeconds * 1000) + 3))
+      await play(...heldThenNudged(quick.maxMs * 2, 3), hold(pose(0.5, 0.5, OPEN), 3))
+      unclaim()
+      expect(end).toHaveBeenCalledTimes(2)
+      expect(end).toHaveBeenLastCalledWith(undefined)
+    })
+  })
+
   it('a pinch held a little past a click, drifting slightly, scrolls that drift and never glides', async () => {
     await ready()
     // About 430 ms closed while the hand drifts 2% of the frame up, then let go.
@@ -845,13 +881,22 @@ describe('its lifetime (#58)', () => {
   /** Whether a hand is in view, and whether it rests in a pinch (thumb touching index, #75). */
   let present: boolean
   let pinched: boolean
+  /** Whether tracking keeps dropping out: 6 camera frames in 26 without the hand (#75). */
+  let dropouts: boolean
+  /** The room the tests leave around a limit they stop short of or run past. */
+  const MARGIN_MS = 1000
 
   beforeEach(() => {
     present = false
     pinched = false
+    dropouts = false
+    let calls = 0
     markCoachSeen(localStorage) // the coach (which pauses the count) has been seen
     tracker.createHandTracker.mockImplementation(async () => ({
-      detect: () => sighting(present ? pose(0.5, 0.5, pinched ? 0.05 : 0.9) : null),
+      detect: () => {
+        const dropped = dropouts && calls++ % 26 >= 20
+        return sighting(present && !dropped ? pose(0.5, 0.5, pinched ? CHIN_GAP : 0.9) : null)
+      },
       close: tracker.close,
     }))
   })
@@ -892,9 +937,9 @@ describe('its lifetime (#58)', () => {
     pinched = true
     await render()
     await turnOn()
-    await runFor(noHandMs - 1000)
+    await runFor(noHandMs - MARGIN_MS)
     expect(pressed()).toBe('true')
-    await runFor(3000)
+    await runFor(2 * MARGIN_MS)
     expect(pressed()).toBe('false')
     expect(status()).toBe('Elin görünmedi, elinle gezme kapandı')
   })
@@ -903,11 +948,24 @@ describe('its lifetime (#58)', () => {
     present = true
     await render()
     await turnOn()
-    await runFor(5000) // open, so armed
+    await runFor(5 * MARGIN_MS) // an open hand: armed
     pinched = true
-    await runFor(HAND_TUNING.rest.ms + 500 + noHandMs - 3000)
+    // The last engaged frame is the guard's release, rest.ms after the pinch began.
+    await runFor(HAND_TUNING.rest.ms + noHandMs - MARGIN_MS)
     expect(pressed()).toBe('true')
-    await runFor(3500)
+    await runFor(2 * MARGIN_MS)
+    expect(pressed()).toBe('false')
+  })
+
+  it('a hand at the chin whose tracking keeps dropping out does not keep it on (#75)', async () => {
+    present = true
+    pinched = true
+    dropouts = true
+    await render()
+    await turnOn()
+    await runFor(noHandMs - MARGIN_MS)
+    expect(pressed()).toBe('true')
+    await runFor(2 * MARGIN_MS)
     expect(pressed()).toBe('false')
   })
 
