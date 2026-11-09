@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { hold, PALM, pose } from './hand-fixtures'
+import { hold, PALM, pose, resting, type Rest } from './hand-fixtures'
 import {
   INDEX_TIP,
   initialGestureState,
@@ -155,13 +155,24 @@ describe('the pinch', () => {
   /** A visitor's open thumb–index gap, as a share of the palm. */
   const OPEN = 0.9
 
+  const { arm, rest } = HAND_TUNING
+  /** Frames of a wide-open hand that are surely `arm.ms` long (#75). */
+  const armFrames = Math.ceil(arm.ms / FRAME_MS) + 2
+  /** Frames that surely last `ms`. */
+  const framesOf = (ms: number) => Math.ceil(ms / FRAME_MS) + 1
+  /** A held pinch this long (frames) is still short of the rest guard's `rest.ms` (#75). */
+  const UNDER_REST = Math.floor(rest.ms / FRAME_MS) - 15
+
   const still = (gap: number, frames: number) => hold(pose(0.5, 0.5, gap), frames)
   const kinds = (events: GestureEvent[][]) => events.flat().map((e) => e.kind)
   const count = (events: GestureEvent[][], kind: GestureEvent['kind']) =>
     kinds(events).filter((k) => k === kind).length
 
-  /** A hand shown open long enough to calibrate on `open`. */
-  const calibrated = (open = OPEN) => feed(still(open, pinch.calibrationFrames)).state
+  /** A hand shown open long enough to calibrate on `open`, and then wide open long enough to arm. */
+  const calibrated = (open = OPEN) =>
+    feed([...still(open, pinch.calibrationFrames), ...still(open, armFrames)]).state
+  /** A hand shown open long enough to calibrate on `open` and no more: not armed (#75). */
+  const calibratedOnly = (open = OPEN) => feed(still(open, pinch.calibrationFrames)).state
 
   describe('calibration', () => {
     it.each([0.7, OPEN, 1.2])(
@@ -181,6 +192,8 @@ describe('the pinch', () => {
       const { state } = feed([
         ...still(OPEN * share * 0.2, closedFrames),
         ...still(OPEN, pinch.calibrationFrames - closedFrames),
+        // (#75) The pinch needs a wide-open run first: the calibration's own frames don't count.
+        ...still(OPEN, armFrames),
       ])
       expect(state.threshold! / OPEN).toBeCloseTo(share, 6)
       expect(count(feed(still(OPEN * share * 0.9, 10), state).events, 'pinch')).toBe(1)
@@ -214,7 +227,9 @@ describe('the pinch', () => {
     it('never flicker while the gap oscillates inside the hysteresis band', () => {
       // Every frame somewhere between the threshold and the opening gap, never outside it.
       const next = noise(5)
-      const inside = Array.from({ length: 90 }, () => pose(0.5, 0.5, band(0.5 + 0.45 * next())))
+      const inside = Array.from({ length: UNDER_REST }, () =>
+        pose(0.5, 0.5, band(0.5 + 0.45 * next())),
+      )
       const open = feed(inside, calibrated())
       expect(kinds(open.events).filter((k) => k !== 'move')).toEqual([])
       expect(open.state.pinch).toBeNull()
@@ -225,7 +240,7 @@ describe('the pinch', () => {
 
     it('close once, and stay closed, while a noisy gap hovers around the threshold', () => {
       const next = noise(9)
-      const hovering = Array.from({ length: 90 }, () =>
+      const hovering = Array.from({ length: UNDER_REST }, () =>
         pose(0.5, 0.5, threshold * (1 + 0.3 * next())),
       )
       const { events } = feed(hovering, calibrated())
@@ -430,6 +445,236 @@ describe('the pinch', () => {
         expect(taken).toBeLessThan(sweepFrames)
         expect(closedAt - times[taken]!).toBeLessThanOrEqual(pinch.anchorMaxAgeMs)
       })
+    })
+  })
+
+  describe('arming (#75)', () => {
+    /** A thumb touching the index finger: a hand resting at the chin. */
+    const CHIN = 0.05
+    const threshold = OPEN * pinch.calibrationShare
+    const sceneFrames = framesOf(2000)
+    const motions: Rest[] = ['still', 'drift', 'sway']
+    const quiet = (events: GestureEvent[][]) => [
+      ...new Set(kinds(events).filter((k) => k !== 'move' && k !== 'lost')),
+    ]
+
+    /** Three ways a hand can come to the chin already pinched, as the state it starts from. */
+    const starts: Record<string, () => GestureState> = {
+      'after calibrating on an open hand': () =>
+        // Open for the calibration, then relaxed for longer than an arming holds: not wide open.
+        feed(still(threshold * 1.2, framesOf(arm.holdMs) + 5), calibratedOnly()).state,
+      'after tracking was lost and the hand came back': () =>
+        feed(Array(lostAfterFrames).fill(null), calibrated()).state,
+      'as the very first hand ever seen': () => initialGestureState,
+    }
+
+    describe.each(Object.entries(starts))('a hand at the chin %s', (_, start) => {
+      it.each(motions)('(%s) gives no pinch, click or grab, and is not engaged', (motion) => {
+        const { events, state } = feed(resting(motion, sceneFrames, { gap: CHIN }), start())
+        expect(quiet(events)).toEqual([])
+        expect(state.pinch).toBeNull()
+        expect(state.engaged).toBe(false)
+      })
+
+      it.each(motions)(
+        '(%s) with fingers parting for under arm.ms and touching again still gives nothing',
+        (motion) => {
+          const chin = resting(motion, sceneFrames, { gap: CHIN })
+          const { events } = feed(
+            [...chin, ...still(OPEN, 2), ...chin, ...still(OPEN, 2), ...chin],
+            start(),
+          )
+          expect(quiet(events)).toEqual([])
+        },
+      )
+
+      it('follows the fingertip as an open hand does', () => {
+        const { state } = feed(
+          resting('still', sceneFrames, { gap: CHIN, x: 0.4, y: 0.4 }),
+          start(),
+        )
+        const open = cursorAfter(hold(pose(0.4, 0.4, OPEN), 10))
+        expect(state.cursor!.x).toBeCloseTo(open.x, 3)
+        expect(state.cursor!.y).toBeCloseTo(open.y, 3)
+      })
+    })
+
+    it('a real pinch from a hand wide open for arm.ms clicks when quick and still', () => {
+      const tap = [...still(CHIN, 4), ...still(OPEN, 5)]
+      const { events } = feed(tap, calibratedOnly())
+      // Not yet armed: nothing.
+      expect(quiet(events)).toEqual([])
+      const armed = feed([...still(OPEN, armFrames), ...tap], calibratedOnly())
+      expect(count(armed.events, 'pinch')).toBe(1)
+      expect(count(armed.events, 'click')).toBe(1)
+    })
+
+    it('does not arm on a wide-open run shorter than arm.ms', () => {
+      const short = Math.floor(arm.ms / FRAME_MS) - 1
+      const { events } = feed([...still(OPEN, short), ...still(CHIN, 6)], calibratedOnly())
+      expect(quiet(events)).toEqual([])
+    })
+
+    it('stays armed for arm.holdMs after the open run, and no longer', () => {
+      const wait = (ms: number) =>
+        feed(
+          [...still(OPEN, armFrames), ...still(threshold * 1.2, framesOf(ms)), ...still(CHIN, 4)],
+          calibratedOnly(),
+        ).events
+      expect(count(wait(arm.holdMs * 0.5), 'pinch')).toBe(1)
+      expect(count(wait(arm.holdMs + 200), 'pinch')).toBe(0)
+    })
+
+    it('needs another wide-open run for a second pinch after a click', () => {
+      const tap = [...still(CHIN, 4), ...still(OPEN, 3)]
+      const again = feed([...tap, ...tap], calibrated())
+      expect(count(again.events, 'click')).toBe(1)
+      expect(count(again.events, 'pinch')).toBe(1)
+      const rearmed = feed([...tap, ...still(OPEN, armFrames), ...tap], calibrated())
+      expect(count(rearmed.events, 'click')).toBe(2)
+    })
+
+    it('needs another wide-open run for a second pinch after a release', () => {
+      const grab = [...still(CHIN, framesOf(HAND_TUNING.click.maxMs) + 3), ...still(OPEN, 3)]
+      const again = feed([...grab, ...still(CHIN, 8)], calibrated())
+      expect(count(again.events, 'release')).toBe(1)
+      expect(count(again.events, 'pinch')).toBe(1)
+      const rearmed = feed([...grab, ...still(OPEN, armFrames), ...still(CHIN, 8)], calibrated())
+      expect(count(rearmed.events, 'pinch')).toBe(2)
+    })
+
+    it('lets a visitor whose threshold sits at its floor arm with a fully open hand', () => {
+      // The smallest open gap that calibrates to the floor.
+      const open = pinch.threshold.min / pinch.calibrationShare
+      const state = feed(still(open, pinch.calibrationFrames)).state
+      expect(state.threshold).toBe(pinch.threshold.min)
+      const { events } = feed(
+        [...still(open, armFrames), ...still(CHIN, 4), ...still(open, 4)],
+        state,
+      )
+      expect(count(events, 'click')).toBe(1)
+    })
+
+    it('does not let a threshold at its floor arm on a half-open hand', () => {
+      const open = pinch.threshold.min / pinch.calibrationShare
+      const state = feed(still(open, pinch.calibrationFrames)).state
+      const half = arm.gapMin * 0.8
+      const { events } = feed([...still(half, armFrames * 2), ...still(CHIN, 8)], state)
+      expect(quiet(events)).toEqual([])
+    })
+
+    it('stays armed through a pinch that is a grab: deltas, scrolling and stepping are as before', () => {
+      const rise = 0.1
+      const moving = Array.from({ length: 6 }, (_, i) =>
+        pose(0.5, 0.5 - (rise * (i + 1)) / 6, CHIN),
+      )
+      const { events } = feed(
+        [
+          ...still(CHIN, 2),
+          ...moving,
+          ...hold(pose(0.5, 0.5 - rise, CHIN), 20),
+          ...hold(pose(0.5, 0.5 - rise, OPEN), 5),
+        ],
+        calibrated(),
+      )
+      const ups = events.flat().flatMap((e) => (e.kind === 'grab' ? [e.up] : []))
+      expect(ups.reduce((a, b) => a + b, 0)).toBeCloseTo(rise / HAND_TUNING.frame.height, 2)
+      expect(count(events, 'release')).toBe(1)
+    })
+
+    it('is lost with tracking: an armed hand that leaves and returns pinched is ignored', () => {
+      const { events } = feed(
+        [...Array(lostAfterFrames).fill(null), ...still(CHIN, 20)],
+        calibrated(),
+      )
+      expect(quiet(events)).toEqual([])
+    })
+  })
+
+  describe('the rest guard (#75)', () => {
+    const CHIN = 0.05
+    const motions: Rest[] = ['still', 'drift', 'sway']
+    const FRAMES_REST = framesOf(rest.ms)
+    const quiet = (events: GestureEvent[][]) => [
+      ...new Set(kinds(events).filter((k) => k !== 'move' && k !== 'lost')),
+    ]
+    /** The frame index of the first event of `kind`. */
+    const firstOf = (events: GestureEvent[][], kind: GestureEvent['kind']) =>
+      events.findIndex((step) => step.some((e) => e.kind === kind))
+
+    it.each(motions)('(%s) lets a resting grab go with a release after rest.ms', (motion) => {
+      const resting_ = resting(motion, FRAMES_REST + 40, { gap: CHIN })
+      const { events, state } = feed(resting_, calibrated())
+      expect(count(events, 'pinch')).toBe(1)
+      expect(count(events, 'release')).toBe(1)
+      expect(count(events, 'click')).toBe(0)
+      // Not before rest.ms has passed since the pinch began, and soon after.
+      const pinchedAt = firstOf(events, 'pinch')
+      const heldFor = (firstOf(events, 'release') - pinchedAt) * FRAME_MS
+      expect(heldFor).toBeGreaterThanOrEqual(rest.ms)
+      expect(heldFor).toBeLessThan(rest.ms + 3 * FRAME_MS)
+      // Then nothing more, and the hand is not engaged.
+      expect(
+        events
+          .slice(firstOf(events, 'release') + 1)
+          .flat()
+          .every((e) => e.kind === 'move'),
+      ).toBe(true)
+      expect(state.pinch).toBeNull()
+      expect(state.engaged).toBe(false)
+    })
+
+    it('does not let go of a grab that keeps moving', () => {
+      // Sweeping across the frame for three times rest.ms: always further than the radius.
+      const frames = framesOf(rest.ms * 3)
+      const sweep = Array.from({ length: frames }, (_, i) =>
+        pose(0.5 + 0.2 * Math.sin(i * 0.1), 0.5, CHIN),
+      )
+      const { events } = feed([...still(CHIN, 3), ...sweep], calibrated())
+      expect(count(events, 'release')).toBe(0)
+    })
+
+    it('lets go rest.ms after a moving grab comes to a stop', () => {
+      const rise = 0.1
+      const moving = Array.from({ length: 6 }, (_, i) =>
+        pose(0.5, 0.5 - (rise * (i + 1)) / 6, CHIN),
+      )
+      const { events } = feed(
+        [...still(CHIN, 2), ...moving, ...hold(pose(0.5, 0.5 - rise, CHIN), FRAMES_REST + 30)],
+        calibrated(),
+      )
+      expect(count(events, 'release')).toBe(1)
+      const grabs = events.flat().flatMap((e) => (e.kind === 'grab' ? [e.up] : []))
+      expect(grabs.reduce((a, b) => a + b, 0)).toBeCloseTo(rise / HAND_TUNING.frame.height, 2)
+    })
+
+    it('reports where its last steady frame was, so the page does not glide on a rest', () => {
+      const { events } = feed(resting('still', FRAMES_REST + 10, { gap: CHIN }), calibrated())
+      const release = events.flat().find((e) => e.kind === 'release')
+      expect(release).toEqual({ kind: 'release', steadyAt: expect.any(Number) })
+    })
+
+    it('ignores the closed fingers until the hand has been wide open for arm.ms', () => {
+      const resting_ = resting('sway', FRAMES_REST + 10, { gap: CHIN })
+      const rested = feed(resting_, calibrated()).state
+      // Staying closed, or parting for under arm.ms and touching again: nothing.
+      const stays = feed(
+        [...resting('sway', FRAMES_REST, { gap: CHIN }), ...still(OPEN, 2), ...still(CHIN, 20)],
+        rested,
+      )
+      expect(quiet(stays.events)).toEqual([])
+      // Wide open for arm.ms, then a pinch counts again.
+      const armed = feed([...still(OPEN, armFrames), ...still(CHIN, 4), ...still(OPEN, 4)], rested)
+      expect(count(armed.events, 'click')).toBe(1)
+    })
+
+    it('does not let go of a deliberate pinch shorter than rest.ms', () => {
+      const { events } = feed(
+        resting('still', framesOf(rest.ms * 0.8), { gap: CHIN }),
+        calibrated(),
+      )
+      expect(count(events, 'release')).toBe(0)
+      expect(count(events, 'grab')).toBe(0)
     })
   })
 })
