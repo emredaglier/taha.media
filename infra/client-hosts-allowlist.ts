@@ -12,6 +12,12 @@
  * Never add a host that a consent-gated or "nothing is collected" feature would send data to.
  *
  * `*.sub.domain.tld` allows any subdomain of it, not the bare domain, and needs three labels.
+ *
+ * `in:` is a regex on a file's path with forward slashes. The scan of built output
+ * (`.next/static`, the prerendered HTML) matches it against the built file's path; the scan of our
+ * own source (`apps/web/src`, `client-hosts-source.test.ts`) matches it against the source file's
+ * path. A scope for built output (`/static/chunks/`) therefore never applies to source, and a
+ * host named in our source (a comment included) needs its own entry scoped to that file.
  */
 import type { AllowedHost } from './client-hosts.ts'
 
@@ -65,21 +71,65 @@ export const ALLOWLIST: AllowedHost[] = [
   },
 
   // --- Names that are never requested ------------------------------------------------------------
+  // Each is scoped to the built files that hold it, so the same host in our own code, in another
+  // file type or in another library's chunk still fails.
   {
     host: 'www.w3.org',
+    in: /\/static\/chunks\/|\.(?:html|rsc|svg)$/,
     reason:
       'XML namespace identifiers (SVG, MathML, XLink, XML) that React and inline SVG use to create ' +
-      'elements; an identifier, not an address anything fetches.',
+      'elements, and the `xmlns` of prerendered markup or an SVG file; an identifier, not an ' +
+      'address anything fetches.',
   },
   {
     host: 'react.dev',
+    in: /\/static\/chunks\//,
     reason:
       "React's production error decoder link (`https://react.dev/errors/<code>`), built into an " +
-      'error message and never requested by the page.',
+      'error message in a chunk and never requested by the page.',
   },
   {
     host: 'nextjs.org',
-    reason: "Documentation links in Next's error and warning messages; text, never requested.",
+    in: /\/static\/chunks\//,
+    reason:
+      "Documentation links in Next's error and warning messages in a chunk; text, never requested.",
+  },
+  {
+    host: 'tailwindcss.com',
+    in: /\/static\/css\/[^/]+\.css$/,
+    reason:
+      'The licence banner Tailwind keeps at the top of the built stylesheet ' +
+      '(`/*! tailwindcss v4 | MIT License | https://tailwindcss.com */`); a comment, never requested.',
+  },
+  {
+    host: 'github.com',
+    in: /\/static\/chunks\/polyfills-[^/]+\.js$/,
+    reason:
+      "core-js's `license:` and `source:` strings in Next's polyfills chunk, a link to its licence " +
+      'and repository kept for attribution; text, never requested.',
+  },
+  {
+    host: 'docs.sentry.io',
+    in: /\/static\/chunks\/[^/]+\.js$/,
+    reason:
+      "The Sentry browser SDK's warning about running inside a browser extension, a " +
+      'documentation link in a console message; text, never requested.',
+  },
+
+  // --- Names in our own source (the source scan only; none of them is in the built output) ------
+  {
+    host: 'site.invalid',
+    in: /\/apps\/web\/src\/app\/preview\/route\.ts$/,
+    reason:
+      "A placeholder origin for parsing the preview route's `path` parameter (an open-redirect " +
+      'guard): `.invalid` is reserved and never resolves, and the code only compares origins.',
+  },
+  {
+    host: 'storage.googleapis.com',
+    in: /\/apps\/web\/src\/components\/hand\/tracker\.ts$/,
+    reason:
+      "A comment in tracker.ts saying where the vendored hand model came from (MediaPipe's model " +
+      'bucket). The file is vendored and SHA-256 pinned, never downloaded from there.',
   },
 
   // --- MediaPipe's WASM loader and binary (Hand control, #56) ------------------------------------

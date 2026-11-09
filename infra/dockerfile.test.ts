@@ -88,7 +88,9 @@ describe('Dockerfile', () => {
     )
     // What the browser downloads: the built static files and `public/`, and the prerendered HTML.
     expect(step).toMatch(/client-hosts\.ts apps\/web\/\.next\/static apps\/web\/public/)
-    expect(step).toMatch(/client-hosts\.ts --ext html,rsc --allow-empty apps\/web\/\.next\/server/)
+    expect(step).toMatch(
+      /client-hosts\.ts --ext html,rsc,body --allow-empty apps\/web\/\.next\/server/,
+    )
     // `&&`, so the first scan's failure stops the build, and the files are in the build context.
     expect(step).toContain('&& node infra/client-hosts.ts')
     expect(read('.dockerignore')).not.toMatch(/^!?\/?infra\b/m)

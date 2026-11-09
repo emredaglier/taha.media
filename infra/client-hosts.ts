@@ -5,15 +5,21 @@
  * guards the built output, so the next library that phones home, a version bump that moves an
  * endpoint or a script tag in our own code fails the build too.
  *
- *   node infra/client-hosts.ts [--ext html,rsc] [--allow-empty] [--allowlist <file>] <folder>...
+ *   node infra/client-hosts.ts [--ext html,rsc,body] [--allow-empty] [--allowlist <file>] <folder>...
  *
  * Scans every file below each folder whose type a browser downloads or reads (.js .mjs .css .html
  * .wasm .task .json .txt .svg .xml .webmanifest .rsc; `--ext` narrows that, for folders that also
  * hold server code). Source maps are skipped: they are removed after upload and never ship. It
- * finds `http(s)://` and `ws(s)://` URLs and protocol-relative `//host` ones, also inside JSON
- * strings (`https:\/\/`) and in binaries. A run that finds no file at all fails, so a wrong path
- * cannot pass, unless `--allow-empty` says there may be none (the HTML Next prerenders). The
- * allowlist is `infra/client-hosts-allowlist.ts`, one commented entry per host.
+ * finds `http(s)://` and `ws(s)://` URLs (also with a bracketed IPv6 host) and protocol-relative
+ * `//host` ones, also inside JSON strings (`https:\/\/`, `\u002f`, `\x2f`) and in binaries. A
+ * folder that does not exist is skipped when another given folder has files (`apps/web/public`
+ * may not exist); a run that finds no file at all fails, so a wrong path cannot pass, unless
+ * `--allow-empty` says there may be none (the HTML Next prerenders). The allowlist is
+ * `infra/client-hosts-allowlist.ts`, one commented entry per host.
+ *
+ * Server Components are not in the built client output (the image builds with no database and
+ * the routes are `force-dynamic`, so little HTML is prerendered), so `scanSource` reads
+ * `apps/web/src` against the same allowlist; `client-hosts-source.test.ts` runs it in `pnpm test`.
  *
  * Not reported, because they cannot leave the machine or are not literal: single-label names
  * (`localhost`, Next's `http://n` base) and URLs built at run time (`https://${host}`). A host
@@ -34,7 +40,11 @@ export type AllowedHost = {
   host: string
   /** Why this host may appear in the client output: what it is and why it is never a data leak. */
   reason: string
-  /** Only in files whose path (forward slashes) matches. Omit when any file may name the host. */
+  /**
+   * Only in files whose path (forward slashes) matches. Omit when any file may name the host. In
+   * the source scan it is matched against the source file's path, so a scope written for built
+   * output (`/static/chunks/`) does not apply there; see `client-hosts-source.test.ts`.
+   */
   in?: RegExp
 }
 
@@ -63,11 +73,17 @@ export const SCANNED_EXTENSIONS = [
   '.rsc',
 ]
 
+/** What the source scan reads: the app's own code and styles. */
+export const SOURCE_EXTENSIONS = ['.ts', '.tsx', '.css']
+/** Tests, specs, test helper folders and fixtures: they name hosts to test with and never ship. */
+const NOT_SHIPPED_SOURCE =
+  /(?:^|\/)(?:test|__tests__|__fixtures__|fixtures?)\/|\.(?:test|spec)\.[^/]+$|[-.]fixtures?\.[^/]+$/
+
 const MIN_REASON_LENGTH = 12
 const HOSTNAME = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*$/
 /** What follows the dot in `//name.js`: a file, not a top-level domain. */
 const FILE_LIKE = new Set(
-  'js mjs cjs css map json wasm task html htm ts tsx jsx svg png jpg jpeg webp avif gif ico woff woff2 ttf otf txt xml md'.split(
+  'js mjs cjs css map json wasm task html htm ts tsx jsx svg png jpg jpeg webp avif gif ico woff woff2 ttf otf txt xml'.split(
     ' ',
   ),
 )
@@ -100,22 +116,36 @@ function hostMatches(pattern: string, host: string): boolean {
   return pattern.startsWith('*.') ? host.endsWith(pattern.slice(1)) : host === pattern
 }
 
-/** URLs with a scheme: the host stops at a port, path, query, fragment or any quote. */
-const SCHEME_URL = /(?:https?|wss?):\/\/(?:[^\s/?#@"'`<>\\]*@)?([A-Za-z0-9.-]*)/gi
+/**
+ * URLs with a scheme: the host stops at a port, path, query, fragment or any quote. A host is a
+ * name, an IPv4 address or a bracketed IPv6 address (at least one colon, so `[abc]` is no host).
+ */
+const SCHEME_URL =
+  /(?:https?|wss?):\/\/(?:[^\s/?#@"'`<>\\[\]]*@)?(\[(?=[0-9A-Fa-f.]*:)[0-9A-Fa-f:.]+\]|[A-Za-z0-9.-]*)/gi
+const IPV6_HOST = /^\[[0-9a-f:.]+\]$/
 /** `//host.tld` not glued to a word, a path or a scheme. */
 const RELATIVE_URL =
   /(?<![\w:/.\\-])\/\/([A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+)(?![\w.-])/g
 
-/** JSON-escaped slashes (`https:\/\/`, `\u002F`) become plain ones, so the patterns see one form. */
-const unescapeSlashes = (text: string) => text.replace(/\\u002f/gi, '/').replace(/\\\//g, '/')
+/**
+ * Escaped slashes (`https:\/\/`, `\u002F`, `\x2F`) become plain ones, so the patterns see one
+ * form. Offsets, lines and excerpts of a finding refer to this text.
+ */
+export const unescapeSlashes = (text: string) =>
+  text.replace(/\\u002f|\\x2f/gi, '/').replace(/\\\//g, '/')
 
-/** The hosts a text names and where (offsets into the unescaped text, which `scanText` maps). */
+/** The hosts a text names and where (`index` is an offset into `unescapeSlashes(text)`). */
 export function extractHosts(text: string): { host: string; index: number }[] {
+  return hostsInUnescaped(unescapeSlashes(text))
+}
+
+/** `extractHosts` for a text that `unescapeSlashes` has already been applied to. */
+function hostsInUnescaped(plain: string): { host: string; index: number }[] {
   const found: { host: string; index: number }[] = []
-  const plain = unescapeSlashes(text)
   for (const match of plain.matchAll(SCHEME_URL)) {
     const host = match[1]!.toLowerCase().replace(/\.+$/, '')
-    if (host.includes('.') && HOSTNAME.test(host)) found.push({ host, index: match.index })
+    if ((host.includes('.') && HOSTNAME.test(host)) || IPV6_HOST.test(host))
+      found.push({ host, index: match.index })
   }
   for (const match of plain.matchAll(RELATIVE_URL)) {
     const host = match[1]!.toLowerCase()
@@ -136,38 +166,49 @@ function excerptAround(text: string, index: number): string {
 }
 
 /** Every file below `folder` of a scanned type, in a stable order. */
-function filesBelow(folder: string, extensions: readonly string[]): string[] {
+function filesBelow(
+  folder: string,
+  extensions: readonly string[],
+  skip?: (file: string) => boolean,
+): string[] {
   return fs
     .readdirSync(folder, { withFileTypes: true })
     .sort((a, b) => a.name.localeCompare(b.name))
     .flatMap((entry) => {
       const full = path.join(folder, entry.name)
-      if (entry.isDirectory()) return filesBelow(full, extensions)
-      return extensions.includes(path.extname(entry.name).toLowerCase()) ? [full] : []
+      if (entry.isDirectory()) return filesBelow(full, extensions, skip)
+      if (!extensions.includes(path.extname(entry.name).toLowerCase())) return []
+      return skip?.(full) ? [] : [full]
     })
 }
 
 /**
- * Scans the folders; returns the files looked at and every place a host outside `allowlist` is
- * named. Throws on a folder that does not exist.
+ * Scans the folders; returns the files looked at, every place a host outside `allowlist` is named,
+ * and the folders that do not exist (the caller decides whether that is an error). A path that is
+ * a file, not a folder, throws. `skip` leaves out files by their full path.
  */
 export function scanFolders(
   folders: readonly string[],
   allowlist: readonly AllowedHost[],
   extensions: readonly string[] = SCANNED_EXTENSIONS,
-): { scanned: number; findings: Finding[] } {
+  skip?: (file: string) => boolean,
+): { scanned: number; findings: Finding[]; missing: string[] } {
   const findings: Finding[] = []
+  const missing: string[] = []
   let scanned = 0
   for (const folder of folders) {
-    if (!fs.existsSync(folder) || !fs.statSync(folder).isDirectory())
-      throw new Error(`${folder} is not a folder: run the scan on a finished build`)
-    for (const file of filesBelow(folder, extensions)) {
+    if (!fs.existsSync(folder)) {
+      missing.push(folder)
+      continue
+    }
+    if (!fs.statSync(folder).isDirectory()) throw new Error(`${folder} is not a folder`)
+    for (const file of filesBelow(folder, extensions, skip)) {
       scanned++
       // Latin-1 reads every byte as one character, so binaries and UTF-8 text both keep their offsets.
       const text = unescapeSlashes(fs.readFileSync(file, 'latin1'))
       const where = toForwardSlashes(file)
       let lineStarts: number[] | undefined
-      for (const { host, index } of extractHosts(text)) {
+      for (const { host, index } of hostsInUnescaped(text)) {
         const allowed = allowlist.some(
           (entry) => hostMatches(entry.host, host) && (!entry.in || entry.in.test(where)),
         )
@@ -185,6 +226,24 @@ export function scanFolders(
       }
     }
   }
+  return { scanned, findings, missing }
+}
+
+/**
+ * Scans the web app's own source (`.ts`, `.tsx`, `.css`, without tests and fixtures) against the
+ * allowlist: Server Components, which the built client output does not hold. An entry's `in:` is
+ * matched against the source file's path, so scopes written for built output never apply. Throws
+ * when the folder is missing or holds no source, so a wrong path cannot pass.
+ */
+export function scanSource(
+  folder: string,
+  allowlist: readonly AllowedHost[],
+): { scanned: number; findings: Finding[] } {
+  const skip = (file: string) =>
+    NOT_SHIPPED_SOURCE.test(toForwardSlashes(path.relative(folder, file)))
+  const { scanned, findings, missing } = scanFolders([folder], allowlist, SOURCE_EXTENSIONS, skip)
+  if (missing.length > 0) throw new Error(`${folder} is not a folder: the source scan needs it`)
+  if (scanned === 0) throw new Error(`no source files below ${folder}: is this the app's src?`)
   return { scanned, findings }
 }
 
@@ -236,7 +295,9 @@ async function main(args: string[]): Promise<number> {
     else folders.push(arg)
   }
   if (folders.length === 0) {
-    console.error('usage: node infra/client-hosts.ts [--ext html,rsc] [--allow-empty] <folder>...')
+    console.error(
+      'usage: node infra/client-hosts.ts [--ext html,rsc,body] [--allow-empty] <folder>...',
+    )
     return 1
   }
   const problems = allowlistProblems(allowlist)
@@ -244,7 +305,12 @@ async function main(args: string[]): Promise<number> {
     console.error(`The allowlist is not valid:\n${problems.map((p) => `  ${p}`).join('\n')}`)
     return 1
   }
-  const { scanned, findings } = scanFolders(folders, allowlist, extensions)
+  const { scanned, findings, missing } = scanFolders(folders, allowlist, extensions)
+  // A missing folder is skipped (`apps/web/public` may not exist) only when another one had files.
+  if (missing.length > 0 && scanned === 0) {
+    console.error(`${missing.join(', ')} is not a folder: run the scan on a finished build`)
+    return 1
+  }
   if (scanned === 0 && !allowEmpty) {
     console.error(`No files to scan below ${folders.join(', ')}: is this a finished build?`)
     return 1
@@ -253,7 +319,8 @@ async function main(args: string[]): Promise<number> {
     console.error(formatFindings(findings))
     return 1
   }
-  console.log(`ok: ${scanned} files scanned, every host they name is on the allowlist`)
+  const skipped = missing.length > 0 ? ` (skipped, not a folder: ${missing.join(', ')})` : ''
+  console.log(`ok: ${scanned} files scanned, every host they name is on the allowlist${skipped}`)
   return 0
 }
 
