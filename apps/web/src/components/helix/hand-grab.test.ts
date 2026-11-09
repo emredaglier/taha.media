@@ -93,6 +93,18 @@ describe("the hand's grab on Home", () => {
     expect(model.inputs).toEqual(['dragStart', 'dragMove', 'dragMove', 'dragEnd'])
   })
 
+  it('stops turning when the menu opens mid-grab: the Helix settles, the page gets the rest', () => {
+    const model = helix()
+    let menuOpen = false
+    const grab = helixGrab({ turns: () => !menuOpen, apply: model.apply })
+    expect(grab.move(0.05)).toBe(true)
+    menuOpen = true
+    expect(grab.move(0.05)).toBe(false)
+    expect(grab.move(0.05)).toBe(false)
+    expect(grab.end()).toBe(false)
+    expect(model.inputs).toEqual(['dragStart', 'dragMove', 'dragEnd'])
+  })
+
   it('tells the Helix when a grab starts turning it (no card is hovered meanwhile)', () => {
     const model = helix()
     let started = 0

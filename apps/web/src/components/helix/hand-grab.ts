@@ -8,7 +8,8 @@ import type { GrabSink } from '../hand/grab'
  * (`dragStart`, `dragMove`, `dragEnd`), so the motion model follows and then settles on a card as
  * it does for a mouse or a finger. Only while `turns()` says the Helix takes input (Home holds the
  * screen, the menu is shut); before that the move is left to the page, whose scroll scrubs the
- * zoom. A grab that began on the page is taken over at the first move after the melt. The hand
+ * zoom. A grab that began on the page is taken over at the first move after the melt, and one that
+ * is turning the Helix when the menu opens lets go of it there (the Helix settles). The hand
  * moves `up` screen heights; the Helix turns `HAND_TUNING.grab.turnCards` cards per screen height,
  * given to the model in drag pixels. `onStart` runs when a grab starts turning the Helix.
  */
@@ -27,6 +28,12 @@ export function helixGrab({
       return holding
     },
     move(up) {
+      if (holding && !turns()) {
+        // The menu opened mid-grab (or the logo replayed the opening): stop turning and settle.
+        holding = false
+        apply({ kind: 'dragEnd' })
+        return false
+      }
       if (!holding) {
         if (!turns()) return false
         holding = true

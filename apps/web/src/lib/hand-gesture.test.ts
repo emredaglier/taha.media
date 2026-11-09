@@ -1,12 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
+import { hold, PALM, pose } from './hand-fixtures'
 import {
-  INDEX_KNUCKLE,
   INDEX_TIP,
   initialGestureState,
   readGesture,
-  THUMB_TIP,
-  WRIST,
   type GestureEvent,
   type GestureState,
   type HandFrame,
@@ -153,24 +151,11 @@ describe('tracking lost', () => {
 
 describe('the pinch', () => {
   const { pinch } = HAND_TUNING
-  /** The palm's length (wrist to index knuckle), in camera-frame heights. */
-  const PALM = 0.15
+  const share = pinch.calibrationShare
   /** A visitor's open thumb–index gap, as a share of the palm. */
   const OPEN = 0.9
 
-  /**
-   * A hand whose index fingertip is at (x, y) in the camera's own picture, with the thumb's tip
-   * below it at `gap` times the palm's length (the pinch ratio the reader should measure).
-   */
-  const pose = (x: number, y: number, gap: number): HandFrame =>
-    Array.from({ length: 21 }, (_, i) => {
-      if (i === INDEX_TIP) return { x, y }
-      if (i === THUMB_TIP) return { x, y: y + gap * PALM }
-      if (i === INDEX_KNUCKLE) return { x, y: y + 0.2 }
-      if (i === WRIST) return { x, y: y + 0.2 + PALM }
-      return { x, y: y + 0.1 }
-    })
-  const still = (gap: number, frames: number) => Array<HandFrame>(frames).fill(pose(0.5, 0.5, gap))
+  const still = (gap: number, frames: number) => hold(pose(0.5, 0.5, gap), frames)
   const kinds = (events: GestureEvent[][]) => events.flat().map((e) => e.kind)
   const count = (events: GestureEvent[][], kind: GestureEvent['kind']) =>
     kinds(events).filter((k) => k === kind).length
@@ -180,15 +165,26 @@ describe('the pinch', () => {
 
   describe('calibration', () => {
     it.each([0.7, OPEN, 1.2])(
-      'sets the threshold to about a third of the open gap (%s palms)',
+      'sets the threshold to its share of the open gap (%s palms)',
       (open) => {
         const state = calibrated(open)
-        expect(state.threshold! / open).toBeCloseTo(1 / 3, 2)
-        // Just under a third closes the fingers; just over doesn't.
-        expect(count(feed(still(open * 0.3, 10), state).events, 'pinch')).toBe(1)
-        expect(count(feed(still(open * 0.36, 10), state).events, 'pinch')).toBe(0)
+        expect(state.threshold! / open).toBeCloseTo(share, 6)
+        // Just under the share closes the fingers; just over doesn't.
+        expect(count(feed(still(open * share * 0.9, 10), state).events, 'pinch')).toBe(1)
+        expect(count(feed(still(open * share * 1.1, 10), state).events, 'pinch')).toBe(0)
       },
     )
+
+    it('reads the open gap from the open frames when the hand starts pinched or in a fist', () => {
+      // Most of the calibration closed, then open: pinching works as for an open start.
+      const closedFrames = Math.ceil(pinch.calibrationFrames / 2)
+      const { state } = feed([
+        ...still(OPEN * share * 0.2, closedFrames),
+        ...still(OPEN, pinch.calibrationFrames - closedFrames),
+      ])
+      expect(state.threshold! / OPEN).toBeCloseTo(share, 6)
+      expect(count(feed(still(OPEN * share * 0.9, 10), state).events, 'pinch')).toBe(1)
+    })
 
     it('waits for the open hand: no pinch before it has measured the gap', () => {
       const { events, state } = feed(still(OPEN * 0.1, pinch.calibrationFrames - 1))
@@ -203,7 +199,7 @@ describe('the pinch', () => {
 
     it('survives tracking lost: the hand comes back calibrated', () => {
       const lost = feed(Array(lostAfterFrames).fill(null), calibrated()).state
-      expect(lost.threshold).toBeCloseTo(OPEN / 3, 2)
+      expect(lost.threshold).toBeCloseTo(OPEN * share, 6)
     })
   })
 
@@ -285,8 +281,8 @@ describe('the pinch', () => {
         [
           ...still(closed, tuning.confirmFrames),
           ...moving,
-          ...Array<HandFrame>(30).fill(pose(0.5, 0.5 - rise, closed)),
-          ...Array<HandFrame>(tuning.confirmFrames + 3).fill(pose(0.5, 0.5 - rise, OPEN)),
+          ...hold(pose(0.5, 0.5 - rise, closed), 30),
+          ...hold(pose(0.5, 0.5 - rise, OPEN), tuning.confirmFrames + 3),
         ],
         calibrated(),
       )
@@ -305,6 +301,36 @@ describe('the pinch', () => {
       const grabbing = feed(still(closed, Math.ceil(click.maxMs / FRAME_MS) + 3), calibrated())
       const { events } = feed(Array(lostAfterFrames).fill(null), grabbing.state)
       expect(kinds(events)).toEqual(['release', 'lost'])
+    })
+
+    it('a pinch that is not yet a grab ends with the loss alone when the hand leaves', () => {
+      const pinching = feed(still(closed, tuning.confirmFrames + 1), calibrated())
+      const { events } = feed(Array(lostAfterFrames).fill(null), pinching.state)
+      expect(kinds(events)).toEqual(['lost'])
+    })
+
+    it("marks a grab's first delta, the drift since the pinch began, as a catch-up", () => {
+      // Held past a click's length while drifting slowly up, then held still.
+      const frames = Math.ceil(click.maxMs / FRAME_MS) + 3
+      const drift = Array.from({ length: frames }, (_, i) =>
+        pose(0.5, 0.5 - (0.02 * (i + 1)) / frames, closed),
+      )
+      const { events } = feed(
+        [...still(closed, tuning.confirmFrames), ...drift, ...hold(drift.at(-1)!, 3)],
+        calibrated(),
+      )
+      const grabs = events.flat().filter((e) => e.kind === 'grab')
+      const pinchedAt = clock - (frames + 3) * FRAME_MS
+      expect(grabs[0]!.since).toBeCloseTo(pinchedAt, 6)
+      expect(grabs.slice(1).every((e) => e.since === undefined)).toBe(true)
+    })
+
+    it('a release tells when its last steady frame was: before the fingers began to open', () => {
+      const grabbing = feed(still(closed, Math.ceil(click.maxMs / FRAME_MS) + 3), calibrated())
+      const lastSteady = clock
+      const { events } = feed(still(OPEN, tuning.confirmFrames), grabbing.state)
+      const release = events.flat().find((e) => e.kind === 'release')
+      expect(release).toEqual({ kind: 'release', steadyAt: lastSteady })
     })
 
     describe('the grab anchor', () => {
@@ -342,16 +368,41 @@ describe('the pinch', () => {
 
       it('ignores the fingers closing: a held grab gives no movement from it', () => {
         const before = feed(still(OPEN, 30), calibrated())
-        const { events } = feed(
-          [...closing(5), ...Array<HandFrame>(30).fill(pinchedAt)],
-          before.state,
-        )
+        const { events } = feed([...closing(5), ...hold(pinchedAt, 30)], before.state)
         const grabbed = events.flat().flatMap((e) => (e.kind === 'grab' ? [e.up] : []))
         expect(Math.abs(grabbed.reduce((a, b) => a + b, 0))).toBeLessThan(0.002)
         // The cursor during the grab is where it was aimed.
         const aimed = before.state.cursor!
         const last = cursorBefore([...events, [{ kind: 'lost' }]], 'lost')!
         expect(Math.hypot(last.x - aimed.x, last.y - aimed.y)).toBeLessThan(0.005)
+      })
+
+      it(`reaches back no more than ${pinch.anchorMaxAgeMs} ms before the fingers closed`, () => {
+        // The hand sweeps 0.3 of the width in 300 ms, its gap relaxing early in the sweep, then
+        // pinches: the widest gap is before the sweep, far back, but the anchor stays in the cap.
+        const start = feed(hold(pose(0.65, 0.5, OPEN), 30), calibrated())
+        const sweepFrames = Math.round(300 / FRAME_MS)
+        const sweep = Array.from({ length: sweepFrames }, (_, i) => {
+          const t = (i + 1) / sweepFrames
+          return pose(0.65 - 0.3 * t, 0.5, OPEN - (OPEN - 0.72) * Math.min(1, 3 * t))
+        })
+        const times: number[] = []
+        const cursors: ScreenPoint[] = []
+        let state = start.state
+        for (const frame of [...sweep, ...hold(pose(0.35, 0.5, closed), tuning.confirmFrames)]) {
+          clock += FRAME_MS
+          state = readGesture(state, frame, clock).state
+          times.push(clock)
+          cursors.push(state.cursor!)
+        }
+        const closedAt = times[sweepFrames]!
+        const anchored = cursors.at(-1)!
+        // The frame whose cursor the pinch took: within the cap before the closing.
+        const taken = cursors.findIndex(
+          (c) => Math.hypot(c.x - anchored.x, c.y - anchored.y) < 1e-9,
+        )
+        expect(taken).toBeLessThan(sweepFrames)
+        expect(closedAt - times[taken]!).toBeLessThanOrEqual(pinch.anchorMaxAgeMs)
       })
     })
   })

@@ -139,17 +139,20 @@ export function HandControl() {
     }
 
     /** The grab moved `up` screen heights at `at` (ms): its claimant takes it, or the page. */
-    const grab = (up: number, at: number) => {
+    const grab = (up: number, at: number, since: number | undefined) => {
       grabbing = true
       if (handGrabSink()?.move(up)) return
-      scroller.move(up, at)
+      scroller.move(up, at, since)
     }
-    /** The grab let go at `at` (ms): the claimant settles, or the page glides on. */
-    const letGo = (at: number) => {
-      if (!grabbing) return
+    /**
+     * Ends the grab under way: its claimant settles. The page glides on only when `letGo` says
+     * when the hand let go (and when its last steady frame was); otherwise it stops at once.
+     */
+    const endGrab = (letGo?: { steadyAt: number; at: number }) => {
+      const claimed = grabbing && handGrabSink()?.end() === true
       grabbing = false
-      if (handGrabSink()?.end()) scroller.cancel()
-      else scroller.release(at)
+      if (letGo && !claimed) scroller.release(letGo.steadyAt, letGo.at)
+      else scroller.cancel()
     }
 
     const track = (attempt: number) => {
@@ -206,11 +209,11 @@ export function HandControl() {
               explorer.click()
               break
             case 'grab':
-              grab(event.up, at)
+              grab(event.up, at, event.since)
               break
             case 'release':
               fillRing(false)
-              letGo(at)
+              endGrab({ steadyAt: event.steadyAt, at })
               break
           }
         }
@@ -285,9 +288,7 @@ export function HandControl() {
           showRing(null)
           explorer.release()
           // A grab under way lets go without gliding: the Helix settles, the page stays.
-          if (grabbing) handGrabSink()?.end()
-          grabbing = false
-          scroller.cancel()
+          endGrab()
           cursor = null
           return
       }

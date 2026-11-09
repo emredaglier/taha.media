@@ -26,10 +26,18 @@ export type GestureEvent =
   | { kind: 'pinch' }
   /** A quick, still pinch let go: click where the cursor is. */
   | { kind: 'click' }
-  /** A grab moved `up` screen heights since the last one (negative: down). */
-  | { kind: 'grab'; up: number }
-  /** A grab let go (or the hand left the camera while pinching). */
-  | { kind: 'release' }
+  /**
+   * A grab moved `up` screen heights since the last one (negative: down). `since` marks the
+   * catch-up: the first delta, which brings in at once what the cursor moved from the anchor since
+   * the pinch began (`since`, ms) until it turned out to be a grab, so its speed is spread over
+   * that time, not over one frame.
+   */
+  | { kind: 'grab'; up: number; since?: number }
+  /**
+   * A grab let go (or the hand left the camera mid-grab). `steadyAt` is the time (ms) of its last
+   * steady frame: the release itself comes a few frames later, once the fingers have surely opened.
+   */
+  | { kind: 'release'; steadyAt: number }
 
 /** A point in the mirrored camera frame, 0 to 1. */
 type FramePoint = { x: number; y: number }
@@ -52,8 +60,12 @@ type Pinch = {
    * shift the pinch point), and if they do open it never counts.
    */
   steadyY: number
+  /** The time (ms) of the last steady frame. */
+  steadyAt: number
   /** The cursor's height (camera frame) at the last grab delta. */
   reportedY: number
+  /** Whether the grab's first delta (the catch-up since the anchor) has gone out. */
+  caughtUp: boolean
 }
 
 /** One frame with open fingers, kept briefly to find where the cursor was before a pinch. */
@@ -94,10 +106,13 @@ export const initialGestureState: GestureState = {
 
 const clamp = (v: number, low: number, high: number) => Math.min(high, Math.max(low, v))
 
-const median = (values: readonly number[]) => {
+/** The `p` percentile (0 to 1) of `values`, interpolated between the nearest two. */
+const percentile = (values: readonly number[], p: number) => {
   const sorted = [...values].sort((a, b) => a - b)
-  const middle = Math.floor(sorted.length / 2)
-  return sorted.length % 2 ? sorted[middle]! : (sorted[middle - 1]! + sorted[middle]!) / 2
+  const at = (sorted.length - 1) * p
+  const below = sorted[Math.floor(at)]!
+  const above = sorted[Math.ceil(at)]!
+  return below + (above - below) * (at - Math.floor(at))
 }
 
 /** The distance between two landmarks in camera pixels (the picture asked for). */
@@ -128,15 +143,21 @@ const toScreen = (point: FramePoint): ScreenPoint => {
 
 /**
  * Where the cursor was just before the fingers began to close: in the last open frame whose gap
- * was still within `anchorSlack` of the widest gap of the anchor window.
+ * was still within `anchorSlack` of the widest gap of the anchor window, but no more than
+ * `anchorMaxAgeMs` before `closedAt` (the first frame of the closing), else the frame at that cap.
  */
-const anchorOf = (recent: readonly Recent[], fallback: FramePoint): FramePoint => {
+const anchorOf = (
+  recent: readonly Recent[],
+  closedAt: number,
+  fallback: FramePoint,
+): FramePoint => {
+  const { anchorSlack, anchorMaxAgeMs } = HAND_TUNING.pinch
   if (recent.length === 0) return fallback
   const widest = Math.max(...recent.map((frame) => frame.ratio))
-  const open = recent.findLast(
-    (frame) => frame.ratio >= widest * (1 - HAND_TUNING.pinch.anchorSlack),
-  )
-  return open?.point ?? fallback
+  const open = recent.findLast((frame) => frame.ratio >= widest * (1 - anchorSlack))
+  if (open && closedAt - open.at <= anchorMaxAgeMs) return open.point
+  const capped = recent.find((frame) => closedAt - frame.at <= anchorMaxAgeMs)
+  return capped?.point ?? fallback
 }
 
 /** A filter that sits at `value` from `now`, with no speed. */
@@ -170,7 +191,10 @@ export function readGesture(
     const missed = state.missed + 1
     if (state.filter && missed >= HAND_TUNING.lostAfterFrames) {
       // Calibration is the visitor's, not the moment's: it outlives the lost hand.
-      const events: GestureEvent[] = state.pinch?.grabbing ? [{ kind: 'release' }] : []
+      const { pinch } = state
+      const events: GestureEvent[] = pinch?.grabbing
+        ? [{ kind: 'release', steadyAt: pinch.steadyAt }]
+        : []
       events.push({ kind: 'lost' })
       return {
         state: { ...initialGestureState, threshold: state.threshold, samples: state.samples },
@@ -189,7 +213,7 @@ export function readGesture(
     samples = [...samples, ratio]
     if (samples.length >= tuning.calibrationFrames) {
       threshold = clamp(
-        median(samples) * tuning.calibrationShare,
+        percentile(samples, tuning.calibrationPercentile) * tuning.calibrationShare,
         tuning.threshold.min,
         tuning.threshold.max,
       )
@@ -211,8 +235,13 @@ export function readGesture(
   }
 
   if (changed && !pinch) {
-    // Closed: hold on to where the cursor was before the fingers began to close.
-    const from = anchorOf(state.recent, lastPoint)
+    // Closed: hold on to where the cursor was before the fingers began to close. The closing
+    // began with the run of closed frames that confirmed it (this one and those just before).
+    let closedAt = now
+    for (let i = state.recent.length - 1; i >= 0 && state.recent[i]!.ratio < threshold!; i--) {
+      closedAt = state.recent[i]!.at
+    }
+    const from = anchorOf(state.recent, closedAt, lastPoint)
     pinch = {
       startedAt: now,
       from,
@@ -220,7 +249,9 @@ export function readGesture(
       travel: 0,
       grabbing: false,
       steadyY: from.y,
+      steadyAt: now,
       reportedY: from.y,
+      caughtUp: false,
     }
     filter = { x: seeded(from.x, now), y: seeded(from.y, now) }
     released = null
@@ -232,9 +263,9 @@ export function readGesture(
     else {
       if (!pinch.grabbing) {
         const up = (pinch.reportedY - pinch.steadyY) / frame.height
-        if (up !== 0) events.push({ kind: 'grab', up })
+        if (up !== 0) events.push({ kind: 'grab', up, since: pinch.startedAt })
       }
-      events.push({ kind: 'release' })
+      events.push({ kind: 'release', steadyAt: pinch.steadyAt })
     }
     released = { at: now, offset: { x: lastPoint.x - fingertip.x, y: lastPoint.y - fingertip.y } }
     pinch = null
@@ -266,20 +297,25 @@ export function readGesture(
   // reports the cursor's movement, from the anchor on. Only steady frames move it.
   if (pinch) {
     const steady = streak === 0
-    let { travel, grabbing, steadyY, reportedY } = pinch
+    let { travel, grabbing, steadyY, steadyAt, reportedY, caughtUp } = pinch
     if (steady) {
       travel = Math.max(travel, heights(point, pinch.from))
       steadyY = point.y
+      steadyAt = now
     }
     if (!grabbing && (now - pinch.startedAt >= click.maxMs || travel >= click.maxTravel)) {
       grabbing = true
     }
     if (grabbing && steady) {
+      // The first delta brings in, at once, the drift since the anchor.
       const up = (reportedY - steadyY) / frame.height
-      if (up !== 0) events.push({ kind: 'grab', up })
+      if (up !== 0) {
+        events.push(caughtUp ? { kind: 'grab', up } : { kind: 'grab', up, since: pinch.startedAt })
+      }
+      if (up !== 0) caughtUp = true
       reportedY = steadyY
     }
-    pinch = { ...pinch, travel, grabbing, steadyY, reportedY }
+    pinch = { ...pinch, travel, grabbing, steadyY, steadyAt, reportedY, caughtUp }
   }
 
   // Open frames, briefly: the next pinch's anchor is among them.

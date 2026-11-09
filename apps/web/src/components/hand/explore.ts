@@ -6,7 +6,7 @@
 export const HAND_HOVER_ATTR = 'data-hand-hover'
 
 /** The hand's pointer id: any id no mouse, pen or finger uses. */
-const HAND_POINTER_ID = 7001
+export const HAND_POINTER_ID = 7001
 
 /** What a mouse press can focus (disabled controls aside): the element itself or an ancestor. */
 const FOCUSABLE =
@@ -32,7 +32,10 @@ const ancestry = (element: Element | null): Element[] => {
  * hover code accepts them), and moves the hand-hover marker along. `hitTest` answers which element
  * is at a point (client px), leaving out the ring and the preview. Mouse and keyboard are untouched.
  */
-export function createExplorer(hitTest: (x: number, y: number) => Element | null) {
+export function createExplorer(
+  hitTest: (x: number, y: number) => Element | null,
+  navigate: (href: string) => void = (href) => window.location.assign(href),
+) {
   let target: Element | null = null
   let chain: Element[] = []
   let at = { x: 0, y: 0 }
@@ -115,7 +118,8 @@ export function createExplorer(hitTest: (x: number, y: number) => Element | null
      * (`pointerdown`, then `mousedown` unless the page cancelled the press) moves focus where a
      * mouse press would (the nearest focusable element, or away from whatever had it), then the
      * release (`pointerup`, `mouseup`) and the `click`, whose default follows a link or presses a
-     * button. Nothing under the cursor, nothing clicked.
+     * button; a `target="_blank"` link opens in this tab (`navigate`). Nothing under the cursor,
+     * nothing clicked.
      */
     click() {
       const element = target
@@ -129,7 +133,21 @@ export function createExplorer(hitTest: (x: number, y: number) => Element | null
       }
       fire(element, 'pointerup', true, null)
       if (pressed) mouse(element, 'mouseup', false)
+      // A link that opens a new tab opens in this one instead: a synthetic click has no user
+      // activation, so the browser would block the new tab as a pop-up. Taken over only if the
+      // page left the click alone, after every handler has seen it, so it navigates once.
+      const link = element.closest<HTMLAnchorElement | HTMLAreaElement>('a[href], area[href]')
+      const newTab = link?.target.toLowerCase() === '_blank' ? link : null
+      let sameTab: string | null = null
+      const takeOver = (event: Event) => {
+        if (event.defaultPrevented) return
+        event.preventDefault()
+        sameTab = newTab!.href
+      }
+      if (newTab) window.addEventListener('click', takeOver, { once: true })
       mouse(element, 'click', false)
+      if (newTab) window.removeEventListener('click', takeOver)
+      if (sameTab) navigate(sameTab)
     },
 
     /** The cursor is gone (tracking lost, or Hand control stopped): leave whatever it was over. */
