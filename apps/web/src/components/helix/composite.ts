@@ -291,7 +291,7 @@ const UNITS = { scene: 0, meltInputs: 1, showreel: 2, heat: 3, glyphs: 4 }
 
 /** The composite for `gl`, with its own glyph atlas, so a new context builds a new one. */
 export function createComposite(gl: WebGL2RenderingContext): Composite {
-  const program = link(gl, QUAD_VERTEX, FRAGMENT)
+  const program = link(gl, 'composite', QUAD_VERTEX, FRAGMENT)
   const at = uniforms(gl, program, [
     'uScene',
     'uMeltInputs',

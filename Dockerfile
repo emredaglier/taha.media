@@ -64,6 +64,14 @@ RUN if find apps/web/.next/server \( -name '*.wasm' -o -name '*.task' \) | grep 
       echo "apps/web/.next/server holds .wasm or .task files: Hand control's MediaPipe files must stay out of the server build (next.config.ts, #69)" >&2; \
       exit 1; \
     fi
+# Everything the browser downloads may name only the hosts in infra/client-hosts-allowlist.ts (#80):
+# the built chunks, CSS and Hand control's WASM and model, `public/`, and the HTML Next prerenders
+# (server folders also hold server code, so only .html, .rsc and .body, the prerendered route
+# handlers such as robots.txt and sitemap.xml, there; there may be none). A new library or version
+# that phones home fails here, not on a visitor's machine. Hosts written in our own Server
+# Components are not in this output: `infra/client-hosts-source.test.ts` scans `apps/web/src`.
+RUN node infra/client-hosts.ts apps/web/.next/static apps/web/public \
+ && node infra/client-hosts.ts --ext html,rsc,body --allow-empty apps/web/.next/server
 # cms's own `build` script is only a typecheck (so `pnpm build` stays light); the image needs the
 # real Next build. The config loads at build time, so it gets throwaway settings that never leave
 # this stage.

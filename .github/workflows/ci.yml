@@ -2,7 +2,8 @@
 # infra/ci.sh. Runbook, secrets and variables: infra/README.md, "CI and deploy".
 #
 # Shape: `check` (workflow lint, pnpm lint, typecheck, test, build) runs next to `build` (arm64
-# images on the ARM runner, then the release-gate smoke against those images on the same runner).
+# images on the ARM runner, the Helix shader check, then the release-gate smoke against those
+# images on the same runner).
 # Pull requests stop there. On main, `build` publishes the smoke-tested images' <sha> tags to GHCR
 # and hands their digests on; `upload` puts the release's /_next/static on R2 (cdn.taha.media),
 # `push` moves the `main` tags, and `deploy` joins the tailnet and runs infra/deploy.sh. Nothing is
@@ -108,6 +109,11 @@ jobs:
       - if: steps.playwright.outputs.cache-hit == 'true'
         timeout-minutes: 5
         run: pnpm exec playwright install-deps chromium
+      # A shader that doesn't compile makes the Helix fall back to the static Home, which the unit
+      # tests and the smoke both accept. This drives the real renderer in Chromium on SwiftShader.
+      - name: Helix shader check
+        timeout-minutes: 5
+        run: pnpm check:shaders
       - name: Release-gate smoke against the built web image
         run: infra/ci.sh smoke "$GITHUB_SHA"
       - name: Publish the <sha> tags to GHCR
@@ -119,11 +125,13 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: failure()
         # A report, not a result: if it can't be stored (the storage quota), the run still fails
-        # on the smoke test itself, not on this step.
+        # on the smoke test itself, not on this step. The shader check's screenshots go along.
         continue-on-error: true
         with:
           name: smoke-output
-          path: smoke/.output
+          path: |
+            smoke/.output
+            scripts/check-shaders/.output
           include-hidden-files: true
           retention-days: 2
           if-no-files-found: ignore

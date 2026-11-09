@@ -301,6 +301,20 @@ describe('ci workflow (ADR-0010)', () => {
     for (const s of installs) expect(s).toMatch(/timeout-minutes: \d+/)
   })
 
+  it('build runs the shader check (pnpm check:shaders) after the browser install, always, and keeps its screenshots on failure (#78)', () => {
+    const build = jobBlock('build')
+    const at = ['playwright install', 'pnpm check:shaders'].map((s) => build.indexOf(s))
+    expect(at.every((i) => i >= 0)).toBe(true)
+    expect(at[0]).toBeLessThan(at[1]!)
+    const check = steps('build').find((s) => s.includes('pnpm check:shaders')) ?? ''
+    expect(check).not.toMatch(/\bif:/)
+    expect(check).not.toMatch(/continue-on-error/)
+    // `check` has no browser, so it can't run it; the report shares the smoke's failure upload.
+    expect(jobBlock('check')).not.toContain('check:shaders')
+    const upload = steps('build').find((s) => s.includes('actions/upload-artifact')) ?? ''
+    expect(upload).toContain('scripts/check-shaders/.output')
+  })
+
   it('has least-privilege permissions', () => {
     expect(text).toMatch(/\npermissions:\n {2}contents: read\n/)
     for (const name of ['build', 'push']) expect(jobBlock(name), name).toMatch(/packages: write/)
