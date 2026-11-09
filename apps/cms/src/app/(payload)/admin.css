@@ -1,0 +1,32 @@
+/*
+ * Admin overrides (#73). This is the repo's first admin CSS.
+ *
+ * Payload shows a field error as a `.field-error.tooltip`, which its default CSS
+ * (in `@layer payload-default`) cuts to one line with an ellipsis and hides at 1024px
+ * and below. Long refusals, such as the featured-loop replace refusal and the locked
+ * Kullanım refusal, lost their remedy that way. These rules are unlayered, so they beat
+ * the layered defaults without `!important`. Every selector stays under
+ * `.field-error.tooltip`: other tooltips keep Payload's one-line look.
+ */
+
+.field-error.tooltip {
+  /* Payload's `mid-break` query hides every tooltip; a field error must stay visible. */
+  display: block;
+  white-space: normal;
+
+  /*
+   * Grow upward. Payload pins the top edge (`top: -1.25 * base`) and shifts the box up by
+   * the caret size, so a wrapped box would grow down over its field. Pin the bottom edge
+   * at the same spot instead: the top-offset (-1.25) plus one line (0.75 line height and
+   * 2 * 0.2 padding = 1.15) leaves -0.1 * base. The caret hangs off the bottom edge, so
+   * it stays where it is.
+   */
+  top: 0;
+  transform: translateY(calc(-100% + var(--base) * -0.1 - var(--caret-size)));
+}
+
+.field-error.tooltip .tooltip-content {
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+}
