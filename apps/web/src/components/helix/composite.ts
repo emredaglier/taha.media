@@ -160,29 +160,32 @@ float ringAt(vec2 uv) {
 float presenceAt(vec2 uv, bool reel) {
   return reel ? showreelAt(clamp(uv, 0.0, 1.0), 0.0).a : coverAt(uv);
 }
-// Whether a cell may read what it shows at p: the layer covers p, and for cards, p is on a card
-// as hovered as the one under the pixel (hovered). So a cell in a dimmed card's sliver beside the
-// hovered card never takes the hovered card's colour or melt.
-bool showsAt(vec2 p, bool reel, float hovered) {
-  if (presenceAt(p, reel) <= 0.5) return false;
-  return reel || abs(inputsAt(p).hovered - hovered) < 0.5;
-}
-// Where a cell centred at cuv reads what it shows (at): its centre, or, when it can't read there
-// (showsAt), the first of four points a quarter cell out (q) where it can. Every pixel of the cell
-// gets the same point, so the cell stays one glyph. False when there is none: the cell has next to
-// none of the pixel's card under it, and draws no glyph, so a sliver of a card peeking out from
-// behind another shows nothing rather than a speck.
+// The points a cell looks at, in quarter cells from its centre: the centre, then the four around.
+const vec2 CELL_POINTS[5] = vec2[5](vec2(0.0, 0.0), vec2(-1.0, -1.0), vec2(1.0, -1.0),
+                                    vec2(-1.0, 1.0), vec2(1.0, 1.0));
+// Where a cell centred at cuv reads what it shows (at): the first of its points (q is a quarter
+// cell) that the layer covers. Every pixel of the cell gets the same point, so the cell stays one
+// glyph. False, and no glyph, when none is covered (a sliver of a card shows nothing rather than
+// a speck), and for cards when any covered point is on a card hovered differently from the one
+// under the pixel (hovered): a cell that touches the hovered card draws no glyph on the cards
+// around it, so the hovered card's edge stays clean.
 bool cellPoint(vec2 cuv, vec2 q, bool reel, float hovered, out vec2 at) {
   at = cuv;
-  if (showsAt(at, reel, hovered)) return true;
-  at = cuv + vec2(-q.x, -q.y);
-  if (showsAt(at, reel, hovered)) return true;
-  at = cuv + vec2(q.x, -q.y);
-  if (showsAt(at, reel, hovered)) return true;
-  at = cuv + vec2(-q.x, q.y);
-  if (showsAt(at, reel, hovered)) return true;
-  at = cuv + q;
-  return showsAt(at, reel, hovered);
+  bool found = false;
+  for (int i = 0; i < 5; i++) {
+    vec2 p = cuv + q * CELL_POINTS[i];
+    if (presenceAt(p, reel) <= 0.5) continue;
+    if (reel) {
+      at = p;
+      return true;
+    }
+    if (abs(inputsAt(p).hovered - hovered) >= 0.5) return false;
+    if (!found) {
+      at = p;
+      found = true;
+    }
+  }
+  return found;
 }
 // One cell of the glyph grid cellPx px wide, at uv: premultiplied (glyph colour, coverage), before
 // it is clipped to what covers the pixel. The grid rides with the cards (uShift), and turning
