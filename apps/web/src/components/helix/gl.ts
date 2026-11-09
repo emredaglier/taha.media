@@ -16,27 +16,36 @@ void main() {
   gl_Position = vec4(aPos * 2.0 - 1.0, 0.0, 1.0);
 }`
 
-function compile(gl: WebGL2RenderingContext, type: number, source: string): WebGLShader {
+function compile(
+  gl: WebGL2RenderingContext,
+  name: string,
+  type: number,
+  source: string,
+): WebGLShader {
   const shader = gl.createShader(type)
   if (!shader) throw new HelixUnavailable('No shader')
   gl.shaderSource(shader, source)
   gl.compileShader(shader)
   if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS) && !gl.isContextLost()) {
     const stage = type === gl.VERTEX_SHADER ? 'vertex' : 'fragment'
-    throw new HelixUnavailable(`Shader (${stage}): ${gl.getShaderInfoLog(shader) ?? ''}`)
+    throw new HelixUnavailable(`Shader ${name} (${stage}): ${gl.getShaderInfoLog(shader) ?? ''}`)
   }
   return shader
 }
 
-/** A linked program, its vertex position attribute `aPos` at location 0. */
+/**
+ * A linked program, its vertex position attribute `aPos` at location 0. `name` says which program
+ * a compile or link failure is about (`Shader card (fragment): …`, `Program card: …`).
+ */
 export function link(
   gl: WebGL2RenderingContext,
+  name: string,
   vertexSource: string,
   fragmentSource: string,
 ): WebGLProgram {
   const program = gl.createProgram()
-  const vertex = compile(gl, gl.VERTEX_SHADER, vertexSource)
-  const fragment = compile(gl, gl.FRAGMENT_SHADER, fragmentSource)
+  const vertex = compile(gl, name, gl.VERTEX_SHADER, vertexSource)
+  const fragment = compile(gl, name, gl.FRAGMENT_SHADER, fragmentSource)
   gl.attachShader(program, vertex)
   gl.attachShader(program, fragment)
   gl.bindAttribLocation(program, 0, 'aPos')
@@ -44,7 +53,7 @@ export function link(
   gl.deleteShader(vertex)
   gl.deleteShader(fragment)
   if (!gl.getProgramParameter(program, gl.LINK_STATUS) && !gl.isContextLost()) {
-    throw new HelixUnavailable(`Program: ${gl.getProgramInfoLog(program) ?? ''}`)
+    throw new HelixUnavailable(`Program ${name}: ${gl.getProgramInfoLog(program) ?? ''}`)
   }
   return program
 }
