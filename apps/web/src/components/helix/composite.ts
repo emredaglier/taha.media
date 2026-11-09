@@ -149,7 +149,8 @@ vec4 showreelAt(vec2 uv, float lod) {
   if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return vec4(0.0);
   return textureLod(uShowreel, uv, lod);
 }
-// How far the Showreel's ring (its radius from ringRadius) has passed uv, 0 (not yet) to 1 (its cells gone).
+// How far the Showreel's ring (its radius from ringRadius) has passed uv: 0 not yet, 1 its cells
+// gone.
 float ringAt(vec2 uv) {
   float dist = length((uv - uCentre) * vec2(uAspect, 1.0));
   return clamp((uRingRadius - dist) / RING_DEPTH, 0.0, 1.0);
@@ -159,29 +160,37 @@ float ringAt(vec2 uv) {
 float presenceAt(vec2 uv, bool reel) {
   return reel ? showreelAt(clamp(uv, 0.0, 1.0), 0.0).a : coverAt(uv);
 }
-// Where a cell centred at cuv reads what it shows (at): its centre, or, when that is off the card
-// (or the Showreel), the first of four points a quarter cell out (q) that is on it. Every pixel of
-// the cell gets the same point, so the cell stays one glyph. False when none is: the cell has next
-// to no card under it, and draws no glyph, so a sliver of a card peeking out from behind another
-// shows nothing rather than a speck.
-bool cellPoint(vec2 cuv, vec2 q, bool reel, out vec2 at) {
+// Whether a cell may read what it shows at p: the layer covers p, and for cards, p is on a card
+// as hovered as the one under the pixel (hovered). So a cell in a dimmed card's sliver beside the
+// hovered card never takes the hovered card's colour or melt.
+bool showsAt(vec2 p, bool reel, float hovered) {
+  if (presenceAt(p, reel) <= 0.5) return false;
+  return reel || abs(inputsAt(p).hovered - hovered) < 0.5;
+}
+// Where a cell centred at cuv reads what it shows (at): its centre, or, when it can't read there
+// (showsAt), the first of four points a quarter cell out (q) where it can. Every pixel of the cell
+// gets the same point, so the cell stays one glyph. False when there is none: the cell has next to
+// none of the pixel's card under it, and draws no glyph, so a sliver of a card peeking out from
+// behind another shows nothing rather than a speck.
+bool cellPoint(vec2 cuv, vec2 q, bool reel, float hovered, out vec2 at) {
   at = cuv;
-  if (presenceAt(at, reel) > 0.5) return true;
+  if (showsAt(at, reel, hovered)) return true;
   at = cuv + vec2(-q.x, -q.y);
-  if (presenceAt(at, reel) > 0.5) return true;
+  if (showsAt(at, reel, hovered)) return true;
   at = cuv + vec2(q.x, -q.y);
-  if (presenceAt(at, reel) > 0.5) return true;
+  if (showsAt(at, reel, hovered)) return true;
   at = cuv + vec2(-q.x, q.y);
-  if (presenceAt(at, reel) > 0.5) return true;
+  if (showsAt(at, reel, hovered)) return true;
   at = cuv + q;
-  return presenceAt(at, reel) > 0.5;
+  return showsAt(at, reel, hovered);
 }
 // One cell of the glyph grid cellPx px wide, at uv: premultiplied (glyph colour, coverage), before
 // it is clipped to what covers the pixel. The grid rides with the cards (uShift), and turning
 // slides each row sideways by its own amount. The cell's colour, how melted it is and its depth are
 // the same for all its pixels, so a cell is one glyph: its brightness picks the glyph, and as the
 // cell melts, the glyph shrinks about its centre, out of step with its neighbours (STAGGER).
-vec4 glyphCell(vec2 uv, float cellPx, bool reel) {
+// hovered is how hovered the card under the pixel is (cards only).
+vec4 glyphCell(vec2 uv, float cellPx, bool reel, float hovered) {
   float cell = cellPx / CELL_SCREEN_PX;
   vec2 q = (uv - vec2(0.0, uShift)) * vec2(uAspect, 1.0);
   float slide = (hash12(vec2(floor(q.y / cell), 3.7)) - 0.5) * uSpeed * 0.06;
@@ -190,11 +199,11 @@ vec4 glyphCell(vec2 uv, float cellPx, bool reel) {
   vec2 cl = fract(q / cell);
   float h = hash12(id);
   vec2 cuv = vec2(((id.x + 0.5) * cell - slide) / uAspect, (id.y + 0.5) * cell + uShift);
-  // The colour is the picture blurred over about the cell, read at its centre: unpremultiplied,
-  // it is the card's (or the Showreel's) own colour wherever some of it is under the cell.
+  // The colour is the picture blurred over about the cell, read at the cell's point:
+  // unpremultiplied, it is the card's (or the Showreel's) own colour.
   float lod = clamp(log2(cell * uRes.y) + 0.5, 0.0, 6.0);
   vec2 at;
-  if (!cellPoint(cuv, vec2(cell / uAspect, cell) * 0.25, reel, at)) return vec4(0.0);
+  if (!cellPoint(cuv, vec2(cell / uAspect, cell) * 0.25, reel, hovered, at)) return vec4(0.0);
   vec4 sc;
   float vm;
   float fade = 1.0;
@@ -205,8 +214,7 @@ vec4 glyphCell(vec2 uv, float cellPx, bool reel) {
     if (sc.a <= 0.05) sc = showreelAt(clamp(at, 0.0, 1.0), lod);
     vm = ringAt(cuv);
   } else {
-    sc = sceneAt(cuv, lod);
-    if (sc.a <= 0.05) sc = sceneAt(at, lod);
+    sc = sceneAt(at, lod);
     MeltInputs mi = inputsAt(at);
     vm = meltOf(mi, at);
     fade = 1.0 - DEEP_FADE * mi.deep;
@@ -226,12 +234,13 @@ vec4 glyphCell(vec2 uv, float cellPx, bool reel) {
 }
 // The mosaic at uv, grown from the finest grid (grow 0) to the coarsest (grow 1): the two
 // neighbouring grids of the ladder, cross-faded by how far between them it is.
-vec4 mosaicAt(vec2 uv, float grow, bool reel) {
+vec4 mosaicAt(vec2 uv, float grow, bool reel, float hovered) {
   float t = clamp(grow, 0.0, 1.0) * float(CELL_SIZES - 1);
   int lower = min(int(t), CELL_SIZES - 2);
   float fine = reel ? RING_CELLS[lower] : CARD_CELLS[lower];
   float coarse = reel ? RING_CELLS[lower + 1] : CARD_CELLS[lower + 1];
-  return mix(glyphCell(uv, fine, reel), glyphCell(uv, coarse, reel), t - float(lower));
+  vec4 a = glyphCell(uv, fine, reel, hovered);
+  return mix(a, glyphCell(uv, coarse, reel, hovered), t - float(lower));
 }
 void main() {
   vec2 uv = vUv;
@@ -246,7 +255,7 @@ void main() {
   float k = smoothstep(0.03, 0.2, m * (1.0 - 0.8 * clamp(heat * CURSOR_SHRINK, 0.0, 1.0)));
   if (k > 0.0) {
     // Clipped to the card's coverage at the pixel: no glyph reaches past a card's edge.
-    vec4 g = mosaicAt(uv, smoothstep(0.0, 0.6, m), false) * coverAt(uv);
+    vec4 g = mosaicAt(uv, smoothstep(0.0, 0.6, m), false, mi.hovered) * coverAt(uv);
     c = mix(c, g, k);
   }
   c.a = min(c.a, 1.0);
@@ -265,7 +274,7 @@ void main() {
       float kr = smoothstep(0.03, 0.2, rm);
       if (kr > 0.0) {
         // Clipped to the Showreel's own alpha at the pixel.
-        vec4 g = mosaicAt(uv, smoothstep(0.0, 0.5, rm), true) * plain.a;
+        vec4 g = mosaicAt(uv, smoothstep(0.0, 0.5, rm), true, 0.0) * plain.a;
         r = mix(r, g, kr);
       }
     }
