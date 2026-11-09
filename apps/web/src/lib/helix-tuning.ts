@@ -49,10 +49,19 @@ export const HELIX_TUNING = {
    * The cursor's heat trail the signal reads (#64): the moving cursor (on phones, the finger)
    * leaves heat along its path, which spreads and fades. How wide the path is (`radius`, in screen
    * heights), how much heat is left after each of the `stepsPerSecond` steps (`decay`), and how
-   * much heat a move adds (`push`, reached at `fullSpeed` CSS px per second, less when slower). A
-   * frame runs at most `maxSteps` steps, so a stalled tab doesn't run the trail on for seconds.
+   * much heat a move adds (`push`, reached at `fullSpeed` CSS px per second, less when slower).
+   * The rate is the prototype's on a 120 Hz screen (one step a frame, #67): the trail fades in about
+   * 0.16 s and follows the cursor without trailing. A frame runs at most `maxSteps` steps: enough
+   * for a 24 fps frame (5 steps) whole, but a stalled tab doesn't run the trail on for seconds.
    */
-  heat: { radius: 0.05, decay: 0.965, stepsPerSecond: 60, push: 0.6, fullSpeed: 1800, maxSteps: 4 },
+  heat: {
+    radius: 0.05,
+    decay: 0.965,
+    stepsPerSecond: 120,
+    push: 0.6,
+    fullSpeed: 1800,
+    maxSteps: 8,
+  },
   /** How far the cards deep in the Helix melt (0 not at all, 1 fully at the far end). */
   farCards: 0.7,
   /** How far the cards not hovered melt while the pointer rests on a card (0 to 1). */

@@ -33,6 +33,13 @@ describe('planHeat: how many steps a frame runs', () => {
     expect(Math.abs(steps - stepsPerSecond * 10)).toBeLessThanOrEqual(1)
   })
 
+  it('runs the slowest ordinary frame whole, and the cap only bites on a stall', () => {
+    expect(planHeat(HEAT_AT_REST, 1 / FRAME_RATES[0]!, null).steps).toBe(
+      Math.round(stepsPerSecond / FRAME_RATES[0]!),
+    )
+    expect(Math.round(stepsPerSecond / FRAME_RATES[0]!)).toBeLessThanOrEqual(maxSteps)
+  })
+
   it('runs no frame on by more than the most steps a frame may run (a stalled tab)', () => {
     expect(planHeat(HEAT_AT_REST, 5, null).steps).toBe(maxSteps)
     // And nothing is owed afterwards: the next ordinary frame runs as usual.
@@ -66,6 +73,7 @@ describe('planHeat: the cursor splat', () => {
   })
 
   it('keeps a move from a frame that runs no step for the next step, joined to the later move', () => {
+    // Half a step is a frame of a screen twice as fast as the trail (240 Hz at 120 steps a second).
     const halfStep = oneStep / 2
     const first = planHeat(HEAT_AT_REST, halfStep, path(fullSpeed / 4, { x: 0.1, y: 0.1 }))
     expect(first.steps).toBe(0)
