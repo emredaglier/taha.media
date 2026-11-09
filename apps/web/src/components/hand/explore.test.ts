@@ -116,3 +116,70 @@ describe('exploring with the hand', () => {
     expect(log).toEqual([])
   })
 })
+
+describe('clicking with the hand', () => {
+  const CLICK_TYPES = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']
+  /** Every press, release and click that reaches `element`, with its target and where. */
+  const listen = (element: Element) => {
+    const heard: string[] = []
+    for (const type of CLICK_TYPES) {
+      element.addEventListener(type, (event) => {
+        const { clientX, clientY } = event as MouseEvent
+        heard.push(`${type} ${(event.target as Element).id} ${clientX},${clientY}`)
+      })
+    }
+    return heard
+  }
+
+  it('presses, releases and clicks what is under the cursor, as a mouse does, once', () => {
+    const heard = listen(card)
+    const hand = explorer()
+    under = picture
+    hand.moveTo(40, 30)
+    hand.click()
+    expect(heard).toEqual(CLICK_TYPES.map((type) => `${type} picture 40,30`))
+  })
+
+  it('focuses what a mouse click would focus: the link around the picture', () => {
+    const hand = explorer()
+    under = picture
+    hand.moveTo(40, 30)
+    let focusedOnRelease: Element | null = null
+    card.addEventListener('pointerup', () => (focusedOnRelease = document.activeElement))
+    hand.click()
+    // Focus moves between the press and the release, as it does for a mouse.
+    expect(focusedOnRelease).toBe(card)
+    expect(document.activeElement).toBe(card)
+  })
+
+  it('takes focus away when it clicks something unfocusable, as a mouse does', () => {
+    card.focus()
+    const hand = explorer()
+    under = canvas
+    hand.moveTo(300, 30)
+    hand.click()
+    expect(document.activeElement).toBe(document.body)
+  })
+
+  it('a press the page cancels sends no mouse press and moves no focus, but still clicks', () => {
+    const heard = listen(card)
+    picture.addEventListener('pointerdown', (event) => event.preventDefault())
+    const hand = explorer()
+    under = picture
+    hand.moveTo(40, 30)
+    hand.click()
+    expect(heard.map((line) => line.split(' ')[0])).toEqual(['pointerdown', 'pointerup', 'click'])
+    expect(document.activeElement).toBe(document.body)
+  })
+
+  it('clicks nothing over empty space, or once tracking is lost', () => {
+    const heard = listen(card)
+    const hand = explorer()
+    hand.click()
+    under = picture
+    hand.moveTo(40, 30)
+    hand.release()
+    hand.click()
+    expect(heard).toEqual([])
+  })
+})

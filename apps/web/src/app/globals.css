@@ -24,6 +24,20 @@
       opacity: 0;
     }
   }
+
+  /* Hand control's ring pings on a click (only with motion allowed). */
+  --animate-hand-ping: hand-ping 350ms ease-out forwards;
+
+  @keyframes hand-ping {
+    from {
+      opacity: 1;
+      transform: scale(0.5);
+    }
+    to {
+      opacity: 0;
+      transform: scale(1);
+    }
+  }
 }
 
 /*

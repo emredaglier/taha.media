@@ -10,9 +10,11 @@ const tracker = vi.hoisted(() => ({
 }))
 vi.mock('./tracker', () => ({ createHandTracker: tracker.createHandTracker }))
 
+import { INDEX_KNUCKLE, INDEX_TIP, THUMB_TIP, WRIST, type HandFrame } from '../../lib/hand-gesture'
 import { HELIX_TUNING } from '../../lib/helix-tuning'
 import { HAND_TUNING } from '../../lib/hand-tuning'
 import { CONSENT_TEXT, CONSENT_TITLE } from './ConsentNote'
+import { claimHandGrab } from './grab'
 import { HandControl } from './HandControl'
 import { HandToggle } from './HandToggle'
 import { dispatchHand } from './store'
@@ -423,6 +425,168 @@ describe('while on', () => {
     await turnOn()
     await runFrames(1)
     expect(hits.at(-1)).toEqual([999, 799])
+  })
+})
+
+describe('pinching (#57)', () => {
+  const { pinch, click: quick } = HAND_TUNING
+  const PALM = 0.15
+  const OPEN = 0.9
+  const CLOSED = OPEN * pinch.calibrationShare * 0.5
+  /** A hand with its index tip at (x, y) in the camera's picture and the thumb `gap` palms below. */
+  const pose = (x: number, y: number, gap: number): HandFrame =>
+    Array.from({ length: 21 }, (_, i) => {
+      if (i === INDEX_TIP) return { x, y }
+      if (i === THUMB_TIP) return { x, y: y + gap * PALM }
+      if (i === INDEX_KNUCKLE) return { x, y: y + 0.2 }
+      if (i === WRIST) return { x, y: y + 0.2 + PALM }
+      return { x, y: y + 0.1 }
+    })
+  const hold = (frame: HandFrame, count: number) => Array<HandFrame>(count).fill(frame)
+  /** The camera shows `frames` one per camera frame, then keeps showing the last. */
+  let queue: HandFrame[]
+  const show = (...frames: HandFrame[][]) => queue.push(...frames.flat())
+  const ring = () => container.ownerDocument.querySelector<HTMLElement>('[data-hand-ring]')!
+  const ping = () => ring().querySelector<HTMLElement>('[data-hand-ping]')!
+  let link: HTMLAnchorElement
+  let clicks: number
+  let scrolled: number[]
+
+  /** Hand control on, with an open hand shown long enough to calibrate and settle. */
+  const ready = async () => {
+    await render()
+    await turnOn()
+    show(hold(pose(0.5, 0.5, OPEN), pinch.calibrationFrames + 15))
+    await runFrames(pinch.calibrationFrames + 15)
+  }
+  const play = async (...frames: HandFrame[][]) => {
+    show(...frames)
+    await runFrames(frames.flat().length)
+  }
+  const quickPinch = [hold(pose(0.5, 0.5, CLOSED), 4), hold(pose(0.5, 0.5, OPEN), 4)]
+  /** Pinched, the hand rises a tenth of the camera frame, rests, and opens. */
+  const rise = 0.1
+  const grabUp = [
+    hold(pose(0.5, 0.5, CLOSED), pinch.confirmFrames),
+    Array.from({ length: 6 }, (_, i) => pose(0.5, 0.5 - (rise * (i + 1)) / 6, CLOSED)),
+  ]
+  const letGo = hold(pose(0.5, 0.5 - rise, OPEN), pinch.confirmFrames)
+
+  beforeEach(() => {
+    queue = []
+    tracker.createHandTracker.mockImplementation(async () => ({
+      detect: () => (queue.length > 1 ? queue.shift() : queue[0]) ?? null,
+      close: tracker.close,
+    }))
+    link = document.createElement('a')
+    link.href = '#is'
+    link.textContent = 'İşler'
+    document.body.append(link)
+    clicks = 0
+    link.addEventListener('click', (event) => {
+      event.preventDefault()
+      clicks++
+    })
+    document.elementsFromPoint = () => [link]
+    scrolled = []
+    vi.spyOn(window, 'scrollBy').mockImplementation(((options: ScrollToOptions) => {
+      scrolled.push(options.top ?? 0)
+    }) as typeof window.scrollBy)
+  })
+
+  afterEach(() => {
+    link.remove()
+    vi.restoreAllMocks()
+  })
+
+  it('a quick pinch clicks the link under the cursor once, and focuses it as a mouse would', async () => {
+    await ready()
+    await play(...quickPinch)
+    expect(clicks).toBe(1)
+    expect(document.activeElement).toBe(link)
+    expect(scrolled).toEqual([])
+  })
+
+  it(`a pinch held longer than ${quick.maxMs} ms clicks nothing`, async () => {
+    await ready()
+    await play(hold(pose(0.5, 0.5, CLOSED), Math.ceil(quick.maxMs / (1000 / 30)) + 4))
+    await play(hold(pose(0.5, 0.5, OPEN), 4))
+    expect(clicks).toBe(0)
+  })
+
+  it('a pinch and a move up scrolls the page down with the hand', async () => {
+    await ready()
+    await play(...grabUp, hold(pose(0.5, 0.5 - rise, CLOSED), 30))
+    const during = scrolled.reduce((a, b) => a + b, 0)
+    // Up is down the page, by the tuned share of the screen per screen the hand moved (800 px).
+    const expected = (rise / HAND_TUNING.frame.height) * 800 * HAND_TUNING.grab.scrollGain
+    expect(Math.abs(during - expected)).toBeLessThanOrEqual(2)
+    // A hand that came to rest before letting go doesn't glide.
+    const rested = scrolled.length
+    await play(letGo, hold(pose(0.5, 0.5 - rise, OPEN), 10))
+    expect(scrolled.length).toBe(rested)
+  })
+
+  it('letting go of a moving grab glides on briefly, the same way', async () => {
+    await ready()
+    await play(...grabUp)
+    await play(letGo)
+    const released = scrolled.length
+    // A second and a half (camera frames at 30 per second).
+    await play(hold(pose(0.5, 0.5 - rise, OPEN), 45))
+    const glide = scrolled.slice(released)
+    expect(glide.length).toBeGreaterThan(1)
+    // On down the page, the way the hand moved.
+    expect(glide.every((top) => top > 0)).toBe(true)
+    // It is brief: it has stopped by then.
+    const stopped = scrolled.length
+    await play(hold(pose(0.5, 0.5 - rise, OPEN), 10))
+    expect(scrolled.length).toBe(stopped)
+    expect(clicks).toBe(0)
+  })
+
+  it('a claimed grab (the Helix on Home) goes to its claimant: no page scroll, no glide', async () => {
+    const move = vi.fn((_up: number) => true)
+    const end = vi.fn(() => true)
+    const unclaim = claimHandGrab({ move, end })
+    await ready()
+    await play(...grabUp, letGo, hold(pose(0.5, 0.5 - rise, OPEN), 10))
+    unclaim()
+    expect(move).toHaveBeenCalled()
+    const ups = move.mock.calls.map(([up]) => up)
+    expect(ups.reduce((a, b) => a + b, 0)).toBeGreaterThan(0)
+    expect(end).toHaveBeenCalledTimes(1)
+    expect(scrolled).toEqual([])
+  })
+
+  it('turning Hand control off mid-grab lets go of the claimed grab', async () => {
+    const end = vi.fn(() => true)
+    const unclaim = claimHandGrab({ move: () => true, end })
+    await ready()
+    await play(...grabUp)
+    await click(toggle())
+    unclaim()
+    expect(end).toHaveBeenCalledTimes(1)
+  })
+
+  it('the ring fills while the fingers are pinched, and pings on a click', async () => {
+    await ready()
+    expect(ring().dataset.pinched).toBe('false')
+    await play(hold(pose(0.5, 0.5, CLOSED), pinch.confirmFrames + 1))
+    expect(ring().dataset.pinched).toBe('true')
+    expect(ping().dataset.on).not.toBe('true')
+    await play(hold(pose(0.5, 0.5, OPEN), pinch.confirmFrames + 1))
+    expect(ring().dataset.pinched).toBe('false')
+    expect(ping().dataset.on).toBe('true')
+  })
+
+  it('the ring animates only with motion allowed', async () => {
+    await ready()
+    const animated = [ring(), ping()]
+      .flatMap((element) => element.className.split(/\s+/))
+      .filter((name) => /(^|:)(animate|transition)/.test(name))
+    expect(animated.length).toBeGreaterThan(0)
+    for (const name of animated) expect(name.startsWith('motion-safe:')).toBe(true)
   })
 })
 

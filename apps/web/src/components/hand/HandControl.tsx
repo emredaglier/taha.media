@@ -6,6 +6,7 @@ import type { HandControlEffect } from '../../lib/hand-control'
 import { initialGestureState, readGesture, type HandFrame } from '../../lib/hand-gesture'
 import { HAND_TUNING } from '../../lib/hand-tuning'
 import { createExplorer, type Explorer } from './explore'
+import { createGrabScroller, handGrabSink } from './grab'
 import type { HandTracker } from './tracker'
 import { dispatchHand, handState, setHandRunner, useHandControl } from './store'
 
@@ -76,12 +77,14 @@ function drawHand(canvas: HTMLCanvasElement | null, hand: HandFrame | null) {
 }
 
 /**
- * Hand control's controller (#56), in the root layout so it lives across client-side
+ * Hand control's controller (#56, #57), in the root layout so it lives across client-side
  * navigation. It runs the lifecycle's effects (`lib/hand-control`): it owns the camera stream, the
  * tracking task (loaded through a dynamic `import()` only after Aç), the preview and the ring.
- * Each camera frame goes through the gesture reader, and the cursor explores the page through the
- * same pointer events a mouse sends. A hidden tab, the ×, the toggle or unmounting stops every
- * camera track and closes the task.
+ * Each camera frame goes through the gesture reader: the cursor explores the page through the
+ * same pointer events a mouse sends, a quick pinch clicks what is under it as a mouse does, and a
+ * grab goes to whoever claimed it (the Helix on Home, `grab.ts`) or else scrolls the page, which
+ * glides on briefly after letting go. The ring is filled while pinched and pings on a click. A
+ * hidden tab, the ×, the toggle or unmounting stops every camera track and closes the task.
  */
 export function HandControl() {
   const { phase } = useHandControl()
@@ -95,6 +98,11 @@ export function HandControl() {
   useEffect(() => {
     const live = attempts.current
     const explorer: Explorer = createExplorer(hitTest)
+    // Where the cursor is (client px), and what a grab starting there scrolls.
+    let cursor: { x: number; y: number } | null = null
+    const scroller = createGrabScroller(() => (cursor ? hitTest(cursor.x, cursor.y) : null))
+    // Whether a grab is under way (its moves went to a claimant or to the page).
+    let grabbing = false
     let stopTracking: (() => void) | null = null
     // Set on unmount: an answer that arrives later is released here, since no runner is left to
     // act on the reducer's release.
@@ -116,6 +124,32 @@ export function HandControl() {
       if (!element) return
       element.dataset.lost = point ? 'false' : 'true'
       if (point) element.style.transform = `translate(${point.x}px, ${point.y}px)`
+      else element.dataset.pinched = 'false'
+    }
+    const fillRing = (pinched: boolean) => {
+      if (ring.current) ring.current.dataset.pinched = String(pinched)
+    }
+    /** Restarts the ring's ping (its animation runs only with motion allowed). */
+    const pingRing = () => {
+      const ping = ring.current?.querySelector<HTMLElement>('[data-hand-ping]')
+      if (!ping) return
+      ping.dataset.on = 'false'
+      void ping.offsetWidth
+      ping.dataset.on = 'true'
+    }
+
+    /** The grab moved `up` screen heights at `at` (ms): its claimant takes it, or the page. */
+    const grab = (up: number, at: number) => {
+      grabbing = true
+      if (handGrabSink()?.move(up)) return
+      scroller.move(up, at)
+    }
+    /** The grab let go at `at` (ms): the claimant settles, or the page glides on. */
+    const letGo = (at: number) => {
+      if (!grabbing) return
+      grabbing = false
+      if (handGrabSink()?.end()) scroller.cancel()
+      else scroller.release(at)
     }
 
     const track = (attempt: number) => {
@@ -144,19 +178,40 @@ export function HandControl() {
         const step = readGesture(gesture, hand, at)
         gesture = step.state
         for (const event of step.events) {
-          if (event.kind === 'lost') {
-            showRing(null)
-            explorer.release()
-          } else {
-            // The cursor reaches the last pixel on each side, never past it: a point on the edge
-            // itself hits nothing, and MENU sits at the right edge.
-            const { clientWidth: w, clientHeight: h } = document.documentElement
-            const point = {
-              x: Math.min(event.point.x * w, w - 1),
-              y: Math.min(event.point.y * h, h - 1),
+          switch (event.kind) {
+            case 'lost':
+              cursor = null
+              showRing(null)
+              explorer.release()
+              break
+            case 'move': {
+              // The cursor reaches the last pixel on each side, never past it: a point on the edge
+              // itself hits nothing, and MENU sits at the right edge.
+              const { clientWidth: w, clientHeight: h } = document.documentElement
+              cursor = {
+                x: Math.min(event.point.x * w, w - 1),
+                y: Math.min(event.point.y * h, h - 1),
+              }
+              showRing(cursor)
+              explorer.moveTo(cursor.x, cursor.y)
+              break
             }
-            showRing(point)
-            explorer.moveTo(point.x, point.y)
+            case 'pinch':
+              fillRing(true)
+              scroller.cancel() // a new pinch catches a gliding page
+              break
+            case 'click':
+              fillRing(false)
+              pingRing()
+              explorer.click()
+              break
+            case 'grab':
+              grab(event.up, at)
+              break
+            case 'release':
+              fillRing(false)
+              letGo(at)
+              break
           }
         }
       })
@@ -229,6 +284,11 @@ export function HandControl() {
           drawHand(canvas.current, null)
           showRing(null)
           explorer.release()
+          // A grab under way lets go without gliding: the Helix settles, the page stays.
+          if (grabbing) handGrabSink()?.end()
+          grabbing = false
+          scroller.cancel()
+          cursor = null
           return
       }
     }
@@ -297,10 +357,18 @@ export function HandControl() {
         <div
           ref={ring}
           data-hand-overlay=""
+          data-hand-ring=""
           data-lost="true"
+          data-pinched="false"
           aria-hidden="true"
-          className="pointer-events-none fixed top-0 left-0 z-[70] -mt-3.5 -ml-3.5 size-7 rounded-full border-2 border-text opacity-100 data-[lost=true]:opacity-0 motion-safe:transition-opacity motion-safe:duration-300"
-        />
+          className="pointer-events-none fixed top-0 left-0 z-[70] -mt-3.5 -ml-3.5 size-7 rounded-full border-2 border-text opacity-100 data-[lost=true]:opacity-0 data-[pinched=true]:bg-text motion-safe:transition-opacity motion-safe:duration-300"
+        >
+          {/* The click's ping: a ring that grows and fades, only with motion allowed. */}
+          <span
+            data-hand-ping=""
+            className="absolute -inset-3 rounded-full border-2 border-text opacity-0 motion-safe:data-[on=true]:animate-hand-ping"
+          />
+        </div>
       ) : null}
     </>
   )
