@@ -10,6 +10,12 @@ import type { NextConfig } from 'next'
 const { SENTRY_AUTH_TOKEN, SENTRY_ORG, SENTRY_PROJECT } = process.env
 const uploadSourceMaps = Boolean(SENTRY_AUTH_TOKEN && SENTRY_ORG && SENTRY_PROJECT)
 
+/** `import('./tracker')` inside `components/hand`, the one import the server build skips (below). */
+const handTrackerOnlyInBrowser = {
+  checkResource: (resource: string, context: string) =>
+    resource === './tracker' && /[\\/]components[\\/]hand$/.test(context),
+}
+
 const nextConfig: NextConfig = {
   // Workspace packages ship TypeScript source; list each one web imports.
   transpilePackages: ['@taha/cms-config'],
@@ -25,28 +31,30 @@ const nextConfig: NextConfig = {
   // deployment id for skew protection. CI sets them (#17); both may be empty.
   ...(process.env.ASSET_PREFIX ? { assetPrefix: process.env.ASSET_PREFIX } : {}),
   ...(process.env.DEPLOYMENT_ID ? { deploymentId: process.env.DEPLOYMENT_ID } : {}),
-  ...(uploadSourceMaps
-    ? {
-        productionBrowserSourceMaps: true,
-        webpack: (config, { isServer, dev }) => {
-          // Browser bundles of a production build only: Sentry is browser-side only.
-          if (!isServer && !dev) {
-            config.plugins.push(
-              sentryWebpackPlugin({
-                authToken: SENTRY_AUTH_TOKEN,
-                org: SENTRY_ORG,
-                project: SENTRY_PROJECT,
-                release: { name: process.env.DEPLOYMENT_ID || undefined },
-                // Uploaded, then removed, so the maps never ship in the image.
-                sourcemaps: { filesToDeleteAfterUpload: ['.next/static/**/*.map'] },
-                telemetry: false,
-              }),
-            )
-          }
-          return config
-        },
-      }
-    : {}),
+  ...(uploadSourceMaps ? { productionBrowserSourceMaps: true } : {}),
+  webpack: (config, { isServer, dev, webpack }) => {
+    // Hand control's tracker (MediaPipe's WASM and the model, about 22 MB) is reached only by a
+    // dynamic import in an effect after the camera grant, which never runs on the server. Without
+    // this the server compilation emits its three `new URL(…, import.meta.url)` files a second
+    // time, into `.next/server/chunks/static/media`, and they land in the web image (#69). Ignored,
+    // the import is a promise that rejects if it ever ran; the browser build is untouched.
+    if (isServer) config.plugins.push(new webpack.IgnorePlugin(handTrackerOnlyInBrowser))
+    // Browser bundles of a production build only: Sentry is browser-side only.
+    if (uploadSourceMaps && !isServer && !dev) {
+      config.plugins.push(
+        sentryWebpackPlugin({
+          authToken: SENTRY_AUTH_TOKEN,
+          org: SENTRY_ORG,
+          project: SENTRY_PROJECT,
+          release: { name: process.env.DEPLOYMENT_ID || undefined },
+          // Uploaded, then removed, so the maps never ship in the image.
+          sourcemaps: { filesToDeleteAfterUpload: ['.next/static/**/*.map'] },
+          telemetry: false,
+        }),
+      )
+    }
+    return config
+  },
 }
 
 // web has no admin and no API routes (ADR-0001); withPayload is only here to bundle Payload's
