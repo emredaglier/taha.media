@@ -4,11 +4,11 @@ import { colourTexture, float, link, QUAD_VERTEX, screenQuad, uniforms } from '.
 
 /**
  * The cursor's heat trail (#45 "pass 3", #64): the moving cursor (on phones, the finger) leaves
- * heat along its path, which spreads and fades. The analogue signal reads it to bump the tracking
- * and jitter the lines where the cursor passes.
+ * heat along its path, which spreads and fades. The glyph mosaic reads it to turn its letters back
+ * into picture where the cursor passes.
  *
- * It needs half-float render targets. A device without them gets no trail: the signal, its
- * jitter from turning and the melt itself work the same, only the cursor leaves nothing.
+ * It needs half-float render targets. A device without them gets no trail: the mosaic, its rows
+ * sliding as the Helix turns and the melt itself work the same, only the cursor leaves nothing.
  */
 export type HeatTrail = {
   /** The heat now (red), 0 where the cursor hasn't been. */

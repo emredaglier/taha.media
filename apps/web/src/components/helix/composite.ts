@@ -1,22 +1,24 @@
 import { HELIX_TUNING } from '../../lib/helix-tuning'
 import { createTarget, float, link, QUAD_VERTEX, screenQuad, uniforms, type Target } from './gl'
+import { createGlyphAtlas, GLYPH_ATLAS } from './glyph-atlas'
 
 /**
  * The composite (#45 "pass 4"): the cards (`scene`) and the Showreel layer (`showreel`), each
- * drawn into its own screen-sized target, put together on the canvas through the analogue signal
- * (#64), the one melt material that does every job:
- * - A signal failing: rows of the picture jump sideways, the colours bleed apart, a tracking band
- *   rolls down the screen. There is no static: the owner removed it on 2026-11-09 (#65). Turning
- *   raises the jitter, and the cursor's heat trail (`HeatTrail`) bumps the tracking where it
- *   passes.
+ * drawn into its own screen-sized target, put together on the canvas through the glyph mosaic
+ * (#68), the one melt material that does every job:
+ * - The picture turns into a grid of letters (`. : - + T A H A`, in Taha's serif, `GlyphAtlas`),
+ *   each cell's glyph picked by its brightness and tinted with its colour. As it melts, the cells
+ *   grow coarser and then shrink away out of step, until the page shows through.
  * - How melted each pixel is comes from one measure (`meltAt`): the top and bottom of the screen
  *   beyond the sharp band, cards deep in the Helix, cards not hovered, and cards that haven't
- *   appeared yet (or are leaving the visible band). The more melted, the more it tears, until it
- *   is gone and the page shows through. The hovered card doesn't melt at the edges or for depth.
- * - Sharp cards (the hovered one, the ones in the sharp band) keep straight top and bottom edges;
- *   their left and right edges shift row by row (Scanline edges). Everything else tears along
- *   its outline too.
- * - The Showreel drops out line by line behind a jittering ring that grows from its centre.
+ *   appeared yet (or are leaving the visible band). The hovered card doesn't melt at the edges or
+ *   for depth.
+ * - Seamless (#68): glyphs appear only where the picture melts, and never beyond a card's own
+ *   anti-aliased edge (or the Showreel's). The cells come in a few fixed sizes, each a whole grid
+ *   riding with the cards, and the melt cross-fades neighbouring sizes, so the grid never tears.
+ * - The cursor's heat trail (`HeatTrail`) fades the glyphs back to the picture where it passes,
+ *   without changing the cell size. Turning slides the rows of cells sideways, smoothly.
+ * - The Showreel dissolves through a ring of coarse glyphs that grows from its centre.
  * The card pass writes what the measure needs for each pixel as the scene's melt inputs
  * (`MELT_INPUTS_GLSL`).
  */
@@ -45,7 +47,7 @@ MeltInputs unpackMeltInputs(vec4 v) { return MeltInputs(v.r, v.g, v.b, v.a); }`
 /**
  * How much a card deep in the Helix fades (colour and alpha × (1 - DEEP_FADE × deep), the
  * prototype's light haze). The card pass leaves it to the composite, so the scene's alpha stays
- * the cards' coverage, which the outline is traced from.
+ * the cards' coverage, which the glyphs are clipped to.
  */
 const DEEP_FADE = 0.35
 
@@ -59,99 +61,59 @@ export type CompositeFrame = {
   reach: number
   /** The screen's shape (width / height). */
   aspect: number
-  /** Seconds, for the tracking band. */
-  time: number
-  /**
-   * Which drawn frame this is (`nextFrame`, wrapped): the line jitter re-rolls every frame, not
-   * on a clock, so it does so on every display (#66).
-   */
-  frame: number
-  /** How fast the Helix turns, 0 to 1: it raises the jitter. */
+  /** How fast the Helix turns, 0 to 1: it slides the rows of cells sideways. */
   speed: number
-  /** How far the Helix has turned, in screen heights (`turnOnScreen`): the outline follows it. */
+  /** How far the Helix has turned, in screen heights (`turnOnScreen`): the grid follows it. */
   shift: number
   /** The cursor's heat trail (`HeatTrail`; red). */
   heat: WebGLTexture
 }
 
-// Value noise, as the prototype has it.
-const NOISE = `
+// A hash, as the prototype has it: one steady random number per cell.
+const HASH = `
 float hash12(vec2 p) {
   vec3 p3 = fract(vec3(p.xyx) * 0.1031);
   p3 += dot(p3, p3.yzx + 33.33);
   return fract((p3.x + p3.y) * p3.z);
-}
-float vnoise(vec2 p) {
-  vec2 i = floor(p), f = fract(p);
-  vec2 u = f * f * (3.0 - 2.0 * f);
-  return mix(mix(hash12(i), hash12(i + vec2(1.0, 0.0)), u.x),
-             mix(hash12(i + vec2(0.0, 1.0)), hash12(i + vec2(1.0, 1.0)), u.x), u.y);
-}
-float fbm(vec2 p) {
-  float a = 0.5, s = 0.0;
-  for (int i = 0; i < 4; i++) { s += a * vnoise(p); p = p * 2.03 + 17.1; a *= 0.5; }
-  return s;
 }`
 
-// The cards' outline, as the prototype's EDGE chunk has it (the parts the signal reads): the card
-// coverage around the pixel at 17 taps, two rings of 8 at about r and r/2 px. `mean` is the
-// blurred coverage (0 outside, 1 inside, 0.5 on the outline), `band` 1 on the outline and 0 well
-// inside or outside, `dir` the way into the card, and `jit` a small displacement, strongest on
-// the outline, anchored to the turning cards.
-const EDGE = `
-struct Edge { float band; float mean; vec2 dir; vec2 jit; };
-Edge edgeAt(vec2 uv) {
-  vec2 px = 1.0 / uRes;
-  float r = clamp(uRes.y / 150.0, 4.0, 12.0);
-  float acc = coverAt(uv);
-  float wsum = 1.0;
-  vec2 g = vec2(0.0);
-  for (int i = 0; i < 8; i++) {
-    float a = float(i) * 0.785398 + 0.3927;
-    vec2 d = vec2(cos(a), sin(a));
-    float c1 = coverAt(uv + d * px * r);
-    float c2 = coverAt(uv + d * px * r * 0.5);
-    acc += c1 + c2 * 1.5;
-    wsum += 2.5;
-    g += d * (c1 + c2 * 1.5);
-  }
-  Edge e;
-  e.mean = acc / wsum;
-  e.band = 1.0 - pow(abs(2.0 * e.mean - 1.0), 1.6);
-  e.dir = g / max(length(g), 1e-3);
-  vec2 p = (uv - vec2(0.0, uShift)) * uRes / 11.0;
-  vec2 n = vec2(fbm(p * 0.8) * 0.7 + vnoise(p * 4.0) * 0.3, fbm(p * 0.8 + 41.3));
-  e.jit = (n - 0.5) * 2.0 * e.band * px * r * 0.9;
-  return e;
-}`
-
-// The owner's values are in the tuning object; the rest is the prototype's signal as it is.
-const SIGNAL = HELIX_TUNING.signal
+// The owner's values are in the tuning object; the rest is the prototype's glyph mosaic, made
+// seamless (#68, "Seamless and smooth"): no outline band, nothing drawn outside a card, a grid that
+// never tears and no flicker.
+const GLYPHS = HELIX_TUNING.glyphs
 const RING = HELIX_TUNING.meltRing
 
 // Everything is premultiplied: where the picture has melted away, or nothing is drawn, the page
 // colour shows through the canvas (playbook: canvas-colours), so it never reads a CSS colour. The
 // prototype's fades towards the background colour are fades of colour and alpha together here,
-// and its noise and grey are scaled by alpha, so none shows where no card is.
+// and a glyph is its cell's colour premultiplied by the glyph's coverage.
 const FRAGMENT = `#version 300 es
 precision highp float;
 in vec2 vUv;
-uniform sampler2D uScene, uMeltInputs, uShowreel, uHeat;
+uniform sampler2D uScene, uMeltInputs, uShowreel, uHeat, uGlyphs;
 uniform vec2 uRes, uCentre;
-uniform float uShowreelOn, uMelt, uReach, uAspect, uTime, uFrame, uSpeed, uShift;
+uniform float uShowreelOn, uMelt, uReach, uAspect, uSpeed, uShift;
 out vec4 outColor;
 const float SHARP_BAND = ${float(HELIX_TUNING.sharpBand)};
 const float FAR_CARDS = ${float(HELIX_TUNING.farCards)};
 const float NOT_HOVERED = ${float(HELIX_TUNING.notHovered)};
-const float LINE_JITTER = ${float(SIGNAL.lineJitter)};
-const float CHROMA_BLEED = ${float(SIGNAL.chromaBleed)};
-const float CURSOR_BUMP = ${float(SIGNAL.cursorBump)};
-const float SCANLINE_EDGE = ${float(SIGNAL.scanlineEdge)};
+const float LARGEST_CELL = ${float(GLYPHS.largestCell)};
+const float GLYPH_LEVELS = ${float(GLYPHS.glyphLevels)};
+const float STAGGER = ${float(GLYPHS.stagger)};
+const float CURSOR_SHRINK = ${float(GLYPHS.cursorShrink)};
+const float GLYPH_COUNT = ${float(GLYPH_ATLAS.glyphs.length)};
+const float GLYPH_CELL_PX = ${float(GLYPH_ATLAS.cell)};
 const float DEEP_FADE = ${float(DEEP_FADE)};
-const float RING_WIDTH = ${float(RING.width)};
 const float RING_DEPTH = ${float(RING.depth)};
 const float RING_REACH_MARGIN = ${float(RING.reachMargin)};
-${NOISE}
+// Cell sizes are in px at a screen this tall (the prototype's), so the look is the same at any size.
+const float CELL_SCREEN_PX = 900.0;
+// The cell sizes: RUNGS whole grids, from SMALLEST_CELL px up to the largest, each the last times
+// the same factor. The melt cross-fades two neighbouring grids, so the cells grow from fine to
+// coarse without a grid ever changing size from one pixel to the next (which tears it).
+const float SMALLEST_CELL = 2.0;
+const float RUNGS = 4.0;
+${HASH}
 ${MELT_INPUTS_GLSL}
 // How melted the picture is at uv: 0 sharp, 1 gone.
 float meltAt(vec2 uv) {
@@ -166,50 +128,93 @@ float meltAt(vec2 uv) {
 // How much of a card covers uv, 0 to 1: the scene's alpha, which the card pass writes unfaded
 // (the picture's own alpha times the coverage; the pictures are opaque).
 float coverAt(vec2 uv) { return textureLod(uScene, clamp(uv, 0.001, 0.999), 0.0).a; }
-${EDGE}
+// How deep in the Helix the card at uv is, 0 to 1. The melt inputs are blended by coverage at the
+// cards' edges, as the scene's alpha is, so it is the stored value over the coverage.
+float deepAt(vec2 uv) {
+  vec2 at = clamp(uv, 0.001, 0.999);
+  return clamp(textureLod(uMeltInputs, at, 0.0).a / max(coverAt(at), 1e-3), 0.0, 1.0);
+}
 vec4 sceneAt(vec2 uv, float lod) { return textureLod(uScene, clamp(uv, 0.001, 0.999), lod); }
 vec4 showreelAt(vec2 uv, float lod) {
   if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return vec4(0.0);
   return textureLod(uShowreel, uv, lod);
 }
+// How far the Showreel's ring has passed uv, 0 (not yet) to 1 (its cells gone). The ring grows
+// from the centre past the corners, so by the end of the melt the last cell is gone.
+float ringAt(vec2 uv) {
+  float dist = length((uv - uCentre) * vec2(uAspect, 1.0));
+  float radius = uMelt * (uReach + RING_REACH_MARGIN + RING_DEPTH) - 0.03;
+  return clamp((radius - dist) / RING_DEPTH, 0.0, 1.0);
+}
+// One cell of the glyph grid cellPx px wide, at uv: premultiplied (glyph colour, coverage), before
+// it is clipped to what covers the pixel. The grid rides with the cards (uShift), and turning
+// slides each row sideways by its own amount. The cell's colour, how melted it is and its depth are
+// read once, at its centre, so a cell is one glyph; its brightness picks the glyph, and as the cell
+// melts, the glyph shrinks about its centre, out of step with its neighbours (STAGGER).
+vec4 glyphCell(vec2 uv, float cellPx, bool reel) {
+  float cell = cellPx / CELL_SCREEN_PX;
+  vec2 q = (uv - vec2(0.0, uShift)) * vec2(uAspect, 1.0);
+  float slide = (hash12(vec2(floor(q.y / cell), 3.7)) - 0.5) * uSpeed * 0.06;
+  q.x += slide;
+  vec2 id = floor(q / cell);
+  vec2 cl = fract(q / cell);
+  float h = hash12(id);
+  vec2 cuv = vec2(((id.x + 0.5) * cell - slide) / uAspect, (id.y + 0.5) * cell + uShift);
+  float lod = clamp(log2(cell * uRes.y) + 0.5, 0.0, 6.0);
+  vec3 col;
+  float vm;
+  float fade = 1.0;
+  if (reel) {
+    vec4 rs = showreelAt(cuv, lod);
+    col = rs.a > 0.001 ? rs.rgb / rs.a : vec3(0.0);
+    vm = ringAt(cuv);
+  } else {
+    // A cell whose centre is off the card takes its colour, melt and depth from the card at the
+    // pixel, so no cell along a card's edge reads the empty page.
+    vec2 at = coverAt(cuv) > 0.5 ? cuv : uv;
+    // The scene is premultiplied: its colour over its alpha is the cell's own colour.
+    vec4 sc = sceneAt(at, lod);
+    col = sc.a > 0.001 ? sc.rgb / sc.a : vec3(0.0);
+    vm = meltAt(at);
+    fade = 1.0 - DEEP_FADE * deepAt(at);
+  }
+  float s = 1.0 - smoothstep(0.6, 0.9, vm * (1.0 + h * STAGGER * 0.8));
+  float lum = clamp(dot(col, vec3(0.3, 0.59, 0.11)) * 1.25, 0.0, 1.0);
+  float lv = floor(GLYPH_LEVELS + 0.5);
+  float lvl = floor(lum * lv * 0.9999);
+  float ai = floor(lvl / max(lv - 1.0, 1.0) * (GLYPH_COUNT - 1.0) + 0.5);
+  vec2 gc = (cl - 0.5) / max(s, 0.06) + 0.5;
+  float inb = step(0.0, gc.x) * step(gc.x, 1.0) * step(0.0, gc.y) * step(gc.y, 1.0);
+  float glod = clamp(log2(GLYPH_CELL_PX / max(cell * uRes.y * max(s, 0.2), 1.0)), 0.0, 4.0);
+  vec2 guv = vec2((ai + clamp(gc.x, 0.0, 1.0)) / GLYPH_COUNT, 1.0 - clamp(gc.y, 0.0, 1.0));
+  float a = textureLod(uGlyphs, guv, glod).r * inb * s * fade;
+  return vec4(min(col * 1.3, vec3(1.0)) * a, a);
+}
+// The mosaic at uv, grown from the finest grid (grow 0) to the coarsest, whose cells are largest
+// px wide (grow 1): the two neighbouring grids, cross-faded by how far between them it is.
+vec4 mosaicAt(vec2 uv, float grow, float largest, bool reel) {
+  float t = clamp(grow, 0.0, 1.0) * (RUNGS - 1.0);
+  float lower = min(floor(t), RUNGS - 2.0);
+  float factor = largest / SMALLEST_CELL;
+  vec4 fine = glyphCell(uv, SMALLEST_CELL * pow(factor, lower / (RUNGS - 1.0)), reel);
+  vec4 coarse = glyphCell(uv, SMALLEST_CELL * pow(factor, (lower + 1.0) / (RUNGS - 1.0)), reel);
+  return mix(fine, coarse, t - lower);
+}
 void main() {
   vec2 uv = vUv;
-  Edge e = edgeAt(uv);
   float heat = texture(uHeat, uv).r;
-  float m0 = meltAt(uv);
-  float m = clamp(m0 + heat * CURSOR_BUMP * 0.25 * (1.0 - m0), 0.0, 1.0);
-  // Rows two pixels tall jump sideways, a new jump every drawn frame; the tracking band rolls down.
-  float row = floor(uv.y * uRes.y / 2.0);
-  float rj = hash12(vec2(row, uFrame)) - 0.5;
-  float tq = (fract(uv.y * 0.6 - uTime * 0.07) - 0.5) / 0.04;
-  float trk = exp(-tq * tq);
-  // Sharp cards (low melt of the card itself, read a little inside so the pixels just outside
-  // agree) get Scanline edges: no outline noise, only a sideways shift per row, about 2 px at rest.
-  float mc = max(m, meltAt(uv + e.dir * 10.0 / uRes));
-  float sharp = 1.0 - smoothstep(0.0, 0.3, mc);
-  float eb = e.band * (1.0 - sharp);
-  float scanAmp = sharp * (2.0 + uSpeed * 5.0 + heat * CURSOR_BUMP * 4.0) / uRes.x * SCANLINE_EDGE;
-  float amp = (m * 0.07 * (1.0 + uSpeed) + eb * 0.010 + trk * m * 0.04
-               + heat * CURSOR_BUMP * 0.015 * (1.0 - sharp)) * LINE_JITTER;
-  float j = rj * (amp + 2.0 * scanAmp * LINE_JITTER);
-  float ca = (m * 0.012 + eb * 0.002) * CHROMA_BLEED;
-  vec2 pos = uv + vec2(j, 0.0) + e.jit * 0.8 * (1.0 - sharp);
-  float lod = m * 1.2;
-  vec4 red = sceneAt(pos + vec2(ca, 0.0), lod);
-  vec4 green = sceneAt(pos, lod);
-  vec4 blue = sceneAt(pos - vec2(ca, 0.0), lod);
-  vec4 c = vec4(red.r, green.g, blue.b, max(green.a, max(red.a, blue.a)));
-  // Deep cards fade (the prototype's light haze). The melt inputs are blended by coverage at the
-  // cards' edges, as the scene's alpha is, so deep there is the stored value over the coverage.
-  float cover = coverAt(pos);
-  float deep = clamp(textureLod(uMeltInputs, pos, 0.0).a / max(cover, 1e-3), 0.0, 1.0);
-  c *= 1.0 - DEEP_FADE * deep;
-  // Scanlines darken as it melts, and from 0.55 the picture fades out until it is gone.
-  c.rgb *= 1.0 - 0.18 * m * step(0.5, fract(uv.y * uRes.y / 3.0));
+  float m = meltAt(uv);
+  // The card itself, with its own anti-aliased edge: deep cards fade (the prototype's light
+  // haze), and from 0.55 it fades out until it is gone.
+  vec4 c = sceneAt(uv, 0.0) * (1.0 - DEEP_FADE * deepAt(uv));
   c *= 1.0 - smoothstep(0.55, 1.0, m);
-  // A crisp outline where the shifted picture's card ends (the prototype mixes towards the
-  // background by coverage there): alpha follows smoothstep(coverage), keeping the depth fade.
-  c *= smoothstep(0.35, 0.65, cover) / max(cover, 0.35);
+  // The glyphs take over only where it melts; the cursor's heat fades them back to the picture.
+  float k = smoothstep(0.03, 0.2, m * (1.0 - 0.8 * clamp(heat * CURSOR_SHRINK, 0.0, 1.0)));
+  if (k > 0.0) {
+    // Clipped to the card's coverage at the pixel: no glyph reaches past a card's edge.
+    vec4 g = mosaicAt(uv, smoothstep(0.0, 0.6, m), LARGEST_CELL, false) * coverAt(uv);
+    c = mix(c, g, k);
+  }
   c.a = min(c.a, 1.0);
   // Premultiplied: a channel may not exceed alpha.
   c.rgb = clamp(c.rgb, 0.0, c.a);
@@ -219,21 +224,16 @@ void main() {
       // Untouched until the melt starts, so the hand-over matches the static hero.
       r = texture(uShowreel, uv);
     } else {
-      // The ring grows from the centre past the corners; inside it the Showreel drops out line by
-      // line over RING_DEPTH, so by the end of the melt the last line is gone.
-      vec2 rq = (uv - uCentre) * vec2(uAspect, 1.0);
-      float dist = length(rq);
-      float radius = uMelt * (uReach + RING_REACH_MARGIN + RING_DEPTH) - RING_WIDTH;
-      float rm = clamp((radius - dist) / RING_DEPTH, 0.0, 1.0);
-      float o = (dist - radius) / RING_WIDTH;
-      float ringJ = exp(-o * o);
-      float rjj = rj * (ringJ * 0.03 + rm * 0.05) * LINE_JITTER;
-      float rca = ca * 0.5 + ringJ * 0.004 * CHROMA_BLEED;
-      vec4 ra = showreelAt(uv + vec2(rjj + rca, 0.0), 0.0);
-      vec4 rg = showreelAt(uv + vec2(rjj, 0.0), 0.0);
-      vec4 rb = showreelAt(uv + vec2(rjj - rca, 0.0), 0.0);
-      r = vec4(ra.r, rg.g, rb.b, max(max(ra.a, rg.a), rb.a));
-      r *= 1.0 - smoothstep(0.0, 0.35, rm - hash12(vec2(row, 7.0)) * 0.6);
+      // Inside the ring the Showreel turns to coarse glyphs, which shrink away over RING_DEPTH.
+      float rm = ringAt(uv);
+      vec4 plain = showreelAt(uv, 0.0);
+      r = plain * (1.0 - smoothstep(0.6, 1.0, rm));
+      float kr = smoothstep(0.03, 0.2, rm);
+      if (kr > 0.0) {
+        // Clipped to the Showreel's own alpha at the pixel.
+        vec4 g = mosaicAt(uv, smoothstep(0.0, 0.5, rm), LARGEST_CELL * 1.4, true) * plain.a;
+        r = mix(r, g, kr);
+      }
     }
     c = r + c * (1.0 - r.a);
   }
@@ -241,22 +241,25 @@ void main() {
 }`
 
 /** The texture units the composite reads from. */
-const UNITS = { scene: 0, meltInputs: 1, showreel: 2, heat: 3 }
+const UNITS = { scene: 0, meltInputs: 1, showreel: 2, heat: 3, glyphs: 4 }
 
-export function createComposite(gl: WebGL2RenderingContext): Composite {
+/**
+ * The composite for `gl`. `host` is the element the glyph atlas reads the site's serif under (the
+ * canvas); the atlas is built here, so it is rebuilt with everything else in a new context.
+ */
+export function createComposite(gl: WebGL2RenderingContext, host: Element): Composite {
   const program = link(gl, QUAD_VERTEX, FRAGMENT)
   const at = uniforms(gl, program, [
     'uScene',
     'uMeltInputs',
     'uShowreel',
     'uHeat',
+    'uGlyphs',
     'uRes',
     'uShowreelOn',
     'uMelt',
     'uReach',
     'uAspect',
-    'uTime',
-    'uFrame',
     'uSpeed',
     'uShift',
     'uCentre',
@@ -265,7 +268,8 @@ export function createComposite(gl: WebGL2RenderingContext): Composite {
   // Both are read blurred where the picture melts, so they keep mipmaps.
   const scene = createTarget(gl, { depth: true, meltInputs: true, mipmaps: true })
   const showreel = createTarget(gl, { depth: false, mipmaps: true })
-  // The drawing buffer's size in pixels: the signal's rows and shifts are counted in pixels.
+  const glyphs = createGlyphAtlas(gl, host, UNITS.glyphs)
+  // The drawing buffer's size in pixels: how blurred a cell's colour and its glyph are read.
   let size = { width: 1, height: 1 }
 
   const bind = (unit: number, texture: WebGLTexture | null) => {
@@ -283,7 +287,7 @@ export function createComposite(gl: WebGL2RenderingContext): Composite {
       size = { width: Math.max(1, width), height: Math.max(1, height) }
     },
 
-    draw({ showreelOn, melt, centre, reach, aspect, time, frame, speed, shift, heat }) {
+    draw({ showreelOn, melt, centre, reach, aspect, speed, shift, heat }) {
       gl.disable(gl.DEPTH_TEST)
       gl.disable(gl.BLEND)
       gl.useProgram(program)
@@ -292,29 +296,30 @@ export function createComposite(gl: WebGL2RenderingContext): Composite {
       bind(UNITS.meltInputs, scene.meltInputs)
       bind(UNITS.showreel, showreel.texture)
       bind(UNITS.heat, heat)
+      bind(UNITS.glyphs, glyphs.texture)
       gl.uniform1i(at.uScene, UNITS.scene)
       gl.uniform1i(at.uMeltInputs, UNITS.meltInputs)
       gl.uniform1i(at.uShowreel, UNITS.showreel)
       gl.uniform1i(at.uHeat, UNITS.heat)
+      gl.uniform1i(at.uGlyphs, UNITS.glyphs)
       gl.uniform2f(at.uRes, size.width, size.height)
       gl.uniform1f(at.uShowreelOn, showreelOn ? 1 : 0)
       gl.uniform1f(at.uMelt, melt)
       gl.uniform1f(at.uReach, reach)
       gl.uniform1f(at.uAspect, aspect)
-      gl.uniform1f(at.uTime, time)
-      gl.uniform1f(at.uFrame, frame)
       gl.uniform1f(at.uSpeed, speed)
       gl.uniform1f(at.uShift, shift)
       gl.uniform2f(at.uCentre, centre.x, centre.y)
       gl.drawArrays(gl.TRIANGLES, 0, quad.count)
       // Unbound again, so no later pass draws into a texture it is also reading.
-      for (const unit of [UNITS.heat, UNITS.showreel, UNITS.meltInputs, UNITS.scene])
+      for (const unit of [UNITS.glyphs, UNITS.heat, UNITS.showreel, UNITS.meltInputs, UNITS.scene])
         bind(unit, null)
     },
 
     destroy() {
       scene.destroy()
       showreel.destroy()
+      glyphs.destroy()
       quad.destroy()
       gl.deleteProgram(program)
     },

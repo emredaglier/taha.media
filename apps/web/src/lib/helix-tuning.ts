@@ -36,17 +36,18 @@ export const HELIX_TUNING = {
    */
   sharpBand: 0.25,
   /**
-   * The analogue signal (#64), the material that melts the Helix: a signal failing. How far rows
-   * of the picture jump sideways (`lineJitter`), how far its colours bleed apart (`chromaBleed`),
-   * and how strongly the cursor's heat trail bumps the tracking (`cursorBump`). There is no tape
-   * noise or snow: the owner removed the static on 2026-11-09 (#65). The sharp cards keep
-   * straight top and bottom edges, while their left and right edges shift row by row (Scanline
-   * edges) by `scanlineEdge` (1: about 2 px at rest, more as the Helix turns or the cursor
-   * passes, and with `lineJitter`).
+   * The glyph mosaic (#68), the material that melts the Helix: the picture turns into a grid of
+   * letters from Taha's serif, picked by each cell's brightness, and the cells shrink away. How
+   * large the coarsest cells get (`largestCell`, in px at a 900 px tall screen, so the look is the
+   * same at any size; the cells grow to it from 2 px as it melts), how many glyphs the brightness
+   * picks from (`glyphLevels`, 2 to 8), how far out of step the cells vanish (`stagger`, 0
+   * together to 1), and how far the cursor's heat trail shrinks the grid back to picture where it
+   * passes (`cursorShrink`: it fades the glyphs back into the picture and never changes the cell
+   * size, so the grid doesn't tear).
    */
-  signal: { lineJitter: 1, chromaBleed: 1, cursorBump: 1, scanlineEdge: 1 },
+  glyphs: { largestCell: 14, glyphLevels: 6, stagger: 0.6, cursorShrink: 1 },
   /**
-   * The cursor's heat trail the signal reads (#64): the moving cursor (on phones, the finger)
+   * The cursor's heat trail the glyph mosaic reads (#64): the moving cursor (on phones, the finger)
    * leaves heat along its path, which spreads and fades. How wide the path is (`radius`, in screen
    * heights), how much heat is left after each of the `stepsPerSecond` steps (`decay`), and how
    * much heat a move adds (`push`, reached at `fullSpeed` CSS px per second, less when slower).
@@ -119,9 +120,9 @@ export const HELIX_TUNING = {
   /** How much more than just covering the screen the zoom starts from (1 covers it exactly). */
   coverSpare: 1.02,
   /**
-   * The Showreel's melt, in screen heights: a jittering ring grows from its centre, about `width`
-   * wide; inside it the Showreel drops out line by line over `depth`; and it grows this far past
-   * the Showreel's corners (`reachMargin`), so the last lines are gone as the melt ends.
+   * The Showreel's melt, in screen heights: a ring of glyphs grows from its centre; inside it the
+   * Showreel turns to coarse glyphs that shrink away over `depth`; and it grows this far past the
+   * Showreel's corners (`reachMargin`), so the last cells are gone as the melt ends.
    */
-  meltRing: { width: 0.06, depth: 0.14, reachMargin: 0.1 },
+  meltRing: { depth: 0.14, reachMargin: 0.1 },
 }

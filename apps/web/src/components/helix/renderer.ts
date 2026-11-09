@@ -22,7 +22,6 @@ import {
   uniforms,
   vertexArray,
 } from './gl'
-import { nextFrame } from './frame-count'
 import { createHeatTrail } from './heat'
 import { createPreviewLoops } from './loops'
 import { createShowreelLayer } from './showreel'
@@ -110,12 +109,12 @@ void main() {
                      ((FAR + NEAR) * vz + 2.0 * FAR * NEAR) / (NEAR - FAR), -vz);
 }`
 
-// The cards as they are, and the melt inputs the analogue signal needs (see `composite`): how far a
+// The cards as they are, and the melt inputs the glyph mosaic needs (see `composite`): how far a
 // card is not there (it hasn't appeared yet in the opening, or it is in the last slot before the
 // edge of the visible band, so a card beyond it, which may repeat a Work on screen, is never
 // seen), dimmed or hovered, and how deep in the Helix (the prototype's light haze, which the
 // hovered card doesn't get; the composite fades deep cards by it). Alpha is the card's coverage
-// alone, so the composite can trace the cards' outline from it. The page colour shows through
+// alone, so the composite can clip its glyphs to the cards' edges. The page colour shows through
 // wherever a card fades (alpha), so the canvas never reads a CSS colour (playbook: canvas-colours).
 const FRAGMENT = `#version 300 es
 precision highp float;
@@ -157,7 +156,7 @@ const toScreen = (x: number, y: number): ScreenPoint => ({ x: x / 2 + 0.5, y: y 
  * Draws the Helix on `canvas` with hand-written WebGL2 (no 3D library), in four passes: the 16:9
  * cards on the helix, each showing its Work's Preview loop (in the sharp band, or pointed at) or
  * its poster; the Showreel layer of the opening; the cursor's heat trail; and the composite
- * that puts them on the canvas through the analogue signal, melting the top and bottom away, far
+ * that puts them on the canvas through the glyph mosaic, melting the top and bottom away, far
  * cards and cards not pointed at, and the Showreel. Throws `HelixUnavailable` when WebGL2 or a
  * shader fails; `onLost` runs if the context is lost later.
  */
@@ -191,7 +190,7 @@ export function createHelixRenderer(
     'uDimmed',
   ])
   const mesh = vertexArray(gl, cardMesh())
-  const composite = createComposite(gl)
+  const composite = createComposite(gl, canvas)
   const heat = createHeatTrail(gl)
   const host = canvas.parentElement!
   // The plain block stands in for a Showreel with neither loop nor poster: the colour the static
@@ -204,8 +203,6 @@ export function createHelixRenderer(
   // shows the placeholder colour, or nothing if that can't be read.
   const placeholder = cssColour(canvas, '--color-placeholder') ?? new Uint8Array([0, 0, 0, 0])
   let destroyed = false
-  // Counts the drawn frames for the signal's line jitter (#66); a hidden tab draws none.
-  let frame = 0
   const stills = works.map(({ poster }) => {
     const texture = colourTexture(gl, placeholder)
     const still = { texture, crop: cropToCard(poster.width, poster.height, poster.focalPoint) }
@@ -266,7 +263,7 @@ export function createHelixRenderer(
       const scale = coverScale(focal, aspect) ** (1 - zoom)
       loops.update(playing, held)
 
-      // --- pass 1: the cards, and the melt inputs for the signal
+      // --- pass 1: the cards, and the melt inputs for the glyph mosaic
       composite.scene.bind()
       gl.viewport(0, 0, canvas.width, canvas.height)
       gl.clearColor(0, 0, 0, 0)
@@ -312,7 +309,7 @@ export function createHelixRenderer(
       // --- pass 3: the heat trail. The cursor leaves heat along its path.
       heat.step(dt, cursor, aspect)
 
-      // --- pass 4: the composite, onto the canvas, through the analogue signal
+      // --- pass 4: the composite, onto the canvas, through the glyph mosaic
       const box = reel ? cardOnScreen(reel.slot, focal, aspect) : null
       const centre = box ? toScreen(box.x, box.y) : { x: 0.5, y: 0.5 }
       const speed = Math.min(1, Math.abs(bend) / HELIX_SHAPE.bendMax)
@@ -324,8 +321,6 @@ export function createHelixRenderer(
         centre,
         reach: box ? Math.hypot(box.halfWidth * aspect, box.halfHeight) / 2 : 0,
         aspect,
-        time: (performance.now() / 1000) % 1000,
-        frame: (frame = nextFrame(frame)),
         speed,
         shift: turnOnScreen(progress, focal),
         heat: heat.texture,

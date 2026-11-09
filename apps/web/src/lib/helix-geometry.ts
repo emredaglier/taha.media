@@ -56,7 +56,7 @@ export function lensFor(width: number, height: number) {
 
 /**
  * How far turning the Helix by `turn` cards moves the front of it up the screen, in screen
- * heights: one slot's height where the front card sits. The signal's outline noise rides with it.
+ * heights: one slot's height where the front card sits. The glyph mosaic's grid rides with it.
  */
 export const turnOnScreen = (turn: number, focal: number): number =>
   (turn * SLOT_PITCH * focal) / (HELIX_SHAPE.cameraZ - HELIX_SHAPE.radius) / 2
