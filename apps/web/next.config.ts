@@ -10,8 +10,12 @@ import type { NextConfig } from 'next'
 const { SENTRY_AUTH_TOKEN, SENTRY_ORG, SENTRY_PROJECT } = process.env
 const uploadSourceMaps = Boolean(SENTRY_AUTH_TOKEN && SENTRY_ORG && SENTRY_PROJECT)
 
-/** `import('./tracker')` inside `components/hand`, the one import the server build skips (below). */
-const handTrackerOnlyInBrowser = {
+/**
+ * `import('./tracker')` inside `components/hand`, the one import the server build skips (below).
+ * Exported for its guard test: renaming the file or its folder must fail a test, not quietly ship
+ * the files in the server build again.
+ */
+export const handTrackerOnlyInBrowser = {
   checkResource: (resource: string, context: string) =>
     resource === './tracker' && /[\\/]components[\\/]hand$/.test(context),
 }

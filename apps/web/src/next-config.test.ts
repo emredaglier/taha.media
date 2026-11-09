@@ -4,7 +4,7 @@ import path from 'node:path'
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import config from '../next.config'
+import config, { handTrackerOnlyInBrowser } from '../next.config'
 
 it('sends no Client Hints headers: Payload adds them for its admin, and Chrome re-requests the first page for Critical-CH', async () => {
   const rules = (await config.headers?.()) ?? []
@@ -141,5 +141,30 @@ describe("the server build leaves Hand control's MediaPipe files out (#69)", () 
 
   it('emits none of them into the server build', async () => {
     expect((await emitted(true)).filter((name) => name.endsWith('.task'))).toEqual([])
+  })
+
+  it("still matches the real tracker import: HandControl's import('./tracker') in components/hand", () => {
+    const hand = path.join(import.meta.dirname, 'components/hand')
+    const source = fs.readFileSync(path.join(hand, 'HandControl.tsx'), 'utf8')
+    const dynamic = [...source.matchAll(/import\(\s*'([^']+)'\s*\)/g)].map((match) => match[1]!)
+    expect(dynamic).toContain('./tracker')
+    expect(fs.existsSync(path.join(hand, 'tracker.ts'))).toBe(true)
+    for (const resource of dynamic) {
+      expect(handTrackerOnlyInBrowser.checkResource(resource, hand), resource).toBe(true)
+    }
+  })
+
+  it('reaches the tracker only through that dynamic import, never a static one', () => {
+    const src = import.meta.dirname
+    const files = fs
+      .readdirSync(src, { recursive: true, encoding: 'utf8' })
+      .filter((file) => /\.tsx?$/.test(file) && !/\.test\.tsx?$/.test(file))
+    const offenders = files.filter((file) =>
+      fs
+        .readFileSync(path.join(src, file), 'utf8')
+        .split('\n')
+        .some((line) => /from '[^']*\/tracker'/.test(line) && !/^\s*import type /.test(line)),
+    )
+    expect(offenders).toEqual([])
   })
 })

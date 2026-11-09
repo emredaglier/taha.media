@@ -63,6 +63,16 @@ describe('Dockerfile', () => {
     expect(build).toMatch(/^ENV NEXT_STANDALONE=1$/m)
   })
 
+  it("fails the build if Hand control's MediaPipe files reach the web server output (#69)", () => {
+    const build = stage('build')
+    const check = build.indexOf('find apps/web/.next/server')
+    expect(check).toBeGreaterThan(build.indexOf('pnpm --filter @taha/web build'))
+    const step = build.slice(check, build.indexOf('fi\n', check))
+    expect(step).toContain("-name '*.wasm'")
+    expect(step).toContain("-name '*.task'")
+    expect(step).toMatch(/exit 1/)
+  })
+
   it('copies the libsql native binding next to the traced packages of both servers', () => {
     const build = stage('build')
     expect(build).toMatch(/for app in web cms/)
