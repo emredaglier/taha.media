@@ -37,15 +37,25 @@ export const HELIX_TUNING = {
   sharpBand: 0.25,
   /**
    * The glyph mosaic (#68), the material that melts the Helix: the picture turns into a grid of
-   * letters from Taha's serif, picked by each cell's brightness, and the cells shrink away. How
-   * large the coarsest cells get (`largestCell`, in px at a 900 px tall screen, so the look is the
-   * same at any size; the cells grow to it from 2 px as it melts), how many glyphs the brightness
-   * picks from (`glyphLevels`, 2 to 8), how far out of step the cells vanish (`stagger`, 0
-   * together to 1), and how far the cursor's heat trail shrinks the grid back to picture where it
-   * passes (`cursorShrink`: it fades the glyphs back into the picture and never changes the cell
-   * size, so the grid doesn't tear).
+   * letters from Taha's serif, picked by each cell's brightness, and the cells shrink away.
+   * - Cell sizes are in px at a 900 px tall screen, so the look is the same at any size. As it
+   *   melts, the cells grow from `smallestCell` to `largestCell` through `cellSizes` whole grids,
+   *   each the last times the same factor; the melt cross-fades two neighbouring grids, so no grid
+   *   ever changes size from one pixel to the next (which tears it). More sizes ghost less while
+   *   two are blended, at the same cost.
+   * - How many glyphs the brightness picks from (`glyphLevels`, 2 to 8), and how far out of step
+   *   the cells vanish (`stagger`, 0 together to 1).
+   * - How far the cursor's heat trail shrinks the grid back to picture where it passes
+   *   (`cursorShrink`): it fades the glyphs back into the picture and never changes the cell size.
    */
-  glyphs: { largestCell: 14, glyphLevels: 6, stagger: 0.6, cursorShrink: 1 },
+  glyphs: {
+    smallestCell: 2,
+    largestCell: 14,
+    cellSizes: 6,
+    glyphLevels: 6,
+    stagger: 0.6,
+    cursorShrink: 1,
+  },
   /**
    * The cursor's heat trail the glyph mosaic reads (#64): the moving cursor (on phones, the finger)
    * leaves heat along its path, which spreads and fades. How wide the path is (`radius`, in screen
@@ -122,7 +132,9 @@ export const HELIX_TUNING = {
   /**
    * The Showreel's melt, in screen heights: a ring of glyphs grows from its centre; inside it the
    * Showreel turns to coarse glyphs that shrink away over `depth`; and it grows this far past the
-   * Showreel's corners (`reachMargin`), so the last cells are gone as the melt ends.
+   * Showreel's corners (`reachMargin`), so the last cells are gone as the melt ends. It starts
+   * `headStart` behind the centre (the prototype's), so the first moment of the melt doesn't
+   * already punch glyphs into the middle of the Showreel; `reachMargin` covers it at the end.
    */
-  meltRing: { depth: 0.14, reachMargin: 0.1 },
+  meltRing: { depth: 0.14, reachMargin: 0.1, headStart: 0.03 },
 }

@@ -190,7 +190,7 @@ export function createHelixRenderer(
     'uDimmed',
   ])
   const mesh = vertexArray(gl, cardMesh())
-  const composite = createComposite(gl, canvas)
+  const composite = createComposite(gl)
   const heat = createHeatTrail(gl)
   const host = canvas.parentElement!
   // The plain block stands in for a Showreel with neither loop nor poster: the colour the static

@@ -3,12 +3,13 @@ import { colourTexture } from './gl'
 /**
  * The glyph mosaic's letters (#68), as the prototype's atlas has them: a row of cells, light to
  * heavy, so a cell's brightness picks one by its place in the row. Each glyph is drawn white on
- * black, centred in a square cell `cell` px wide, its baseline `baseline` px from the cell's top.
+ * black, centred across a square cell `cell` px wide, its middle `middleY` px below the cell's top
+ * (the prototype's, a little low, so the letters sit in the middle to the eye).
  */
 export const GLYPH_ATLAS = {
   glyphs: ['.', ':', '-', '+', 'T', 'A', 'H', 'A'],
   cell: 64,
-  baseline: 35,
+  middleY: 35,
 } as const
 
 /** The canvas font the atlas draws with, in the site's serif `family` (the prototype's size). */
@@ -46,20 +47,15 @@ export type GlyphAtlas = {
  * The glyph atlas for the composite, in the serif the site's headings use (Tailwind's
  * `font-serif`). Only the font family is read from CSS, never a colour (playbook: canvas-colours):
  * the glyphs are white on black, and the composite tints them with the picture. Until the serif has
- * loaded, the atlas is black, so the mosaic draws no glyphs rather than wrong ones. `unit` is the
- * texture unit the composite reads it from; the upload leaves nothing bound there.
+ * loaded, the atlas is black, so the mosaic draws no glyphs rather than wrong ones.
  */
-export function createGlyphAtlas(
-  gl: WebGL2RenderingContext,
-  host: Element,
-  unit: number,
-): GlyphAtlas {
+export function createGlyphAtlas(gl: WebGL2RenderingContext): GlyphAtlas {
   const texture = colourTexture(gl, new Uint8Array([0, 0, 0, 255]))
   let destroyed = false
 
   const draw = () => {
     if (destroyed || gl.isContextLost()) return
-    const { glyphs, cell, baseline } = GLYPH_ATLAS
+    const { glyphs, cell, middleY } = GLYPH_ATLAS
     const canvas = document.createElement('canvas')
     canvas.width = glyphs.length * cell
     canvas.height = cell
@@ -71,8 +67,9 @@ export function createGlyphAtlas(
     context.textAlign = 'center'
     context.textBaseline = 'middle'
     context.font = font
-    glyphs.forEach((glyph, index) => context.fillText(glyph, (index + 0.5) * cell, baseline))
-    gl.activeTexture(gl.TEXTURE0 + unit)
+    glyphs.forEach((glyph, index) => context.fillText(glyph, (index + 0.5) * cell, middleY))
+    // On unit 0, as the other uploads; unbound after, so the composite binds it where it reads it.
+    gl.activeTexture(gl.TEXTURE0)
     gl.bindTexture(gl.TEXTURE_2D, texture)
     // Not flipped: the canvas's top row is the texture's first, as the composite reads it.
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas)
@@ -81,7 +78,7 @@ export function createGlyphAtlas(
     gl.bindTexture(gl.TEXTURE_2D, null)
   }
 
-  const font = atlasFont(serifFamily(host))
+  const font = atlasFont(serifFamily())
   const cancel = drawWhenFontLoads(document.fonts, font, draw)
 
   return {
@@ -94,13 +91,16 @@ export function createGlyphAtlas(
   }
 }
 
-/** The font family `font-serif` resolves to, read from a probe under `host`. */
-function serifFamily(host: Element): string {
+/**
+ * The font family `font-serif` resolves to, read from a hidden probe on the body (the class, not
+ * Tailwind's `--font-serif`, which it may leave out when unused), or the browser's serif.
+ */
+function serifFamily(): string {
   const probe = document.createElement('span')
   probe.className = 'font-serif'
   probe.hidden = true
-  host.append(probe)
-  const family = getComputedStyle(probe).fontFamily
+  document.body.append(probe)
+  const family = getComputedStyle(probe).fontFamily.trim()
   probe.remove()
-  return family
+  return family || 'serif'
 }
