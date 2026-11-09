@@ -19,6 +19,8 @@ export type SmokeManifest = {
   /** The start of the first paragraph of the About and Privacy pages. */
   about: { text: string }
   privacy: { text: string }
+  /** The caption of each Gallery item that has one, in the order Galeri shows them. */
+  gallery: { captions: string[] }
 }
 
 type Block = { children?: unknown[] }
@@ -58,10 +60,19 @@ export async function prepareSmokeContent(payload: Payload): Promise<SmokeManife
     data: { slug: newSlug, _status: 'published' },
   })
 
+  // Ready to publish (a cover and main media) but never published: the preview instance leaves out
+  // a draft it cannot render yet, so a bare one would be a 404 there too (#61).
   const draft = await payload.create({
     collection: 'works',
     draft: true,
-    data: { title: 'Taslak Çalışma', year: 2026, disciplines: ['kurgu'], _status: 'draft' },
+    data: {
+      title: 'Taslak Çalışma',
+      year: 2026,
+      disciplines: ['kurgu'],
+      cover: liveEdit.cover,
+      mainMedia: { kind: 'image', image: liveEdit.cover },
+      _status: 'draft',
+    },
   })
 
   const works = (await published()).docs.map((work) => ({
@@ -70,9 +81,18 @@ export async function prepareSmokeContent(payload: Payload): Promise<SmokeManife
     featured: Boolean(work.featured),
   }))
 
-  const [about, privacy] = await Promise.all([
+  const [about, privacy, gallery] = await Promise.all([
     payload.findGlobal({ slug: 'about', draft: false, overrideAccess: false }),
     payload.findGlobal({ slug: 'privacy', draft: false, overrideAccess: false }),
+    // Gallery items have no drafts, so every item is live. `_order` is the order Galeri shows.
+    payload.find({
+      collection: 'gallery',
+      overrideAccess: false,
+      sort: '_order',
+      limit: 0,
+      pagination: false,
+      depth: 0,
+    }),
   ])
 
   return {
@@ -86,6 +106,9 @@ export async function prepareSmokeContent(payload: Payload): Promise<SmokeManife
     },
     about: { text: firstBlockText(about.bio, 40) },
     privacy: { text: firstBlockText(privacy.body, 25) },
+    gallery: {
+      captions: gallery.docs.flatMap((item) => (item.caption?.trim() ? [item.caption.trim()] : [])),
+    },
   }
 }
 

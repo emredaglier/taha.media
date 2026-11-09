@@ -15,7 +15,7 @@ import {
   type Expectation,
 } from './failure-rules.ts'
 import { loadEverything } from './load-everything.ts'
-import { expectedTitle, publicRoutes, readManifest } from './manifest.ts'
+import { expectedTitle, publicRoutes, readManifest, type PublicRoute } from './manifest.ts'
 import { routeAssets } from './network.ts'
 
 // The release gate (spec #1, Seam 2; CODING_STANDARDS, "Smoke specs"). It runs against the built
@@ -45,6 +45,13 @@ const asHtml = (value: string) =>
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#x27;')
+
+/** The titles and captions a list route must show, one by one. */
+const expectedTexts = (route: PublicRoute): string[] => [
+  ...(route.featuredTitles ?? []),
+  ...(route.workTitles ?? []),
+  ...(route.galleryCaptions ?? []),
+]
 
 const UNKNOWN_PATH = '/bu/sayfa/yok'
 const draftPath = `/isler/${manifest.draft.slug}`
@@ -157,7 +164,9 @@ test.describe('public routes', () => {
       const failures = await visit(route.path)
       const main = page.locator('main').first()
       await expect(main).toBeVisible()
-      for (const title of route.featuredTitles ?? []) await expect(main).toContainText(title)
+      for (const title of expectedTexts(route)) {
+        await expect(main).toContainText(title)
+      }
       if (route.text) await expect(main).toContainText(route.text)
       if (route.path.startsWith('/isler/')) {
         await expect(page.locator('h1').first()).toContainText(route.text ?? '')
@@ -167,7 +176,9 @@ test.describe('public routes', () => {
       // The server HTML already holds the content: the pages are prerendered (ADR-0012), and
       // nothing is hidden until JavaScript hydrates.
       const html = await (await request.get(route.path)).text()
-      for (const title of route.featuredTitles ?? []) expect(html).toContain(asHtml(title))
+      for (const title of expectedTexts(route)) {
+        expect(html).toContain(asHtml(title))
+      }
       if (route.text) expect(html).toContain(asHtml(route.text))
     })
   }

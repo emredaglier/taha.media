@@ -13,6 +13,7 @@ export type SmokeManifest = {
   liveEdit: { slug: string; title: string; newTitle: string }
   about: { text: string }
   privacy: { text: string }
+  gallery: { captions: string[] }
 }
 
 const fail = (reason: string): never => {
@@ -59,6 +60,14 @@ export function parseManifest(raw: unknown): SmokeManifest {
   }
   if (liveEdit.newTitle === liveEdit.title) fail('the live edit changes nothing')
 
+  // Galeri must show something, or the gate would pass an empty page.
+  if (!Array.isArray(m.gallery?.captions) || m.gallery.captions.length === 0) {
+    return fail('no Gallery item with a caption')
+  }
+  const captions = m.gallery.captions.map((caption, index) =>
+    text(caption, `gallery.captions[${index}]`),
+  )
+
   return {
     works,
     draft,
@@ -66,6 +75,7 @@ export function parseManifest(raw: unknown): SmokeManifest {
     liveEdit,
     about: { text: text(m.about?.text, 'about.text') },
     privacy: { text: text(m.privacy?.text, 'privacy.text') },
+    gallery: { captions },
   }
 }
 
@@ -84,6 +94,10 @@ export type PublicRoute = {
   text?: string
   /** Home only: the title of every Featured Work. */
   featuredTitles?: string[]
+  /** İşler only: the title of every published Work. */
+  workTitles?: string[]
+  /** Galeri only: the caption of every Gallery item that has one. */
+  galleryCaptions?: string[]
 }
 
 /** Every public route of the site, with what must be on it. */
@@ -95,6 +109,11 @@ export function publicRoutes(manifest: SmokeManifest): PublicRoute[] {
         .filter((work) => work.featured)
         .map((work) => expectedTitle(manifest, work)),
     },
+    { path: '/isler', workTitles: manifest.works.map((work) => expectedTitle(manifest, work)) },
+    // The manifest holds no Disciplines, so this one checks that the filter page loads and shows
+    // its filter link.
+    { path: '/isler?disiplin=motion', text: 'Motion' },
+    { path: '/galeri', galleryCaptions: manifest.gallery.captions },
     { path: '/hakkimda', text: manifest.about.text },
     { path: '/gizlilik', text: manifest.privacy.text },
     ...manifest.works.map((work) => ({

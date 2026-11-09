@@ -1,41 +1,11 @@
 import { createTestSite, type TestSite } from '@taha/cms-config/testing'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
+import { block, doc, paragraphs, textNode } from '../test/lexical'
 import { getAbout, getPrivacy, getSite } from './pages'
 
 let site: TestSite
 let editor: Awaited<ReturnType<TestSite['createEditor']>>
-
-const textNode = (value: string, format = 0) => ({
-  type: 'text',
-  text: value,
-  format,
-  version: 1,
-  detail: 0,
-  mode: 'normal',
-  style: '',
-})
-const block = (type: string, children: object[], extra: object = {}) => ({
-  type,
-  children,
-  direction: 'ltr' as const,
-  format: '' as const,
-  indent: 0,
-  version: 1,
-  ...extra,
-})
-const doc = (...children: object[]) => ({
-  root: {
-    type: 'root',
-    children,
-    direction: 'ltr' as const,
-    format: '' as const,
-    indent: 0,
-    version: 1,
-  },
-})
-const paragraphs = (...texts: string[]) =>
-  doc(...texts.map((value) => block('paragraph', [textNode(value)])))
 
 beforeAll(async () => {
   site = await createTestSite()

@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { FEATURED_MAX, FEATURED_MIN } from '../featured'
+import { toMainMedia } from '../main-media-read'
 import { createTestSite, type TestSite } from '../testing'
 import { seedLocal } from './local'
 import { applyLiveEdit, prepareSmokeContent, type SmokeManifest } from './smoke'
@@ -52,9 +53,14 @@ describe('prepareSmokeContent', () => {
       draft: true,
       where: { slug: { equals: manifest.draft.slug } },
       overrideAccess: true,
+      depth: 2,
     })
     expect(latest).toHaveLength(1)
     expect(latest[0]?.title).toBe(manifest.draft.title)
+    // The preview instance leaves out a draft it cannot render yet, one with no cover or main
+    // media (apps/web/src/data/works.ts), so the spec would get a 404 for it (#61).
+    expect(latest[0]?.cover).toMatchObject({ id: expect.any(Number) })
+    expect(() => toMainMedia(latest[0]!.mainMedia)).not.toThrow()
   })
 
   it('renames a published Work so its old address has to redirect', async () => {
@@ -75,6 +81,21 @@ describe('prepareSmokeContent', () => {
   it('quotes text of the published About and Privacy pages', () => {
     expect(manifest.about.text.length).toBeGreaterThan(10)
     expect(manifest.privacy.text.length).toBeGreaterThan(5)
+  })
+
+  it('lists the captions of the Gallery items in the order Galeri shows them', async () => {
+    const { docs } = await site.cms.find({
+      collection: 'gallery',
+      sort: '_order',
+      limit: 0,
+      pagination: false,
+      depth: 0,
+    })
+    expect(docs.length).toBeGreaterThanOrEqual(2)
+    expect(manifest.gallery.captions.length).toBeGreaterThanOrEqual(1)
+    expect(manifest.gallery.captions).toEqual(
+      docs.flatMap((item) => (item.caption ? [item.caption] : [])),
+    )
   })
 
   it('is plain JSON, so the spec can read it from a file', () => {
