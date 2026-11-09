@@ -1,9 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
+import { isSixteenByNine } from './featured-loop'
 import type { User, Work } from './payload-types'
-import { createTestSite, type TestSite } from './testing'
+import { createTestSite, videoFixture, type TestSite } from './testing'
 
-// Issue #43: featuring a Work (published) needs a 16:9 Preview loop. Same seam as works.int.test.ts.
+// Issues #43 and #46: featuring a Work (published) needs a 16:9 Preview loop, and a Video such a Work
+// uses as its loop stays 16:9 when its file is replaced. Same seam as works.int.test.ts.
 
 const NEEDS_LOOP = 'Öne çıkarmak için 16:9 önizleme döngüsü gerekli.'
 const WRONG_SHAPE = 'Öne çıkarmak için önizleme döngüsü 16:9 olmalı; bu video'
@@ -170,5 +172,120 @@ describe('a Work that needs no loop', () => {
     )
     const draft = await save({ previewLoop: null }, 'draft', work.id)
     expect(draft._status).toBe('draft')
+  })
+})
+
+// Issue #46: the rule also holds when the file of a Video that a featured Work shows is replaced.
+describe('replacing the file of a Video a featured Work uses as its loop', () => {
+  const replaceFile = (id: number, file: string) => {
+    const data = videoFixture(file)
+    return site.cms.update({
+      collection: 'videos',
+      id,
+      data: {},
+      file: { data, mimetype: 'video/mp4', name: file, size: data.length },
+      user: editor,
+      overrideAccess: false,
+    })
+  }
+
+  const publishedFeatured = async (title: string, loopId: number) =>
+    save({ title, featured: true, previewLoop: loopId }, 'published')
+
+  it.each(['portrait.mp4', 'square.mp4', 'loop-636.mp4'])(
+    'is refused with %s, in Turkish, naming the Work',
+    async (file) => {
+      const loopId = await loop('loop-720.mp4')
+      await publishedFeatured('Fragman Döngüsü', loopId)
+
+      const errors = await messagesOf(replaceFile(loopId, file))
+      expect(errors).toHaveLength(1)
+      expect(errors[0]).toMatchObject({ path: 'filename' })
+      expect(errors[0]?.message).toContain('“Fragman Döngüsü” işi')
+      expect(errors[0]?.message).toContain('16:9')
+    },
+  )
+
+  it('names every featured Work that shows the loop', async () => {
+    const loopId = await loop('loop-720.mp4')
+    await publishedFeatured('Birinci İş', loopId)
+    await publishedFeatured('İkinci İş', loopId)
+
+    const [error] = await messagesOf(replaceFile(loopId, 'portrait.mp4'))
+    expect(error?.message).toContain('“Birinci İş” işi')
+    expect(error?.message).toContain('“İkinci İş” işi')
+  })
+
+  it('stores nothing and leaves the Video as it was when refused', async () => {
+    const loopId = await loop('loop-720.mp4')
+    await publishedFeatured('Dokunulmaz Döngü', loopId)
+    const before = await site.cms.findByID({ collection: 'videos', id: loopId, depth: 0 })
+    const requests = site.s3.requests.length
+
+    await messagesOf(replaceFile(loopId, 'portrait.mp4'))
+
+    // No upload, copy or delete reached R2, and the stored Video is exactly what it was.
+    expect(site.s3.requests.length).toBe(requests)
+    const after = await site.cms.findByID({ collection: 'videos', id: loopId, depth: 0 })
+    expect(after).toEqual(before)
+    expect(after).toMatchObject({ width: 1280, height: 720 })
+  })
+
+  it('goes by the published Work: a draft that already unfeatures it does not free the loop', async () => {
+    const loopId = await loop('loop-720.mp4')
+    const work = await publishedFeatured('Yayındaki İş', loopId)
+    await save({ featured: false }, 'draft', work.id)
+
+    const [error] = await messagesOf(replaceFile(loopId, 'portrait.mp4'))
+    expect(error?.message).toContain('“Yayındaki İş” işi')
+  })
+
+  // The originals are 1280x720, so the new size shows the file really was replaced.
+  it.each([
+    ['loop-ok.mp4', 640, 360],
+    ['loop-638.mp4', 638, 360],
+  ] as const)('succeeds with the 16:9 file %s', async (file, width, height) => {
+    const loopId = await loop('loop-720.mp4')
+    await publishedFeatured('Yeni Dosya', loopId)
+
+    expect(await replaceFile(loopId, file)).toMatchObject({ width, height })
+    expect(isSixteenByNine(width, height)).toBe(true)
+    const stored = await site.cms.findByID({ collection: 'videos', id: loopId, depth: 0 })
+    expect(stored).toMatchObject({ width, height })
+  })
+
+  it('lets any shape in for a Video no featured Work uses', async () => {
+    const unused = await loop('loop-720.mp4')
+    expect(await replaceFile(unused, 'portrait.mp4')).toMatchObject({ width: 360, height: 640 })
+
+    const notFeatured = await loop('loop-720.mp4')
+    await save({ featured: false, previewLoop: notFeatured }, 'published')
+    expect(await replaceFile(notFeatured, 'square.mp4')).toMatchObject({ width: 360, height: 360 })
+  })
+
+  it('lets any shape in for a main video of a featured Work', async () => {
+    const mainId = (
+      await site.uploadVideo(editor, { use: 'main', file: 'loop-720.mp4', name: 'ana-video.mp4' })
+    ).id
+    await save(
+      {
+        featured: true,
+        previewLoop: await loop('loop-720.mp4'),
+        mainMedia: { kind: 'video', video: mainId },
+      },
+      'published',
+    )
+
+    expect(await replaceFile(mainId, 'portrait.mp4')).toMatchObject({ width: 360, height: 640 })
+  })
+
+  it('lets any shape in while only a draft features the Work, and publishing is then refused', async () => {
+    const loopId = await loop('loop-720.mp4')
+    const draft = await save({ featured: true, previewLoop: loopId }, 'draft')
+
+    await replaceFile(loopId, 'portrait.mp4')
+
+    const errors = await messagesOf(save({}, 'published', draft.id))
+    expect(errors[0]?.message).toContain(WRONG_SHAPE)
   })
 })

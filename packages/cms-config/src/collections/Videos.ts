@@ -8,6 +8,7 @@ import {
 } from 'payload'
 
 import { editor } from '../access'
+import { keepFeaturedLoopSixteenByNine } from '../featured-loop'
 import { guardMediaDelete } from '../media-delete'
 import { anyReferences } from '../media-references'
 import { readMp4, type Mp4Info } from '../mp4'
@@ -134,7 +135,7 @@ export const Videos: CollectionConfig = {
         return args
       },
     ],
-    beforeValidate: [keepUseWhileReferenced, readAndCheck],
+    beforeValidate: [keepUseWhileReferenced, readAndCheck, keepFeaturedLoopSixteenByNine],
   },
   fields: [
     {
