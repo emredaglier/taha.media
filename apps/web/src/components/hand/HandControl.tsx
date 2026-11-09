@@ -401,7 +401,8 @@ export function HandControl() {
         // Last, since turning off stops this loop. The coach open gives the visitor longer.
         const watched = watchHand(
           handWatch ?? startHandWatch(at),
-          { seen: hand !== null, coach: coachOpen.current },
+          // A hand resting in a pinch (at the chin) is seen, but not engaged (#75).
+          { seen: hand !== null && gesture.engaged, coach: coachOpen.current },
           at,
         )
         handWatch = watched.state

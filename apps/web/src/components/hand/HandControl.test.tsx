@@ -842,14 +842,16 @@ describe('after the controller is gone', () => {
 describe('its lifetime (#58)', () => {
   const { noHandMs, coachNoHandMs, minFps, slowMs, sampleMs, graceMs } = HAND_TUNING.lifetime
   const pressed = () => toggle()!.getAttribute('aria-pressed')
-  /** Whether a hand is in view. */
+  /** Whether a hand is in view, and whether it rests in a pinch (thumb touching index, #75). */
   let present: boolean
+  let pinched: boolean
 
   beforeEach(() => {
     present = false
+    pinched = false
     markCoachSeen(localStorage) // the coach (which pauses the count) has been seen
     tracker.createHandTracker.mockImplementation(async () => ({
-      detect: () => sighting(present ? pose(0.5, 0.5, 0.9) : null),
+      detect: () => sighting(present ? pose(0.5, 0.5, pinched ? 0.05 : 0.9) : null),
       close: tracker.close,
     }))
   })
@@ -875,6 +877,38 @@ describe('its lifetime (#58)', () => {
     present = false
     await runFor(noHandMs - 1000)
     expect(pressed()).toBe('true')
+  })
+
+  it('an open hand in view keeps it on', async () => {
+    present = true
+    await render()
+    await turnOn()
+    await runFor(noHandMs * 2)
+    expect(pressed()).toBe('true')
+  })
+
+  it('a hand resting in a pinch, the first ever seen, does not keep it on (#75)', async () => {
+    present = true
+    pinched = true
+    await render()
+    await turnOn()
+    await runFor(noHandMs - 1000)
+    expect(pressed()).toBe('true')
+    await runFor(3000)
+    expect(pressed()).toBe('false')
+    expect(status()).toBe('Elin görünmedi, elinle gezme kapandı')
+  })
+
+  it('a hand that pinches and rests lets it turn off noHandMs after the rest guard (#75)', async () => {
+    present = true
+    await render()
+    await turnOn()
+    await runFor(5000) // open, so armed
+    pinched = true
+    await runFor(HAND_TUNING.rest.ms + 500 + noHandMs - 3000)
+    expect(pressed()).toBe('true')
+    await runFor(3500)
+    expect(pressed()).toBe('false')
   })
 
   it(`while the coach is open it waits ${coachNoHandMs / 1000} s, not for ever`, async () => {

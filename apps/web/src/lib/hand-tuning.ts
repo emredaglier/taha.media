@@ -58,6 +58,22 @@ export const HAND_TUNING = {
     releaseEaseMs: 200,
   },
   /**
+   * Arming (#75): a pinch counts only if the fingers were wide open just before, so a hand resting
+   * in a pinch (at the chin, say) never clicks or scrolls. Wide open is a thumb–index gap (÷ palm,
+   * as the pinch's) of at least the larger of `gapFactor` times the calibrated threshold (above
+   * the open hysteresis, `pinch.openFactor`) and `gapMin` (so a threshold clamped to its floor
+   * can't make arming trivial, yet it stays under the 0.45 open gap that calibrates to that floor),
+   * held for `ms`. That run counts as the arming until `holdMs` after it ended, measured to the
+   * first frame of the fingers closing. A pinch uses its arming up; tracking lost loses it.
+   */
+  arm: { gapFactor: 2, gapMin: 0.4, ms: 200, holdMs: 1000 },
+  /**
+   * The rest guard (#75): a grab whose cursor has stayed within `radius` (camera-frame heights) of
+   * one point for `ms` is a hand resting, not grabbing: it lets go (a release, no glide), and its
+   * closed fingers are ignored until the hand has been wide open again (arming).
+   */
+  rest: { radius: 0.03, ms: 1500 },
+  /**
    * A click is a quick pinch: let go within `maxMs` of closing, and moving less than `maxTravel`
    * of the camera frame's height meanwhile. Any longer or further and the pinch is a grab.
    */
