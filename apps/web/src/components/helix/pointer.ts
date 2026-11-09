@@ -12,6 +12,19 @@ export function devicePoint(canvas: HTMLCanvasElement, clientX: number, clientY:
   }
 }
 
+/**
+ * Captures a press's pointer on `element`, so a drag keeps going off it. Hand control's click
+ * (#57) presses with a pointer the browser doesn't know, which can't be captured (the browser
+ * throws); it is left uncaptured, as it never drags.
+ */
+export function capturePointer(element: Element, pointerId: number) {
+  try {
+    element.setPointerCapture(pointerId)
+  } catch {
+    // Not an active pointer: nothing to capture.
+  }
+}
+
 /** What the pointer did over the Helix since the last frame. */
 export type PointerSample = {
   /** Where it is, in normalized device coordinates; null when it isn't over the Helix. */
@@ -24,7 +37,7 @@ export type PointerSample = {
 
 /**
  * Follows the pointer over the Helix's canvas (#55): a mouse, a pen, or a finger while it is down
- * (Hand control will feed the same pointer events). `sample` is called once per frame.
+ * (Hand control sends the same pointer events). `sample` is called once per frame.
  */
 export function watchPointer(canvas: HTMLCanvasElement) {
   /** Where it is and where it was at the last sample, in client px. */

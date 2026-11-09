@@ -10,9 +10,13 @@ const tracker = vi.hoisted(() => ({
 }))
 vi.mock('./tracker', () => ({ createHandTracker: tracker.createHandTracker }))
 
+import { hold, pose } from '../../lib/hand-fixtures'
+import type { HandFrame } from '../../lib/hand-gesture'
 import { HELIX_TUNING } from '../../lib/helix-tuning'
 import { HAND_TUNING } from '../../lib/hand-tuning'
+import { lockScroll } from '../../lib/menu-a11y'
 import { CONSENT_TEXT, CONSENT_TITLE } from './ConsentNote'
+import { claimHandGrab } from './grab'
 import { HandControl } from './HandControl'
 import { HandToggle } from './HandToggle'
 import { dispatchHand } from './store'
@@ -48,11 +52,15 @@ const device = ({ cores, memory }: { cores: number; memory?: number }) => {
 /** A camera stream with one video track. */
 const stream = () => ({ getTracks: () => [track], getVideoTracks: () => [track] })
 
+/** The camera's frame interval (s), and whether the visitor prefers reduced motion. */
+let frameSeconds: number
+let reducedMotion: boolean
+
 /** Runs `count` camera frames through the controller's tracking loop. */
 const runFrames = (count: number) =>
   act(() => {
     for (let i = 0; i < count; i++) {
-      videoTime += 1 / 30
+      videoTime += frameSeconds
       const due = frames
       frames = []
       for (const frame of due) frame(videoTime * 1000)
@@ -105,6 +113,8 @@ beforeEach(() => {
   getUserMedia = vi.fn(async () => stream())
   frames = []
   videoTime = 0
+  frameSeconds = 1 / 30
+  reducedMotion = false
   hits = []
   vi.stubGlobal('requestAnimationFrame', (frame: (now: number) => void) => frames.push(frame))
   vi.stubGlobal('cancelAnimationFrame', () => {})
@@ -139,7 +149,9 @@ beforeEach(() => {
     'matchMedia',
     (query: string) =>
       ({
-        matches: DESKTOP_QUERIES.includes(query),
+        matches:
+          DESKTOP_QUERIES.includes(query) ||
+          (reducedMotion && query === '(prefers-reduced-motion: reduce)'),
         addEventListener: () => {},
         removeEventListener: () => {},
       }) as unknown as MediaQueryList,
@@ -423,6 +435,176 @@ describe('while on', () => {
     await turnOn()
     await runFrames(1)
     expect(hits.at(-1)).toEqual([999, 799])
+  })
+})
+
+describe('pinching (#57)', () => {
+  const { pinch, click: quick } = HAND_TUNING
+  const OPEN = 0.9
+  const CLOSED = OPEN * pinch.calibrationShare * 0.5
+  /** Camera frames in `ms` at the camera's current frame rate. */
+  const framesIn = (ms: number) => Math.max(1, Math.round(ms / (frameSeconds * 1000)))
+  /** The camera shows `frames` one per camera frame, then keeps showing the last. */
+  let queue: HandFrame[]
+  const show = (...frames: HandFrame[][]) => queue.push(...frames.flat())
+  let link: HTMLAnchorElement
+  let clicks: number
+  let scrolled: number[]
+
+  /** Hand control on, with an open hand shown long enough to calibrate and settle. */
+  const ready = async () => {
+    await render()
+    await turnOn()
+    const frames = pinch.calibrationFrames + framesIn(500)
+    show(hold(pose(0.5, 0.5, OPEN), frames))
+    await runFrames(frames)
+  }
+  const play = async (...frames: HandFrame[][]) => {
+    show(...frames)
+    await runFrames(frames.flat().length)
+  }
+  const total = (tops: number[]) => tops.reduce((a, b) => a + b, 0)
+  const quickPinch = () => [hold(pose(0.5, 0.5, CLOSED), 4), hold(pose(0.5, 0.5, OPEN), 4)]
+  /** Pinched, the hand rises a tenth of the camera frame in a fifth of a second. */
+  const rise = 0.1
+  const grabUp = () => {
+    const steps = framesIn(200)
+    return [
+      hold(pose(0.5, 0.5, CLOSED), pinch.confirmFrames),
+      Array.from({ length: steps }, (_, i) => pose(0.5, 0.5 - (rise * (i + 1)) / steps, CLOSED)),
+    ]
+  }
+  const letGo = () => hold(pose(0.5, 0.5 - rise, OPEN), pinch.confirmFrames)
+  const after = (ms: number) => hold(pose(0.5, 0.5 - rise, OPEN), framesIn(ms))
+
+  beforeEach(() => {
+    queue = []
+    tracker.createHandTracker.mockImplementation(async () => ({
+      detect: () => (queue.length > 1 ? queue.shift() : queue[0]) ?? null,
+      close: tracker.close,
+    }))
+    link = document.createElement('a')
+    link.href = '#is'
+    link.textContent = 'İşler'
+    document.body.append(link)
+    clicks = 0
+    link.addEventListener('click', (event) => {
+      event.preventDefault()
+      clicks++
+    })
+    document.elementsFromPoint = () => [link]
+    scrolled = []
+    vi.spyOn(window, 'scrollBy').mockImplementation(((options: ScrollToOptions) => {
+      scrolled.push(options.top ?? 0)
+    }) as typeof window.scrollBy)
+  })
+
+  afterEach(() => {
+    link.remove()
+    vi.restoreAllMocks()
+  })
+
+  it('a quick pinch clicks the link under the cursor once, and focuses it as a mouse would', async () => {
+    await ready()
+    await play(...quickPinch())
+    expect(clicks).toBe(1)
+    expect(document.activeElement).toBe(link)
+    expect(scrolled).toEqual([])
+  })
+
+  it(`a pinch held longer than ${quick.maxMs} ms clicks nothing`, async () => {
+    await ready()
+    await play(hold(pose(0.5, 0.5, CLOSED), framesIn(quick.maxMs) + 4))
+    await play(hold(pose(0.5, 0.5, OPEN), 4))
+    expect(clicks).toBe(0)
+  })
+
+  it('a pinch and a move up scrolls the page down with the hand', async () => {
+    await ready()
+    await play(...grabUp(), hold(pose(0.5, 0.5 - rise, CLOSED), framesIn(1000)))
+    // Up is down the page, by the tuned share of the screen per screen the hand moved (800 px).
+    const expected = (rise / HAND_TUNING.frame.height) * 800 * HAND_TUNING.grab.scrollGain
+    expect(Math.abs(total(scrolled) - expected)).toBeLessThanOrEqual(2)
+    // A hand that came to rest before letting go doesn't glide.
+    const rested = scrolled.length
+    await play(letGo(), after(300))
+    expect(scrolled.length).toBe(rested)
+  })
+
+  it.each([30, 15])(
+    'letting go of a moving grab glides on briefly, the same way, at %s camera frames a second',
+    async (fps) => {
+      frameSeconds = 1 / fps
+      await ready()
+      await play(...grabUp(), letGo())
+      const released = scrolled.length
+      await play(after(1500))
+      const glide = scrolled.slice(released)
+      expect(glide.length).toBeGreaterThan(1)
+      expect(glide.every((top) => top > 0)).toBe(true)
+      // It is brief: it has stopped by then.
+      const stopped = scrolled.length
+      await play(after(300))
+      expect(scrolled.length).toBe(stopped)
+      expect(clicks).toBe(0)
+    },
+  )
+
+  it('under reduced motion the page stops where the grab let go: no glide', async () => {
+    reducedMotion = true
+    await ready()
+    await play(...grabUp(), letGo())
+    const released = scrolled.length
+    expect(released).toBeGreaterThan(0)
+    await play(after(1000))
+    expect(scrolled.length).toBe(released)
+  })
+
+  it('a pinch held a little past a click, drifting slightly, scrolls that drift and never glides', async () => {
+    await ready()
+    // About 430 ms closed while the hand drifts 2% of the frame up, then let go.
+    const steps = framesIn(430)
+    const drift = Array.from({ length: steps }, (_, i) =>
+      pose(0.5, 0.5 - (0.02 * (i + 1)) / steps, CLOSED),
+    )
+    await play(hold(pose(0.5, 0.5, CLOSED), pinch.confirmFrames), drift)
+    await play(hold(pose(0.5, 0.48, OPEN), pinch.confirmFrames))
+    const released = scrolled.length
+    await play(hold(pose(0.5, 0.48, OPEN), framesIn(1000)))
+    expect(scrolled.length).toBe(released)
+    expect(clicks).toBe(0)
+  })
+
+  it('scrolls nothing while the page is locked (the open menu), as the wheel does', async () => {
+    await ready()
+    const unlock = lockScroll(document.documentElement)
+    await play(...grabUp(), letGo(), after(1000))
+    unlock()
+    expect(scrolled).toEqual([])
+  })
+
+  it('a claimed grab (the Helix on Home) goes to its claimant: no page scroll, no glide', async () => {
+    const move = vi.fn((_up: number) => true)
+    const end = vi.fn(() => true)
+    const unclaim = claimHandGrab({ move, end })
+    await ready()
+    await play(...grabUp(), letGo(), after(300))
+    unclaim()
+    expect(move).toHaveBeenCalled()
+    const ups = move.mock.calls.map(([up]) => up)
+    expect(total(ups)).toBeGreaterThan(0)
+    expect(end).toHaveBeenCalledTimes(1)
+    expect(scrolled).toEqual([])
+  })
+
+  it('turning Hand control off mid-grab lets go of the claimed grab', async () => {
+    const end = vi.fn(() => true)
+    const unclaim = claimHandGrab({ move: () => true, end })
+    await ready()
+    await play(...grabUp())
+    await click(toggle())
+    unclaim()
+    expect(end).toHaveBeenCalledTimes(1)
   })
 })
 

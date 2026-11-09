@@ -57,6 +57,13 @@ RUN mkdir -p apps/web/public apps/cms/public
 RUN --mount=type=secret,id=sentry_auth_token \
     SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token 2>/dev/null || true)" \
     pnpm --filter @taha/web build
+# Hand control's MediaPipe files (its WASM and the hand model, about 22 MB) belong to the browser
+# build only: the server build skips `import('./tracker')` (next.config.ts, #69). Fail here if any
+# reach the server output, which the web image ships.
+RUN if find apps/web/.next/server \( -name '*.wasm' -o -name '*.task' \) | grep -q .; then \
+      echo "apps/web/.next/server holds .wasm or .task files: Hand control's MediaPipe files must stay out of the server build (next.config.ts, #69)" >&2; \
+      exit 1; \
+    fi
 # cms's own `build` script is only a typecheck (so `pnpm build` stays light); the image needs the
 # real Next build. The config loads at build time, so it gets throwaway settings that never leave
 # this stage.
