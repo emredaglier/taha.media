@@ -23,5 +23,8 @@ smoke/.output/
 # Local CMS database
 apps/cms/data/
 
+# QA kit folder: seeded database and Media (scripts/qa)
+.qa/
+
 # Claude Code worktrees
 .claude/worktrees/

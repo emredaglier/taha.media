@@ -11,6 +11,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "smoke": "node smoke/run.ts",
+    "qa": "node scripts/qa/qa.ts",
     "build": "pnpm -r build",
     "dev": "pnpm --filter @taha/web dev",
     "seed": "pnpm --filter @taha/cms seed",
