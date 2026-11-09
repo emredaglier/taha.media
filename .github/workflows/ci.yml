@@ -94,12 +94,14 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # The browser download is cached; the system libraries are not part of ~/.cache, so they are
       # installed on a hit too. Each install has its own timeout: a hung apt mirror fails in
-      # minutes and can be re-run, instead of eating the job's 45.
+      # minutes and can be re-run, instead of eating the job's 45. The key names the runner kind:
+      # actions/cache stores ~ paths relative to the workspace, so a GitHub-hosted entry restored on
+      # the self-hosted runner (#84) lands outside ~/.cache and reports a hit with no browser.
       - uses: actions/cache@v6
         id: playwright
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ runner.arch }}-chromium-${{ hashFiles('pnpm-lock.yaml') }}
+          key: playwright-${{ runner.environment }}-${{ runner.os }}-${{ runner.arch }}-chromium-${{ hashFiles('pnpm-lock.yaml') }}
       - if: steps.playwright.outputs.cache-hit != 'true'
         timeout-minutes: 10
         run: pnpm exec playwright install --with-deps chromium
