@@ -12,6 +12,12 @@ Test behaviour where a user or caller meets it, and keep `pnpm test` near a minu
 - **Pure maths** (layouts, easings, curves) is asserted by properties (symmetry, monotonic,
   matches a brute-force sample, clamps) plus a few worked examples. A restated constant fails on
   every deliberate retune.
+- **Device capabilities** are pinned in the shared setup (`apps/web/src/test/device-setup.ts`):
+  every jsdom test starts on a capable device (twice `HELIX_TUNING.weakDevice`), because jsdom
+  reports the host's real core count and CI runners have fewer. A test of a weak device calls
+  `setDevice({ cores, memory })` from `apps/web/src/test/device.ts` (a key left out keeps the
+  pinned value; `memory: undefined` means not reported) and never defines `navigator` properties
+  itself. The setup resets it before each test.
 - **Slow checks** (a `next build`, Docker) run in the smoke spec against the image the gate
   already builds, not in unit tests.
 - **Repo guards** (for example `infra/ci.test.ts`) scan source on purpose: they enforce an ADR or
@@ -33,3 +39,10 @@ not add specs for look, motion or interaction.
 and on main. A change only under `docs/` or `.scratch/` starts no run (workflow `paths`). GitHub
 cannot waive a required check from code: when a docs-only PR must merge, the check is not marked
 required in the branch rules, or the owner merges it by hand.
+
+The `build` job also runs `pnpm check:shaders` (`scripts/check-shaders/`): the real Helix renderer
+in headless Chromium on SwiftShader. A shader that fails to compile only drops the Helix to the
+static Home, which no unit test or smoke spec notices. A change under
+`apps/web/src/components/helix` (a shader, the renderer or its frames) must pass it. A worker
+without a browser cannot run it (CLAUDE.md, "Memory-heavy commands"), so the lead runs it once
+before merging. A new GLSL path that the check's frames don't reach gets a frame that does.

@@ -108,7 +108,7 @@ export function createShowreelLayer(
   /** Where the hidden `<video>` lives in the page (iOS decodes a loop only when it is in the page). */
   host: Element,
 ): ShowreelLayer {
-  const program = link(gl, VERTEX, FRAGMENT)
+  const program = link(gl, 'showreel', VERTEX, FRAGMENT)
   const at = uniforms(gl, program, [
     'uSlot',
     'uFocal',

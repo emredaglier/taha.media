@@ -73,6 +73,30 @@ describe('Dockerfile', () => {
     expect(step).toMatch(/exit 1/)
   })
 
+  it('fails the build if the client output names a host outside the allowlist (#80)', () => {
+    const build = stage('build')
+    const web = build.indexOf('pnpm --filter @taha/web build')
+    const guard = build.indexOf('find apps/web/.next/server')
+    const scan = build.indexOf('node infra/client-hosts.ts')
+    // After the web build and next to the MediaPipe server-output guard, before the cms build.
+    expect(scan).toBeGreaterThan(guard)
+    expect(scan).toBeGreaterThan(web)
+    expect(scan).toBeLessThan(build.indexOf('@taha/cms exec next build'))
+    const step = build.slice(
+      scan,
+      build.indexOf('\n#', scan) > -1 ? build.indexOf('\n#', scan) : undefined,
+    )
+    // What the browser downloads: the built static files and `public/`, and the prerendered HTML.
+    expect(step).toMatch(/client-hosts\.ts apps\/web\/\.next\/static apps\/web\/public/)
+    expect(step).toMatch(
+      /client-hosts\.ts --ext html,rsc,body --allow-empty apps\/web\/\.next\/server/,
+    )
+    // `&&`, so the first scan's failure stops the build, and the files are in the build context.
+    expect(step).toContain('&& node infra/client-hosts.ts')
+    expect(read('.dockerignore')).not.toMatch(/^!?\/?infra\b/m)
+    expect(read('infra/client-hosts.ts')).toContain("from './client-hosts-allowlist.ts'")
+  })
+
   it('copies the libsql native binding next to the traced packages of both servers', () => {
     const build = stage('build')
     expect(build).toMatch(/for app in web cms/)

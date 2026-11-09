@@ -175,7 +175,7 @@ export function createHelixRenderer(
   })
   if (!gl || gl.isContextLost()) throw new HelixUnavailable('No WebGL2 context')
 
-  const program = link(gl, VERTEX, FRAGMENT)
+  const program = link(gl, 'card', VERTEX, FRAGMENT)
   const at = uniforms(gl, program, [
     'uSlot',
     'uFocal',

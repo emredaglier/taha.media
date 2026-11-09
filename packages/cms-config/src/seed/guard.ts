@@ -1,6 +1,18 @@
 type Env = Record<string, string | undefined>
 
 /**
+ * The media settings (R2) that make an environment production: set any and the demo seed refuses.
+ * Exported so the QA kit (scripts/qa) strips exactly these instead of keeping its own copy.
+ */
+export const MEDIA_SETTING_NAMES = [
+  'MEDIA_ORIGIN',
+  'S3_ENDPOINT',
+  'S3_BUCKET',
+  'S3_ACCESS_KEY_ID',
+  'S3_SECRET_ACCESS_KEY',
+] as const
+
+/**
  * A database counts as production when the environment says so (ADR-0011, ADR-0013):
  * - `NODE_ENV=production` (the server's cms container), or `TAHA_ENV=production` for anything
  *   else that points at the live data;
@@ -11,11 +23,7 @@ type Env = Record<string, string | undefined>
 export function isProductionEnvironment(env: Env = process.env): boolean {
   const set = (name: string) => (env[name] ?? '').trim() !== ''
   return (
-    env.NODE_ENV === 'production' ||
-    env.TAHA_ENV === 'production' ||
-    ['MEDIA_ORIGIN', 'S3_ENDPOINT', 'S3_BUCKET', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY'].some(
-      set,
-    )
+    env.NODE_ENV === 'production' || env.TAHA_ENV === 'production' || MEDIA_SETTING_NAMES.some(set)
   )
 }
 
