@@ -9,14 +9,15 @@ export const PALM = 0.15
 
 /**
  * A hand whose index fingertip is at (x, y) in the camera's own picture, with the thumb's tip
- * below it at `gap` times the palm's length: the pinch ratio the reader should measure.
+ * below it at `gap` times the palm's length: the pinch ratio the reader should measure. `palm` is
+ * the palm's length in camera-frame heights: a smaller one is a hand further from the camera.
  */
-export const pose = (x: number, y: number, gap: number): HandFrame =>
+export const pose = (x: number, y: number, gap: number, palm = PALM): HandFrame =>
   Array.from({ length: 21 }, (_, i) => {
     if (i === INDEX_TIP) return { x, y }
-    if (i === THUMB_TIP) return { x, y: y + gap * PALM }
+    if (i === THUMB_TIP) return { x, y: y + gap * palm }
     if (i === INDEX_KNUCKLE) return { x, y: y + 0.2 }
-    if (i === WRIST) return { x, y: y + 0.2 + PALM }
+    if (i === WRIST) return { x, y: y + 0.2 + palm }
     return { x, y: y + 0.1 }
   })
 

@@ -137,6 +137,12 @@ const heights = (a: FramePoint, b: FramePoint) => {
   return Math.hypot((a.x - b.x) * (width / height), a.y - b.y)
 }
 
+/**
+ * How big the hand is in the picture: its palm (wrist to index knuckle) in camera-frame heights.
+ * A hand far from the camera has a small palm (the "Biraz yaklaş" hint, #58).
+ */
+export const palmSize = (hand: HandFrame): number => heights(hand[WRIST]!, hand[INDEX_KNUCKLE]!)
+
 /** Where a camera-frame point lands on screen: the middle of the frame spans the whole screen. */
 const toScreen = (point: FramePoint): ScreenPoint => {
   const { frame } = HAND_TUNING
