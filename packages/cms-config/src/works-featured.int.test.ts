@@ -200,7 +200,7 @@ describe('replacing the file of a Video a featured Work uses as its loop', () =>
 
       const errors = await messagesOf(replaceFile(loopId, file))
       expect(errors).toHaveLength(1)
-      expect(errors[0]).toMatchObject({ path: 'filename' })
+      expect(errors[0]).toMatchObject({ path: 'file' })
       expect(errors[0]?.message).toContain('“Fragman Döngüsü” işi')
       expect(errors[0]?.message).toContain('16:9')
     },

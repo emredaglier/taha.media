@@ -21,11 +21,20 @@ import {
 } from '../video-limits'
 import { uniqueFilename } from './Images'
 
-const refuse = (collection: string, req: PayloadRequest, message: string): never => {
-  throw new ValidationError(
-    { collection, errors: [{ path: 'filename', label: 'Dosya', message }], req },
-    req.t,
-  )
+/**
+ * Where the admin shows a refusal: a bad file under the dropzone (Payload's own `file` path; the
+ * `filename` field is hidden), a use that doesn't fit the stored file next to Kullanım.
+ */
+const FILE_FIELD = { path: 'file', label: 'Dosya' }
+const USE_FIELD = { path: 'use', label: 'Kullanım' }
+
+const refuse = (
+  collection: string,
+  req: PayloadRequest,
+  field: { path: string; label: string },
+  message: string,
+): never => {
+  throw new ValidationError({ collection, errors: [{ ...field, message }], req }, req.t)
 }
 
 /** The bytes of the file being uploaded (in memory, or in the temp file Payload spooled it to). */
@@ -54,7 +63,7 @@ const readAndCheck: CollectionBeforeValidateHook = async ({
     const buffer = await uploadedBytes(req.file)
     bytes = buffer.length
     const read = readMp4(buffer)
-    if (!read) return refuse(collection.slug, req, NOT_MP4_MESSAGE)
+    if (!read) return refuse(collection.slug, req, FILE_FIELD, NOT_MP4_MESSAGE)
     info = read
   } else if (originalDoc?.codec) {
     bytes = originalDoc.filesize ?? 0
@@ -70,7 +79,7 @@ const readAndCheck: CollectionBeforeValidateHook = async ({
   }
 
   const message = videoRefusal(use, info, bytes)
-  if (message) return refuse(collection.slug, req, message)
+  if (message) return refuse(collection.slug, req, req.file ? FILE_FIELD : USE_FIELD, message)
 
   data.width = info.width
   data.height = info.height

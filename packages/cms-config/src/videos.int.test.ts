@@ -26,16 +26,22 @@ function padded(fixture: string, totalBytes: number): Buffer {
   return Buffer.concat([base, free])
 }
 
-/** The message the Editor reads. */
-const refusal = async (promise: Promise<unknown>): Promise<string> => {
+type RefusalEntry = { path?: string; label?: string; message: string }
+
+/** The error entries the admin gets: each names the field it is shown under. */
+const refusalEntries = async (promise: Promise<unknown>): Promise<RefusalEntry[]> => {
   const error = (await promise.then(
     () => {
       throw new Error('Expected the upload to be refused.')
     },
     (e: unknown) => e,
-  )) as { data?: { errors?: { message: string }[] }; message: string }
-  return error.data?.errors?.map((e) => e.message).join(' | ') ?? error.message
+  )) as { data?: { errors?: RefusalEntry[] }; message: string }
+  return error.data?.errors ?? [{ message: error.message }]
 }
+
+/** The message the Editor reads. */
+const refusal = async (promise: Promise<unknown>): Promise<string> =>
+  (await refusalEntries(promise)).map((e) => e.message).join(' | ')
 
 describe('reading the MP4 header', () => {
   // Expected values come from ffprobe on the committed fixtures, not from the reader.
@@ -118,6 +124,32 @@ describe('refusals', () => {
     await expect(
       site.uploadVideo(editor, { use: 'main', file: text, mimetype: 'text/plain', name: 'a.txt' }),
     ).rejects.toThrow()
+  })
+
+  it('shows a refused new file under the file, as Dosya', async () => {
+    const tooHigh = await refusalEntries(
+      site.uploadVideo(editor, { use: 'previewLoop', file: 'hd-1080.mp4' }),
+    )
+    expect(tooHigh).toEqual([expect.objectContaining({ path: 'file', label: 'Dosya' })])
+    const notMp4 = await refusalEntries(
+      site.uploadVideo(editor, { use: 'main', file: Buffer.from('video değil'), name: 'k.mp4' }),
+    )
+    expect(notMp4).toEqual([expect.objectContaining({ path: 'file', label: 'Dosya' })])
+  })
+
+  it('shows a refused change of use next to Kullanım', async () => {
+    // with-audio.mp4 fits main but not a loop; nothing references it, so the caps are what refuse.
+    const video = await site.uploadVideo(editor, { use: 'main', file: 'with-audio.mp4' })
+    const entries = await refusalEntries(
+      site.cms.update({
+        collection: 'videos',
+        id: video.id,
+        data: { use: 'previewLoop' },
+        user: editor,
+        overrideAccess: false,
+      }),
+    )
+    expect(entries).toEqual([expect.objectContaining({ path: 'use', label: 'Kullanım' })])
   })
 
   it('stores nothing when refused', async () => {
