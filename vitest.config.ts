@@ -13,6 +13,7 @@ export default defineConfig({
       '{apps,packages}/*/src/**/*.test.{ts,tsx}',
     ],
     // `next/cache` only works inside a running Next server; tests get an in-memory stand-in.
-    setupFiles: ['apps/web/src/test/next-cache-setup.ts'],
+    // Device capabilities are pinned to a capable device, not the host's.
+    setupFiles: ['apps/web/src/test/next-cache-setup.ts', 'apps/web/src/test/device-setup.ts'],
   },
 })
