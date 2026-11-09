@@ -1,0 +1,10 @@
+{
+  // Its own project: entry.ts types its frames against the web app's real renderer types, which
+  // reach Next's types, and those would make the root project's `process.env` require NODE_ENV.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "allowImportingTsExtensions": true
+  },
+  "include": ["."]
+}

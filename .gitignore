@@ -19,6 +19,7 @@ next-env.d.ts
 
 # Smoke traces, screenshots and report
 smoke/.output/
+scripts/check-shaders/.output/
 
 # Local CMS database
 apps/cms/data/
