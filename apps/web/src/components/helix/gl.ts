@@ -22,7 +22,8 @@ function compile(gl: WebGL2RenderingContext, type: number, source: string): WebG
   gl.shaderSource(shader, source)
   gl.compileShader(shader)
   if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS) && !gl.isContextLost()) {
-    throw new HelixUnavailable(`Shader: ${gl.getShaderInfoLog(shader) ?? ''}`)
+    const stage = type === gl.VERTEX_SHADER ? 'vertex' : 'fragment'
+    throw new HelixUnavailable(`Shader (${stage}): ${gl.getShaderInfoLog(shader) ?? ''}`)
   }
   return shader
 }
