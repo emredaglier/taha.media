@@ -297,6 +297,32 @@ describe('the pinch', () => {
       expect(firstGrab).toBeLessThan(tuning.calibrationFrames + tuning.confirmFrames + 6)
     })
 
+    it('a sideways pinch gives horizontal grab deltas: right positive, as on screen (#59)', () => {
+      // Pinch, move the hand a tenth of the frame to its own left (the camera's right: the screen's
+      // left, mirrored) in a fifth of a second, rest, let go.
+      const sweep = 0.1
+      const moving = Array.from({ length: 6 }, (_, i) =>
+        pose(0.5 + (sweep * (i + 1)) / 6, 0.5, closed),
+      )
+      const { events } = feed(
+        [
+          ...still(closed, tuning.confirmFrames),
+          ...moving,
+          ...hold(pose(0.5 + sweep, 0.5, closed), 30),
+          ...hold(pose(0.5 + sweep, 0.5, OPEN), tuning.confirmFrames + 3),
+        ],
+        calibrated(),
+      )
+      expect(count(events, 'click')).toBe(0)
+      const grabs = events.flat().flatMap((e) => (e.kind === 'grab' ? [e] : []))
+      expect(grabs.length).toBeGreaterThan(1)
+      // In all, how far the hand moved, in screen widths: leftwards on screen, so negative.
+      const right = grabs.reduce((sum, e) => sum + e.right, 0)
+      expect(right).toBeCloseTo(-sweep / crop.width, 2)
+      // Nothing moved up or down.
+      expect(Math.abs(grabs.reduce((sum, e) => sum + e.up, 0))).toBeLessThan(1e-9)
+    })
+
     it('a release comes before the loss when the hand leaves mid-grab, and no click', () => {
       const grabbing = feed(still(closed, Math.ceil(click.maxMs / FRAME_MS) + 3), calibrated())
       const { events } = feed(Array(lostAfterFrames).fill(null), grabbing.state)

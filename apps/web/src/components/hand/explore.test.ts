@@ -244,3 +244,67 @@ describe('clicking with the hand', () => {
     expect(heard).toEqual([])
   })
 })
+
+describe('playing our videos with the hand (#59)', () => {
+  let video: HTMLVideoElement
+  let paused: boolean
+  let refuseSound: boolean
+  let plays: { muted: boolean }[]
+
+  beforeEach(() => {
+    // A Work's main video: ours, with its controls. jsdom plays nothing, so it is a fake player.
+    video = document.createElement('video')
+    video.controls = true
+    document.body.append(video)
+    paused = true
+    refuseSound = false
+    plays = []
+    Object.defineProperty(video, 'paused', { configurable: true, get: () => paused })
+    video.play = async () => {
+      // A browser that won't start sound without a real press (Safari) refuses it.
+      if (refuseSound && !video.muted) throw new DOMException('no gesture', 'NotAllowedError')
+      plays.push({ muted: video.muted })
+      paused = false
+    }
+    video.pause = () => {
+      paused = true
+    }
+    under = video
+  })
+
+  /** A quick pinch at the video, then the play promise settles. */
+  const pinch = async (hand = explorer()) => {
+    hand.moveTo(50, 50)
+    hand.click()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  }
+
+  it('a quick pinch plays a paused video, and the next one pauses it', async () => {
+    const hand = explorer()
+    await pinch(hand)
+    expect(plays).toHaveLength(1)
+    expect(paused).toBe(false)
+    await pinch(hand)
+    expect(paused).toBe(true)
+    expect(plays).toHaveLength(1)
+  })
+
+  it('leaves a Preview loop alone (no controls: it plays in view or on hover)', async () => {
+    video.controls = false
+    await pinch()
+    expect(plays).toEqual([])
+  })
+
+  it('leaves it to the page when the page handles the click itself', async () => {
+    video.addEventListener('click', (event) => event.preventDefault())
+    await pinch()
+    expect(plays).toEqual([])
+  })
+
+  it('plays it muted when the browser refuses sound without a real press', async () => {
+    refuseSound = true
+    await pinch()
+    expect(plays).toEqual([{ muted: true }])
+    expect(paused).toBe(false)
+  })
+})

@@ -78,5 +78,10 @@ export const HAND_TUNING = {
     glideSeconds: 0.3,
     glideStopPxPerSecond: 60,
     glideFromPxPerSecond: 250,
+    /**
+     * In the Galeri lightbox (#59), a grab moving this many screen widths left or right steps to
+     * the next or previous item, once; another as far steps again (`lib/hand-steps.ts`).
+     */
+    stepWidths: 0.15,
   },
 } as const

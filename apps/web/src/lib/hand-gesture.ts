@@ -27,12 +27,13 @@ export type GestureEvent =
   /** A quick, still pinch let go: click where the cursor is. */
   | { kind: 'click' }
   /**
-   * A grab moved `up` screen heights since the last one (negative: down). `since` marks the
+   * A grab moved `up` screen heights since the last one (negative: down), and `right` screen
+   * widths (negative: left; #59, the Galeri lightbox steps on it). `since` marks the
    * catch-up: the first delta, which brings in at once what the cursor moved from the anchor since
    * the pinch began (`since`, ms) until it turned out to be a grab, so its speed is spread over
    * that time, not over one frame.
    */
-  | { kind: 'grab'; up: number; since?: number }
+  | { kind: 'grab'; up: number; right: number; since?: number }
   /**
    * A grab let go (or the hand left the camera mid-grab). `steadyAt` is the time (ms) of its last
    * steady frame: the release itself comes a few frames later, once the fingers have surely opened.
@@ -60,10 +61,14 @@ type Pinch = {
    * shift the pinch point), and if they do open it never counts.
    */
   steadyY: number
+  /** The cursor's place across (camera frame) in the last steady frame. */
+  steadyX: number
   /** The time (ms) of the last steady frame. */
   steadyAt: number
   /** The cursor's height (camera frame) at the last grab delta. */
   reportedY: number
+  /** The cursor's place across (camera frame) at the last grab delta. */
+  reportedX: number
   /** Whether the grab's first delta (the catch-up since the anchor) has gone out. */
   caughtUp: boolean
 }
@@ -178,7 +183,7 @@ const seeded = (value: number, now: number): OneEuroState => ({ value, speed: 0,
  *   just before the fingers began to close: closing them doesn't move it.
  * - **Click:** a pinch let go within `click.maxMs`, having moved less than `click.maxTravel`. Any
  *   other pinch becomes a grab once it is too long or too far, and reports how far the cursor moves
- *   up (`grab`, screen heights, from the anchor on) until it lets go (`release`). Never dwell.
+ *   up and right (`grab`, screen heights and widths, from the anchor on) until it lets go (`release`). Never dwell.
  */
 export function readGesture(
   state: GestureState,
@@ -249,8 +254,10 @@ export function readGesture(
       travel: 0,
       grabbing: false,
       steadyY: from.y,
+      steadyX: from.x,
       steadyAt: now,
       reportedY: from.y,
+      reportedX: from.x,
       caughtUp: false,
     }
     filter = { x: seeded(from.x, now), y: seeded(from.y, now) }
@@ -263,7 +270,9 @@ export function readGesture(
     else {
       if (!pinch.grabbing) {
         const up = (pinch.reportedY - pinch.steadyY) / frame.height
-        if (up !== 0) events.push({ kind: 'grab', up, since: pinch.startedAt })
+        const right = (pinch.steadyX - pinch.reportedX) / frame.width
+        if (up !== 0 || right !== 0)
+          events.push({ kind: 'grab', up, right, since: pinch.startedAt })
       }
       events.push({ kind: 'release', steadyAt: pinch.steadyAt })
     }
@@ -297,10 +306,11 @@ export function readGesture(
   // reports the cursor's movement, from the anchor on. Only steady frames move it.
   if (pinch) {
     const steady = streak === 0
-    let { travel, grabbing, steadyY, steadyAt, reportedY, caughtUp } = pinch
+    let { travel, grabbing, steadyY, steadyX, steadyAt, reportedY, reportedX, caughtUp } = pinch
     if (steady) {
       travel = Math.max(travel, heights(point, pinch.from))
       steadyY = point.y
+      steadyX = point.x
       steadyAt = now
     }
     if (!grabbing && (now - pinch.startedAt >= click.maxMs || travel >= click.maxTravel)) {
@@ -309,13 +319,29 @@ export function readGesture(
     if (grabbing && steady) {
       // The first delta brings in, at once, the drift since the anchor.
       const up = (reportedY - steadyY) / frame.height
-      if (up !== 0) {
-        events.push(caughtUp ? { kind: 'grab', up } : { kind: 'grab', up, since: pinch.startedAt })
+      const right = (steadyX - reportedX) / frame.width
+      if (up !== 0 || right !== 0) {
+        events.push(
+          caughtUp
+            ? { kind: 'grab', up, right }
+            : { kind: 'grab', up, right, since: pinch.startedAt },
+        )
+        caughtUp = true
       }
-      if (up !== 0) caughtUp = true
       reportedY = steadyY
+      reportedX = steadyX
     }
-    pinch = { ...pinch, travel, grabbing, steadyY, steadyAt, reportedY, caughtUp }
+    pinch = {
+      ...pinch,
+      travel,
+      grabbing,
+      steadyY,
+      steadyX,
+      steadyAt,
+      reportedY,
+      reportedX,
+      caughtUp,
+    }
   }
 
   // Open frames, briefly: the next pinch's anchor is among them.

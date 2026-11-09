@@ -597,6 +597,36 @@ describe('pinching (#57)', () => {
     expect(scrolled).toEqual([])
   })
 
+  it('a sideways grab reaches its claimant (the Galeri lightbox) as horizontal moves (#59)', async () => {
+    const move = vi.fn((_up: number, _right: number) => true)
+    const unclaim = claimHandGrab({ move, end: () => true })
+    await ready()
+    // Pinched, the hand moves a tenth of the frame to the screen's left (the camera's right).
+    const steps = framesIn(200)
+    await play(
+      hold(pose(0.5, 0.5, CLOSED), pinch.confirmFrames),
+      Array.from({ length: steps }, (_, i) => pose(0.5 + (0.1 * (i + 1)) / steps, 0.5, CLOSED)),
+      hold(pose(0.6, 0.5, CLOSED), framesIn(500)),
+      hold(pose(0.6, 0.5, OPEN), pinch.confirmFrames),
+    )
+    unclaim()
+    const rights = move.mock.calls.map(([, right]) => right)
+    expect(total(rights)).toBeCloseTo(-0.1 / HAND_TUNING.frame.width, 2)
+    expect(scrolled).toEqual([])
+  })
+
+  it('an unclaimed sideways grab scrolls nothing', async () => {
+    await ready()
+    const steps = framesIn(200)
+    await play(
+      hold(pose(0.5, 0.5, CLOSED), pinch.confirmFrames),
+      Array.from({ length: steps }, (_, i) => pose(0.5 + (0.1 * (i + 1)) / steps, 0.5, CLOSED)),
+      hold(pose(0.6, 0.5, OPEN), pinch.confirmFrames),
+      hold(pose(0.6, 0.5, OPEN), framesIn(500)),
+    )
+    expect(scrolled).toEqual([])
+  })
+
   it('turning Hand control off mid-grab lets go of the claimed grab', async () => {
     const end = vi.fn(() => true)
     const unclaim = claimHandGrab({ move: () => true, end })
@@ -605,6 +635,75 @@ describe('pinching (#57)', () => {
     await click(toggle())
     unclaim()
     expect(end).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('over an external player (#59)', () => {
+  const HINT = 'Oynatıcının içinde fareyi kullan'
+  let under: Element | null
+  let iframe: HTMLIFrameElement
+  /** The hand shows on `shown` frames, then leaves. */
+  let shown: boolean
+
+  beforeEach(() => {
+    iframe = document.createElement('iframe')
+    iframe.src = 'https://player.vimeo.com/video/1?dnt=1&autoplay=1'
+    document.body.append(iframe)
+    under = null
+    shown = true
+    document.elementsFromPoint = () => (under ? [under] : [])
+    tracker.createHandTracker.mockImplementation(async () => ({
+      detect: () => (shown ? pose(0.5, 0.5, 0.9) : null),
+      close: tracker.close,
+    }))
+  })
+
+  afterEach(() => iframe.remove())
+
+  const live = () => container.querySelector('[data-hand-player-hint][aria-live="polite"]')
+  const label = () => container.querySelector<HTMLElement>('[data-hand-ring]')!
+
+  it('says to use the mouse inside it, politely, with a label by the ring', async () => {
+    await render()
+    await turnOn()
+    await runFrames(2)
+    expect(live()!.textContent).toBe('')
+    expect(label().dataset.player).toBe('false')
+    under = iframe
+    await runFrames(1)
+    expect(live()!.textContent).toBe(HINT)
+    expect(label().dataset.player).toBe('true')
+    expect(label().textContent).toContain(HINT)
+  })
+
+  it('clears it when the cursor leaves the player, or the hand leaves the camera', async () => {
+    await render()
+    await turnOn()
+    under = iframe
+    await runFrames(2)
+    expect(live()!.textContent).toBe(HINT)
+    under = document.body
+    await runFrames(1)
+    expect(live()!.textContent).toBe('')
+    expect(label().dataset.player).toBe('false')
+    under = iframe
+    await runFrames(1)
+    shown = false
+    await runFrames(HAND_TUNING.lostAfterFrames)
+    expect(live()!.textContent).toBe('')
+    expect(label().dataset.player).toBe('false')
+  })
+
+  it('the click-to-load poster before it is an ordinary target: no hint', async () => {
+    const poster = document.createElement('button')
+    poster.setAttribute('aria-label', 'Showreel videosunu oynat')
+    document.body.append(poster)
+    await render()
+    await turnOn()
+    under = poster
+    await runFrames(2)
+    expect(live()!.textContent).toBe('')
+    poster.remove()
   })
 })
 

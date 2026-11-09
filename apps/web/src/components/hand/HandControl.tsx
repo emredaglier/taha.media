@@ -7,6 +7,7 @@ import { initialGestureState, readGesture, type HandFrame } from '../../lib/hand
 import { HAND_TUNING } from '../../lib/hand-tuning'
 import { createExplorer, type Explorer } from './explore'
 import { createGrabScroller, handGrabSink } from './grab'
+import { overExternalPlayer, PLAYER_HINT } from './media'
 import type { HandTracker } from './tracker'
 import { dispatchHand, handState, setHandRunner, useHandControl } from './store'
 
@@ -91,6 +92,7 @@ export function HandControl() {
   const video = useRef<HTMLVideoElement>(null)
   const canvas = useRef<HTMLCanvasElement>(null)
   const ring = useRef<HTMLDivElement>(null)
+  const playerHint = useRef<HTMLParagraphElement>(null)
   const attempts = useRef(new Map<number, Attempt>())
   // The camera's own picture size: the preview and its dots follow it (4:3, 16:9, ...).
   const [picture, setPicture] = useState<{ width: number; height: number }>(HAND_TUNING.camera)
@@ -129,6 +131,16 @@ export function HandControl() {
     const fillRing = (pinched: boolean) => {
       if (ring.current) ring.current.dataset.pinched = String(pinched)
     }
+    /**
+     * Over a loaded external player the hand can't reach inside (#59): a label by the ring, and
+     * the hint said once in the polite live region.
+     */
+    const showPlayerHint = (over: boolean) => {
+      if (ring.current) ring.current.dataset.player = String(over)
+      const live = playerHint.current
+      const text = over ? PLAYER_HINT : ''
+      if (live && live.textContent !== text) live.textContent = text
+    }
     /** Restarts the ring's ping (its animation runs only with motion allowed). */
     const pingRing = () => {
       const ping = ring.current?.querySelector<HTMLElement>('[data-hand-ping]')
@@ -138,11 +150,14 @@ export function HandControl() {
       ping.dataset.on = 'true'
     }
 
-    /** The grab moved `up` screen heights at `at` (ms): its claimant takes it, or the page. */
-    const grab = (up: number, at: number, since: number | undefined) => {
+    /**
+     * The grab moved `up` screen heights and `right` screen widths at `at` (ms): its claimant
+     * takes it, or the page scrolls by the vertical part.
+     */
+    const grab = (up: number, right: number, at: number, since: number | undefined) => {
       grabbing = true
-      if (handGrabSink()?.move(up)) return
-      scroller.move(up, at, since)
+      if (handGrabSink()?.move(up, right)) return
+      if (up !== 0) scroller.move(up, at, since)
     }
     /**
      * Ends the grab under way: its claimant settles. The page glides on only when `letGo` says
@@ -185,6 +200,7 @@ export function HandControl() {
             case 'lost':
               cursor = null
               showRing(null)
+              showPlayerHint(false)
               explorer.release()
               break
             case 'move': {
@@ -197,6 +213,7 @@ export function HandControl() {
               }
               showRing(cursor)
               explorer.moveTo(cursor.x, cursor.y)
+              showPlayerHint(overExternalPlayer(hitTest(cursor.x, cursor.y)))
               break
             }
             case 'pinch':
@@ -209,7 +226,7 @@ export function HandControl() {
               explorer.click()
               break
             case 'grab':
-              grab(event.up, at, event.since)
+              grab(event.up, event.right, at, event.since)
               break
             case 'release':
               fillRing(false)
@@ -286,6 +303,7 @@ export function HandControl() {
           if (video.current) video.current.srcObject = null
           drawHand(canvas.current, null)
           showRing(null)
+          showPlayerHint(false)
           explorer.release()
           // A grab under way lets go without gliding: the Helix settles, the page stays.
           endGrab()
@@ -361,15 +379,29 @@ export function HandControl() {
           data-hand-ring=""
           data-lost="true"
           data-pinched="false"
+          data-player="false"
           aria-hidden="true"
-          className="pointer-events-none fixed top-0 left-0 z-[70] -mt-3.5 -ml-3.5 size-7 rounded-full border-2 border-text opacity-100 data-[lost=true]:opacity-0 data-[pinched=true]:bg-text motion-safe:transition-opacity motion-safe:duration-300"
+          className="group pointer-events-none fixed top-0 left-0 z-[70] -mt-3.5 -ml-3.5 size-7 rounded-full border-2 border-text opacity-100 data-[lost=true]:opacity-0 data-[pinched=true]:bg-text motion-safe:transition-opacity motion-safe:duration-300"
         >
           {/* The click's ping: a ring that grows and fades, only with motion allowed. */}
           <span
             data-hand-ping=""
             className="absolute -inset-3 rounded-full border-2 border-text opacity-0 motion-safe:data-[on=true]:animate-hand-ping"
           />
+          {/* Over an external player (#59); the live region below says it for screen readers. */}
+          <span className="absolute top-full left-full mt-2 ml-2 hidden border border-text-muted bg-background-raised px-2 py-1 text-xs whitespace-nowrap text-text group-data-[player=true]:block">
+            {PLAYER_HINT}
+          </span>
         </div>
+      ) : null}
+      {phase === 'on' ? (
+        <p
+          ref={playerHint}
+          data-hand-overlay=""
+          data-hand-player-hint=""
+          aria-live="polite"
+          className="sr-only"
+        />
       ) : null}
     </>
   )
