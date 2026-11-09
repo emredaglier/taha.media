@@ -80,6 +80,28 @@ describe("the hand's grab on Home", () => {
     expect(model.state.progress).toBeGreaterThanOrEqual(1)
   })
 
+  it('a resting hand lets go without a fling: it settles on the nearest card (#75)', () => {
+    const letGo = (options?: { glide: false }) => {
+      const model = helix()
+      const grab = helixGrab({ turns: () => true, apply: model.apply })
+      // Still turning at the end: moving up, quickly, in the last moments before it lets go.
+      for (let i = 0; i < 10; i++) {
+        grab.move(0.03, 0)
+        model.run(FRAME_MS)
+      }
+      expect(grab.end(options)).toBe(true)
+      model.run(3000)
+      expect(isResting(model.state)).toBe(true)
+      return { to: model.state.progress, goal: 10 * 0.03 * HAND_TUNING.grab.turnCards, model }
+    }
+    const flung = letGo()
+    const rest = letGo({ glide: false })
+    expect(rest.to).toBe(Math.round(rest.goal))
+    // The same movement, let go the usual way, carries a card further.
+    expect(flung.to).toBeGreaterThan(rest.to)
+    expect(rest.model.inputs.at(-1)).toBe('dragEnd')
+  })
+
   it('takes over mid-grab when the melt locks the page, and lets go once', () => {
     const model = helix()
     let locked = false

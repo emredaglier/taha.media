@@ -290,12 +290,15 @@ export function HandControl() {
     }
     /**
      * Ends the grab under way: its claimant settles. The page glides on only when `letGo` says
-     * when the hand let go (and when its last steady frame was); otherwise it stops at once.
+     * when the hand let go (and when its last steady frame was), and `glide` isn't false (a hand
+     * resting, #75); otherwise it stops at once.
      */
-    const endGrab = (letGo?: { steadyAt: number; at: number }) => {
-      const claimed = grabbing && handGrabSink()?.end() === true
+    const endGrab = (letGo?: { steadyAt: number; at: number; glide?: false }) => {
+      const claimed =
+        grabbing &&
+        handGrabSink()?.end(letGo?.glide === false ? { glide: false } : undefined) === true
       grabbing = false
-      if (letGo && !claimed) scroller.release(letGo.steadyAt, letGo.at)
+      if (letGo && letGo.glide !== false && !claimed) scroller.release(letGo.steadyAt, letGo.at)
       else scroller.cancel()
     }
 
@@ -394,14 +397,16 @@ export function HandControl() {
               break
             case 'release':
               fillRing(false)
-              endGrab({ steadyAt: event.steadyAt, at })
+              endGrab({ steadyAt: event.steadyAt, at, glide: event.glide })
               break
           }
         }
+        // A hand resting in a pinch (at the chin) is in view, but doesn't count as one (#75).
+        const handCounts = hand !== null && gesture.engaged
         // Last, since turning off stops this loop. The coach open gives the visitor longer.
         const watched = watchHand(
           handWatch ?? startHandWatch(at),
-          { seen: hand !== null, coach: coachOpen.current },
+          { seen: handCounts, coach: coachOpen.current },
           at,
         )
         handWatch = watched.state

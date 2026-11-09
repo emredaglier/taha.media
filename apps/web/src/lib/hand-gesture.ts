@@ -38,8 +38,10 @@ export type GestureEvent =
   /**
    * A grab let go (or the hand left the camera mid-grab). `steadyAt` is the time (ms) of its last
    * steady frame: the release itself comes a few frames later, once the fingers have surely opened.
+   * `glide: false` (the rest guard's, #75): nothing glides on or flings, whatever the last moments
+   * looked like.
    */
-  | { kind: 'release'; steadyAt: number }
+  | { kind: 'release'; steadyAt: number; glide?: false }
 
 /** A point in the mirrored camera frame, 0 to 1. */
 type FramePoint = { x: number; y: number }
@@ -72,6 +74,10 @@ type Pinch = {
   reportedX: number
   /** Whether the grab's first delta (the catch-up since the anchor) has gone out. */
   caughtUp: boolean
+  /** The point (camera frame) the cursor has stayed within `rest.radius` of, for the rest guard. */
+  restPoint: FramePoint
+  /** Since when (ms) it has stayed there. */
+  restSince: number
 }
 
 /** One frame with open fingers, kept briefly to find where the cursor was before a pinch. */
@@ -96,6 +102,26 @@ export type GestureState = {
   recent: Recent[]
   /** The last pinch's end: the cursor eases from where it was back to the fingertip. */
   released: { at: number; offset: FramePoint } | null
+  /** Since when (ms) the fingers have been wide open in a row (arming), or null while they aren't. */
+  wideSince: number | null
+  /**
+   * The time (ms) of the last frame of a wide-open run that lasted `arm.ms`: the arming, or null
+   * while there is none (never, used up by a pinch, or lost with tracking).
+   */
+  armedAt: number | null
+  /**
+   * Whether the closed fingers are being ignored: they closed (or the rest guard let go) without
+   * the arming, and haven't opened since. No pinch, click, grab or release comes of them.
+   */
+  ignoring: boolean
+  /**
+   * Whether the hand is engaged, as of the last frame with a hand: true for an open hand and for a
+   * pinch (or closing fingers whose arming is still good); false for closed fingers that no
+   * arming backs, whether they are ignored yet or not (a hand back from a lost track, a first
+   * hand still calibrating, one resting in a pinch). Calibrating, the fingers count as open from
+   * a gap of `arm.gapMin`. It keeps the no-hand timer from counting a hand resting in a pinch.
+   */
+  engaged: boolean
 }
 
 export const initialGestureState: GestureState = {
@@ -108,6 +134,10 @@ export const initialGestureState: GestureState = {
   pinch: null,
   recent: [],
   released: null,
+  wideSince: null,
+  armedAt: null,
+  ignoring: false,
+  engaged: true,
 }
 
 const clamp = (v: number, low: number, high: number) => Math.min(high, Math.max(low, v))
@@ -193,6 +223,20 @@ const seeded = (value: number, now: number): OneEuroState => ({ value, speed: 0,
  *   `openFactor` times it, and only after `confirmFrames` frames in a row, so it never flickers.
  * - **While pinching** the cursor follows the thumb–index midpoint, anchored where the cursor was
  *   just before the fingers began to close: closing them doesn't move it.
+ * - **Arming (#75):** a pinch counts only if the fingers were wide open just before: a gap of at
+ *   least `arm`'s (the larger of `gapFactor` × the threshold and `gapMin`) for `arm.ms`, ending no
+ *   more than `arm.holdMs` before the fingers began to close. Otherwise the closed fingers are
+ *   ignored (no `pinch`, `click`, `grab` or `release`, no anchoring, the cursor on the fingertip)
+ *   until they open. A pinch uses its arming up; tracking lost loses it (the threshold stays).
+ * - **Rest guard (#75):** a grab whose cursor stays within `rest.radius` of one point for
+ *   `rest.ms` is a hand resting: a `release`, then its closed fingers are ignored until the hand
+ *   has been wide open again.
+ * - **Engaged (#75):** `state.engaged` is true for an open hand and for a pinch (or closing
+ *   fingers whose arming is still good), false for closed fingers no arming backs: ignored, after
+ *   the rest guard, on the first frame of a hand back from a lost track, or while a first hand
+ *   calibrates (there, a gap under `arm.gapMin`). So a hand resting in a pinch doesn't keep the
+ *   no-hand timer going, however often tracking drops out. The rest guard's `release` says
+ *   `glide: false`.
  * - **Click:** a pinch let go within `click.maxMs`, having moved less than `click.maxTravel`. Any
  *   other pinch becomes a grab once it is too long or too far, and reports how far the cursor moves
  *   up and right (`grab`, screen heights and widths, from the anchor on) until it lets go
@@ -203,7 +247,7 @@ export function readGesture(
   hand: HandFrame | null,
   now: number,
 ): { state: GestureState; events: GestureEvent[] } {
-  const { pinch: tuning, click, frame } = HAND_TUNING
+  const { pinch: tuning, click, frame, arm, rest } = HAND_TUNING
   const tip = hand?.[INDEX_TIP]
   if (!hand || !tip || hand.length < 21) {
     const missed = state.missed + 1
@@ -224,7 +268,7 @@ export function readGesture(
 
   const events: GestureEvent[] = []
   const ratio = pinchRatio(hand)
-  let { threshold, samples, streak, pinch, released, filter } = state
+  let { threshold, samples, streak, pinch, released, filter, wideSince, armedAt, ignoring } = state
 
   // Calibration: the first frames with a hand measure the open gap.
   if (threshold === null) {
@@ -243,22 +287,45 @@ export function readGesture(
   const midpoint: FramePoint = { x: 1 - (tip.x + thumb.x) / 2, y: (tip.y + thumb.y) / 2 }
   const lastPoint = filter ? { x: filter.x.value, y: filter.y.value } : fingertip
 
-  // The fingers: a change counts once it has held for `confirmFrames` frames in a row.
+  // The fingers: a change counts once it has held for `confirmFrames` frames in a row. Closed
+  // fingers that are ignored (no arming) count as closed, so they open and close like a pinch.
+  // Arming: a run of wide-open frames lasting `arm.ms` arms the next pinch.
   let changed = false
+  const wasClosed = pinch !== null || ignoring
   if (threshold !== null && state.threshold !== null) {
-    const closed = pinch ? ratio < threshold * tuning.openFactor : ratio < threshold
-    streak = closed === (pinch !== null) ? 0 : streak + 1
+    if (ratio >= Math.max(arm.gapFactor * threshold, arm.gapMin)) {
+      wideSince ??= now
+      if (now - wideSince >= arm.ms) armedAt = now
+    } else wideSince = null
+    const closed = wasClosed ? ratio < threshold * tuning.openFactor : ratio < threshold
+    streak = closed === wasClosed ? 0 : streak + 1
     changed = streak >= tuning.confirmFrames
     if (changed) streak = 0
   }
 
-  if (changed && !pinch) {
-    // Closed: hold on to where the cursor was before the fingers began to close. The closing
-    // began with the run of closed frames that confirmed it (this one and those just before).
-    let closedAt = now
-    for (let i = state.recent.length - 1; i >= 0 && state.recent[i]!.ratio < threshold!; i--) {
+  // The closing began with the run of closed frames that ends with this one (those just before
+  // it, in `recent`). A pinch that began there is armed if the arming ended no more than
+  // `arm.holdMs` before.
+  let closedAt = now
+  let pending = false
+  if (threshold !== null) {
+    for (let i = state.recent.length - 1; i >= 0 && state.recent[i]!.ratio < threshold; i--) {
       closedAt = state.recent[i]!.at
     }
+    pending = armedAt !== null && closedAt - armedAt <= arm.holdMs
+  }
+
+  // Closed, but without the arming: the fingers are ignored until they open.
+  const armed = changed && !wasClosed && pending
+  if (changed && !wasClosed) {
+    if (!armed) ignoring = true
+  } else if (changed && ignoring) ignoring = false
+
+  if (armed) {
+    // Closed: hold on to where the cursor was before the fingers began to close. Each pinch uses
+    // its arming up.
+    armedAt = null
+    wideSince = null
     const from = anchorOf(state.recent, closedAt, lastPoint)
     pinch = {
       startedAt: now,
@@ -272,6 +339,8 @@ export function readGesture(
       reportedY: from.y,
       reportedX: from.x,
       caughtUp: false,
+      restPoint: from,
+      restSince: now,
     }
     filter = { x: seeded(from.x, now), y: seeded(from.y, now) }
     released = null
@@ -344,16 +413,35 @@ export function readGesture(
       reportedY = steadyY
       reportedX = steadyX
     }
-    pinch = {
-      ...pinch,
-      travel,
-      grabbing,
-      steadyY,
-      steadyX,
-      steadyAt,
-      reportedY,
-      reportedX,
-      caughtUp,
+    // The rest guard: a cursor that stays within `rest.radius` of one point lets go.
+    let { restPoint, restSince } = pinch
+    if (heights(point, restPoint) > rest.radius) {
+      restPoint = point
+      restSince = now
+    }
+    if (grabbing && now - restSince >= rest.ms) {
+      // A hand resting, not grabbing: it lets go as if its fingers opened, but without gliding
+      // on (the last moments of a rest may still look like a slow flick), and its closed fingers
+      // are ignored until they open and arm again.
+      events.push({ kind: 'release', steadyAt, glide: false })
+      released = { at: now, offset: { x: point.x - fingertip.x, y: point.y - fingertip.y } }
+      pinch = null
+      ignoring = true
+      streak = 0
+    } else {
+      pinch = {
+        ...pinch,
+        travel,
+        grabbing,
+        steadyY,
+        steadyX,
+        steadyAt,
+        reportedY,
+        reportedX,
+        caughtUp,
+        restPoint,
+        restSince,
+      }
     }
   }
 
@@ -364,8 +452,33 @@ export function readGesture(
         (frame) => now - frame.at <= tuning.anchorWindowMs,
       )
 
+  // Engaged (#75): an open hand is, and so is a pinch, or closing fingers whose pinch is armed.
+  // Closed fingers that no arming backs are not, ignored or not yet: that includes the first
+  // frame of a hand back from a loss, and the calibration frames (clearly open: `arm.gapMin`).
+  const closedNow =
+    threshold === null
+      ? ratio < arm.gapMin
+      : pinch !== null || ignoring
+        ? ratio < threshold * tuning.openFactor
+        : ratio < threshold
+  const engaged = pinch !== null || !closedNow || pending
+
   return {
-    state: { filter, missed: 0, cursor, threshold, samples, streak, pinch, recent, released },
+    state: {
+      filter,
+      missed: 0,
+      cursor,
+      threshold,
+      samples,
+      streak,
+      pinch,
+      recent,
+      released,
+      wideSince,
+      armedAt,
+      ignoring,
+      engaged,
+    },
     events,
   }
 }

@@ -11,11 +11,63 @@ export const CONSENT_TEXT = 'Kameran yalnızca elini görmek için açılır; g�
 export const CONSENT_TITLE = 'Kamera izni'
 
 /**
+ * How long a swallowed press waits for its click after the pointer is released (DOM timing, not
+ * a Hand control tuning).
+ */
+export const CLICK_WAIT_MS = 600
+
+/** How long a swallowed press waits when its pointer is never released (the tab loses it). */
+export const UNRELEASED_PRESS_WAIT_MS = 6000
+
+/**
+ * Takes the press that dismissed the note away from the page: its compat `mousedown` and the
+ * `click` that follows, which lands on `pressed` or an ancestor of it (the click's target is the
+ * common ancestor of where the pointer went down and up). One-shot: it ends with the first click,
+ * the next press, `CLICK_WAIT_MS` after the release, or `UNRELEASED_PRESS_WAIT_MS` after the press, so a later click is never eaten. It lives
+ * on `window`, not in the note's effect, because Vazgeç unmounts the note before the click comes.
+ */
+function swallowPress(pressed: Node) {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const stop = () => {
+    clearTimeout(timer)
+    window.removeEventListener('mousedown', onMouseDown, true)
+    window.removeEventListener('pointerdown', stop, true)
+    window.removeEventListener('pointerup', onRelease, true)
+    window.removeEventListener('pointercancel', onRelease, true)
+    window.removeEventListener('click', onClick, true)
+  }
+  const onMouseDown = (event: MouseEvent) => {
+    event.preventDefault()
+    event.stopPropagation()
+    window.removeEventListener('mousedown', onMouseDown, true)
+  }
+  const onRelease = () => {
+    clearTimeout(timer)
+    timer = setTimeout(stop, CLICK_WAIT_MS)
+  }
+  const onClick = (event: MouseEvent) => {
+    stop()
+    if (event.target instanceof Node && event.target.contains(pressed)) {
+      event.preventDefault()
+      event.stopImmediatePropagation()
+    }
+  }
+  window.addEventListener('mousedown', onMouseDown, true)
+  window.addEventListener('pointerdown', stop, true)
+  window.addEventListener('pointerup', onRelease, true)
+  window.addEventListener('pointercancel', onRelease, true)
+  window.addEventListener('click', onClick, true)
+  // A press that never gets released or clicked (the tab loses it) must not wait for ever.
+  timer = setTimeout(stop, UNRELEASED_PRESS_WAIT_MS)
+}
+
+/**
  * The note before the browser's camera prompt: only Aç goes on to ask the browser. Focus moves to
  * its first button and stays inside: every Tab step is picked by `nextFocus`, because Safari's Tab
  * skips buttons by default and would leave the note (the `webkit-focus` lesson). Esc is Vazgeç,
  * and so is a press anywhere outside `within` (the toggle and the note), so the note is modal for
- * the pointer as well as the keyboard. The toggle takes focus back when the note closes.
+ * the pointer as well as the keyboard: that press and its click are taken away from the page, so
+ * a Work card or link under the pointer is not opened (#74). The toggle takes focus back when the note closes.
  */
 export function ConsentNote({
   onAccept,
@@ -52,7 +104,11 @@ export function ConsentNote({
     }
     const onPointerDown = (event: PointerEvent) => {
       const inside = within.current ?? note
-      if (!(event.target instanceof Node) || !inside.contains(event.target)) onDecline()
+      if (event.target instanceof Node && inside.contains(event.target)) return
+      event.preventDefault()
+      event.stopPropagation()
+      if (event.target instanceof Node) swallowPress(event.target)
+      onDecline()
     }
     document.addEventListener('keydown', onKey)
     document.addEventListener('pointerdown', onPointerDown, true)

@@ -43,10 +43,10 @@ export function helixGrab({
       apply({ kind: 'dragMove', up: (up * HAND_TUNING.grab.turnCards) / HELIX_TUNING.dragScale })
       return true
     },
-    end() {
+    end(options) {
       if (!holding) return false
       holding = false
-      apply({ kind: 'dragEnd' })
+      apply(options?.glide === false ? { kind: 'dragEnd', glide: false } : { kind: 'dragEnd' })
       return true
     },
   }
