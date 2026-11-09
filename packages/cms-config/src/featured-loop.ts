@@ -58,3 +58,71 @@ export const requireFeaturedLoop: CollectionBeforeValidateHook = async ({
     req.t,
   )
 }
+
+const replacedLoopMessage = (places: string[], width: number, height: number): string =>
+  `Bu video öne çıkan bir işin önizleme döngüsü olduğu için yalnızca 16:9 bir dosyayla değiştirilebilir: ${places.join(', ')}. ` +
+  `Yüklenen dosya ${width}×${height}. 16:9 bir dosya yükleyin ya da önce işin yayındaki halinde öne çıkarmayı kaldırıp yayımlayın.`
+
+/**
+ * The 16:9 rule from the Video's side (issue #46): `requireFeaturedLoop` only runs when a Work is
+ * saved, so replacing the file of a Video that a featured Work already shows as its Preview loop
+ * would put a loop of another shape on Home. Only a published featured Work counts, as visitors
+ * see it (the main row, never a draft); a draft that uses the Video meets the Work hook when it
+ * is published. A Video no featured Work uses as its loop, a main video included, is free.
+ *
+ * Runs after the header is read (`readAndCheck` in Videos), which writes the new file's width and
+ * height into the update; a refusal there happens before anything is stored.
+ *
+ * Known gap, as with the delete guard (media-delete.ts): the check and the update are not atomic,
+ * so a Work published as featured with this loop in between is not seen.
+ */
+export const keepFeaturedLoopSixteenByNine: CollectionBeforeValidateHook = async ({
+  collection,
+  data,
+  operation,
+  originalDoc,
+  req,
+}) => {
+  if (operation !== 'update' || !req.file || !data || !originalDoc) return data
+  const width = Number(data.width)
+  const height = Number(data.height)
+  if (width && height && isSixteenByNine(width, height)) return data
+
+  const { docs } = await req.payload.find({
+    collection: 'works',
+    where: {
+      and: [
+        { _status: { equals: 'published' } },
+        { featured: { equals: true } },
+        { previewLoop: { equals: originalDoc.id } },
+      ],
+    },
+    select: { title: true },
+    // The admin's order, so a refusal lists the Works the way the Editor sees them.
+    sort: '_order',
+    depth: 0,
+    pagination: false,
+    overrideAccess: true,
+    req,
+  })
+  if (docs.length === 0) return data
+
+  throw new ValidationError(
+    {
+      collection: collection.slug,
+      errors: [
+        {
+          path: 'filename',
+          label: 'Dosya',
+          message: replacedLoopMessage(
+            docs.map((doc) => `“${doc.title}” işi`),
+            width || 0,
+            height || 0,
+          ),
+        },
+      ],
+      req,
+    },
+    req.t,
+  )
+}

@@ -18,20 +18,26 @@ export const COACH_STEPS = [
 export const COACH_TITLE = 'Elinle gezme'
 
 /**
- * The coach (#58): three skippable steps, next to the preview. Focus moves to its main button and
- * stays inside while it is open, every Tab step picked by `nextFocus` (Safari's Tab skips buttons,
- * the `webkit-focus` lesson); Esc or Atla skips it, and focus goes back to where it was. Each step
- * is announced politely. It isn't one of Hand control's overlays, so the hand can press its
- * buttons too: the last step's click is a good first try.
+ * The coach (#58): three skippable steps, next to the preview. A light, non-modal dialog (the page
+ * behind stays live): focus moves to its main button and Tab keeps it inside while it is open,
+ * every step picked by `nextFocus` (Safari's Tab skips buttons, the `webkit-focus` lesson); Esc or
+ * Atla skips it. Its Esc and Tab stop there, so the menu's own handlers don't act on them too.
+ * When it closes, focus goes to `returnFocus()` (the "?" that opened it, or the toggle), not to
+ * whatever had focus before: after a mouse click in Safari, that is the page's body. Each step is
+ * announced politely. It isn't one of Hand control's overlays, so the hand can press its buttons
+ * too: the last step's click is a good first try.
  */
 export function HandCoach({
   step,
   onStep,
   onClose,
+  returnFocus,
 }: {
   step: number
   onStep: (step: number) => void
   onClose: () => void
+  /** Where focus goes when the coach closes, read then. */
+  returnFocus: () => HTMLElement | null
 }) {
   const panel = useRef<HTMLDivElement>(null)
   const titleId = useId()
@@ -39,15 +45,15 @@ export function HandCoach({
   const last = step >= COACH_STEPS.length - 1
   const { title, text } = COACH_STEPS[Math.min(step, COACH_STEPS.length - 1)]!
 
-  // Focus comes in when it opens, and goes back to where it was when it closes.
+  const focusBack = useRef(returnFocus)
   useEffect(() => {
-    const before = document.activeElement
+    focusBack.current = returnFocus
+  }, [returnFocus])
+
+  // Focus comes in when it opens, and goes back when it closes.
+  useEffect(() => {
     panel.current?.querySelector<HTMLButtonElement>('[data-coach-next]')?.focus()
-    return () => {
-      if (before instanceof HTMLElement && before.isConnected && before !== document.body) {
-        before.focus()
-      }
-    }
+    return () => focusBack.current()?.focus()
   }, [])
 
   useEffect(() => {
@@ -55,6 +61,7 @@ export function HandCoach({
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault()
+        event.stopPropagation()
         onClose()
       } else if (event.key === 'Tab') {
         const target = nextFocus(
@@ -64,19 +71,21 @@ export function HandCoach({
         )
         if (target) {
           event.preventDefault()
+          event.stopPropagation()
           target.focus()
         }
       }
     }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
+    // In the capture phase, so it comes before the menu's and the lightbox's own key handlers.
+    document.addEventListener('keydown', onKey, true)
+    return () => document.removeEventListener('keydown', onKey, true)
   }, [onClose])
 
   return (
     <div
       ref={panel}
       role="dialog"
-      aria-modal="true"
+      aria-modal="false"
       aria-labelledby={titleId}
       aria-describedby={textId}
       data-hand-coach=""

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act } from 'react'
+import { act, StrictMode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { renderToString } from 'react-dom/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -16,7 +16,8 @@ import { HELIX_TUNING } from '../../lib/helix-tuning'
 import { HAND_TUNING } from '../../lib/hand-tuning'
 import { lockScroll } from '../../lib/menu-a11y'
 import { HINT_TEXT } from '../../lib/hand-hints'
-import { markCoachSeen } from '../../lib/hand-session'
+import { HAND_ON_KEY, markCoachSeen } from '../../lib/hand-session'
+import { MENU_PANEL_ID } from '../../lib/menu-a11y'
 import { CONSENT_TEXT, CONSENT_TITLE } from './ConsentNote'
 import { claimHandGrab } from './grab'
 import { COACH_STEPS } from './HandCoach'
@@ -57,6 +58,9 @@ const device = ({ cores, memory }: { cores: number; memory?: number }) => {
   Object.defineProperty(navigator, 'hardwareConcurrency', { configurable: true, value: cores })
   Object.defineProperty(navigator, 'deviceMemory', { configurable: true, value: memory })
 }
+
+/** How the browser says this page was loaded (`PerformanceNavigationTiming.type`). */
+let navigationType: string
 
 /** What the tracker reports for `hand`: found surely, or nothing. */
 const sighting = (hand: HandFrame | null, score = 0.95) => (hand ? { hand, score } : null)
@@ -168,8 +172,14 @@ beforeEach(() => {
     requestVideoFrameCallback: waitFor(() => videoFrames),
     cancelVideoFrameCallback: (handle: number) => videoFrames.delete(handle),
   })
-  // A tab that has never had Hand control on, in a browser without the Permissions API (jsdom).
+  // A tab that has never had Hand control on, in a browser without the Permissions API (jsdom),
+  // on a page reached by a plain navigation.
   Object.defineProperty(navigator, 'permissions', { configurable: true, value: undefined })
+  navigationType = 'navigate'
+  Object.defineProperty(performance, 'getEntriesByType', {
+    configurable: true,
+    value: (type: string) => (type === 'navigation' ? [{ type: navigationType }] : []),
+  })
   Object.defineProperty(HTMLMediaElement.prototype, 'readyState', {
     configurable: true,
     get: () => 4,
@@ -232,6 +242,8 @@ afterEach(async () => {
   delete (navigator as { hardwareConcurrency?: number }).hardwareConcurrency
   delete (navigator as { deviceMemory?: number }).deviceMemory
   delete (navigator as { permissions?: unknown }).permissions
+  delete (performance as { getEntriesByType?: unknown }).getEntriesByType
+  delete (document as { wasDiscarded?: boolean }).wasDiscarded
   const video = HTMLVideoElement.prototype as unknown as Partial<Record<string, unknown>>
   delete video.requestVideoFrameCallback
   delete video.cancelVideoFrameCallback
@@ -781,7 +793,7 @@ describe('after the controller is gone', () => {
 })
 
 describe('its lifetime (#58)', () => {
-  const { noHandMs, minFps, slowMs, sampleMs, graceMs } = HAND_TUNING.lifetime
+  const { noHandMs, coachNoHandMs, minFps, slowMs, sampleMs, graceMs } = HAND_TUNING.lifetime
   const pressed = () => toggle()!.getAttribute('aria-pressed')
   /** Whether a hand is in view. */
   let present: boolean
@@ -818,15 +830,36 @@ describe('its lifetime (#58)', () => {
     expect(pressed()).toBe('true')
   })
 
-  it('while the coach is open, no hand does not count', async () => {
+  it(`while the coach is open it waits ${coachNoHandMs / 1000} s, not for ever`, async () => {
     localStorage.clear()
     await render()
     await turnOn()
-    await runFor(noHandMs + 1000)
+    await runFor(coachNoHandMs - 1000)
     expect(pressed()).toBe('true')
-    await click(button('Atla'))
-    await runFor(noHandMs + 1000)
+    await runFor(2000)
     expect(pressed()).toBe('false')
+  })
+
+  it('closing the coach starts the count afresh', async () => {
+    localStorage.clear()
+    await render()
+    await turnOn()
+    await runFor(coachNoHandMs - 1000)
+    await click(button('Atla'))
+    await runFor(noHandMs - 1000)
+    expect(pressed()).toBe('true')
+    await runFor(2000)
+    expect(pressed()).toBe('false')
+  })
+
+  it('a page at under 1 fps turns it off too', async () => {
+    present = true
+    pageSeconds = 1.25
+    await render()
+    await turnOn()
+    await runFor(slowMs * 4)
+    expect(pressed()).toBe('false')
+    expect(status()).toBe('Bu cihazda akıcı çalışmıyor')
   })
 
   it(`a page under ${minFps} fps for ${slowMs / 1000} s turns it off: "Bu cihazda akıcı çalışmıyor"`, async () => {
@@ -842,7 +875,7 @@ describe('its lifetime (#58)', () => {
     expect(status()).toBe('Bu cihazda akıcı çalışmıyor')
   })
 
-  it.each([60, 120])('a smooth page at %s Hz stays on', async (hz) => {
+  it.each([30, 60, 120])('a page at %s fps stays on', async (hz) => {
     present = true
     pageSeconds = 1 / hz
     await render()
@@ -870,12 +903,33 @@ describe('the hints (#58)', () => {
   const { width, height } = HAND_TUNING.hints.lumaSize
   const hintsShown = () => container.querySelector('[data-hand-hints]')!.textContent
   let palm: number
+  let score: number
+  /** A canvas context whose picture has mean luma `luma`, logging what is drawn, read and cleared. */
+  const fakeCanvas = (luma: () => number) => {
+    const log: unknown[][] = []
+    const getContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(
+      () =>
+        ({
+          clearRect: (...args: unknown[]) => log.push(['clear', ...args]),
+          beginPath: () => {},
+          arc: () => {},
+          fill: () => {},
+          drawImage: (...args: unknown[]) => log.push(['draw', ...args]),
+          getImageData: (...args: number[]) => {
+            log.push(['read', ...args])
+            return { data: new Uint8ClampedArray(args[2]! * args[3]! * 4).fill(luma()) }
+          },
+        }) as unknown as CanvasRenderingContext2D,
+    )
+    return { log, restore: () => getContext.mockRestore() }
+  }
 
   beforeEach(() => {
     palm = nearPalm * 1.5
+    score = 0.95
     markCoachSeen(localStorage)
     tracker.createHandTracker.mockImplementation(async () => ({
-      detect: () => sighting(pose(0.5, 0.5, 0.9, palm)),
+      detect: () => sighting(pose(0.5, 0.5, 0.9, palm), score),
       close: tracker.close,
     }))
   })
@@ -899,22 +953,7 @@ describe('the hints (#58)', () => {
 
   it('"Daha çok ışık" shows for a dark picture, read from a tiny canvas a few times a second', async () => {
     let luma = darkLuma / 2
-    const reads: number[][] = []
-    const draws: unknown[][] = []
-    const getContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(
-      () =>
-        ({
-          clearRect: () => {},
-          beginPath: () => {},
-          arc: () => {},
-          fill: () => {},
-          drawImage: (...args: unknown[]) => draws.push(args),
-          getImageData: (...args: number[]) => {
-            reads.push(args)
-            return { data: new Uint8ClampedArray(args[2]! * args[3]! * 4).fill(luma) }
-          },
-        }) as unknown as CanvasRenderingContext2D,
-    )
+    const canvas = fakeCanvas(() => luma)
     await render()
     await turnOn()
     await runFor(showAfterMs * 2)
@@ -922,13 +961,28 @@ describe('the hints (#58)', () => {
     luma = brightLuma * 2
     await runFor(clearAfterMs * 2)
     expect(hintsShown()).toBe('')
-    // Only ever the shrunk picture, and at most every `lumaEveryMs`.
+    // Only ever the shrunk picture, at most every `lumaEveryMs`, and cleared once read.
+    const reads = canvas.log.filter(([kind]) => kind === 'read')
+    const draws = canvas.log.filter(([kind]) => kind === 'draw')
     const ms = (showAfterMs + clearAfterMs) * 2
     expect(reads.length).toBeGreaterThan(0)
     expect(reads.length).toBeLessThanOrEqual(Math.ceil(ms / lumaEveryMs) + 1)
-    expect(reads.every(([, , w, h]) => w === width && h === height)).toBe(true)
-    expect(draws.every((args) => args[3] === width && args[4] === height)).toBe(true)
-    getContext.mockRestore()
+    expect(reads.every(([, , , w, h]) => w === width && h === height)).toBe(true)
+    expect(draws.every((args) => args[4] === width && args[5] === height)).toBe(true)
+    canvas.log.forEach(([kind], i) => {
+      if (kind === 'read') expect(canvas.log[i + 1]).toEqual(['clear', 0, 0, width, height])
+    })
+    canvas.restore()
+  })
+
+  it('a hand tracked unsurely in a bright picture shows nothing: brightness only', async () => {
+    score = 0.3
+    const canvas = fakeCanvas(() => brightLuma * 2)
+    await render()
+    await turnOn()
+    await runFor(showAfterMs * 3)
+    expect(hintsShown()).toBe('')
+    canvas.restore()
   })
 
   it('turning off clears them', async () => {
@@ -952,22 +1006,128 @@ describe('after a reload in the same tab (#58)', () => {
     Object.defineProperty(navigator, 'permissions', { configurable: true, value: api })
     return api
   }
-  /** A full reload in this tab: the page hides as it unloads, then a fresh page starts. */
-  const reload = async () => {
+  /** The page hides as it unloads (`pagehide`, then hidden), and the old page goes away. */
+  const unload = async () => {
     await act(() => {
+      window.dispatchEvent(new Event('pagehide'))
       hidden = true
       document.dispatchEvent(new Event('visibilitychange'))
     })
     await act(() => root.unmount())
-    hidden = false
+  }
+  /** A fresh page in this tab, loaded the way `how` says (a reload by default), shown or not. */
+  const load = async ({ how = 'reload', shown = true } = {}) => {
+    navigationType = how
+    hidden = !shown
     root = createRoot(container)
     await render()
     await settle()
     await settle()
   }
+  /** A full reload in this tab. */
+  const reload = async () => {
+    await unload()
+    await load()
+  }
 
   beforeEach(() => {
     markCoachSeen(localStorage)
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('the tab keeps only when the page hid with it on, and a load takes that away at once', async () => {
+    permission(async () => ({ state: 'prompt' }))
+    await render()
+    await turnOn()
+    expect(sessionStorage.getItem(HAND_ON_KEY)).toBeNull()
+    await unload()
+    expect(Number(sessionStorage.getItem(HAND_ON_KEY))).toBeGreaterThan(0)
+    await load()
+    expect(sessionStorage.getItem(HAND_ON_KEY)).toBeNull()
+  })
+
+  it.each<[string, () => unknown]>([
+    [
+      'a reload long after the page hid',
+      () => {
+        const later = Date.now() + HAND_TUNING.lifetime.resumeWindowMs + 1000
+        vi.spyOn(Date, 'now').mockReturnValue(later)
+      },
+    ],
+    [
+      'a tab the browser discarded',
+      () => {
+        Object.defineProperty(document, 'wasDiscarded', { configurable: true, value: true })
+      },
+    ],
+    [
+      'a mark copied without a time (an old or foreign flag)',
+      () => sessionStorage.setItem(HAND_ON_KEY, '1'),
+    ],
+  ])('stays off after %s, asking for nothing', async (_, before) => {
+    const api = permission(async () => ({ state: 'granted' }))
+    await render()
+    await turnOn()
+    await unload()
+    await before()
+    await load()
+    expect(pressed()).toBe('false')
+    expect(api.query).not.toHaveBeenCalled()
+    expect(getUserMedia).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    ['a duplicated or reopened tab (a new navigation)', { how: 'navigate' }],
+    ['Back or Forward to this page', { how: 'back_forward' }],
+    ['a page loaded hidden', { shown: false }],
+  ])('stays off for %s, asking for nothing', async (_, how) => {
+    const api = permission(async () => ({ state: 'granted' }))
+    await render()
+    await turnOn()
+    await unload()
+    await load(how)
+    expect(pressed()).toBe('false')
+    expect(api.query).not.toHaveBeenCalled()
+    expect(getUserMedia).toHaveBeenCalledTimes(1)
+  })
+
+  it('comes back under React’s development double mount too (one check per page load)', async () => {
+    permission(async () => ({ state: 'granted' }))
+    await render()
+    await turnOn()
+    await unload()
+    navigationType = 'reload'
+    hidden = false
+    root = createRoot(container)
+    await act(() =>
+      root.render(
+        <StrictMode>
+          <HandToggle />
+          <HandControl />
+        </StrictMode>,
+      ),
+    )
+    await settle()
+    await settle()
+    await settle()
+    expect(pressed()).toBe('true')
+    expect(getUserMedia).toHaveBeenCalledTimes(2)
+  })
+
+  it('stays off if the page is hidden while the browser answers', async () => {
+    let answer: (value: { state: string }) => void = () => {}
+    permission(() => new Promise((resolve) => (answer = resolve)))
+    await render()
+    await turnOn()
+    await unload()
+    await load()
+    hidden = true
+    await act(async () => answer({ state: 'granted' }))
+    await settle()
+    expect(getUserMedia).toHaveBeenCalledTimes(1)
   })
 
   it('comes back on by itself while the camera is granted, without the consent note', async () => {
@@ -986,7 +1146,7 @@ describe('after a reload in the same tab (#58)', () => {
     ['the camera would prompt', async () => ({ state: 'prompt' })],
     ['the camera is denied', async () => ({ state: 'denied' })],
     [
-      'the camera cannot be queried (Firefox throws)',
+      'the camera cannot be queried (the query throws, as in older browsers)',
       () => {
         throw new TypeError('camera')
       },
@@ -1014,8 +1174,9 @@ describe('after a reload in the same tab (#58)', () => {
     const api = permission(async () => ({ state: 'granted' }))
     await render()
     await turnOn()
+    await unload()
     sessionStorage.clear() // a new tab has its own, empty, session storage
-    await reload()
+    await load({ how: 'navigate' })
     expect(pressed()).toBe('false')
     expect(api.query).not.toHaveBeenCalled()
     expect(getUserMedia).toHaveBeenCalledTimes(1)
@@ -1089,15 +1250,59 @@ describe('the coach (#58)', () => {
   it.each([
     ['Atla', () => click(button('Atla'))],
     ['Esc', () => press('Escape')],
-  ])('%s skips it, and focus goes back to where it was', async (_, skip) => {
+  ])('%s skips it, and focus goes to the toggle, since it opened by itself', async (_, skip) => {
     await render()
     await turnOn()
-    const before = toggle()
     expect(coach()).not.toBeNull()
     await skip()
     expect(coach()).toBeNull()
-    expect(document.activeElement).toBe(before)
+    expect(document.activeElement).toBe(toggle())
     expect(pressed()).toBe('true')
+  })
+
+  it('opened by "?", focus goes back to the "?", even when the click left none (Safari)', async () => {
+    markCoachSeen(localStorage)
+    await render()
+    await turnOn()
+    ;(document.activeElement as HTMLElement | null)?.blur() // a mouse click in Safari
+    await click(button('Nasıl kullanılır'))
+    expect(coach()).not.toBeNull()
+    await press('Escape')
+    expect(coach()).toBeNull()
+    expect(document.activeElement).toBe(button('Nasıl kullanılır'))
+  })
+
+  it('is a light, non-modal dialog', async () => {
+    await render()
+    await turnOn()
+    expect(coach()!.getAttribute('aria-modal')).toBe('false')
+  })
+
+  it('its Esc and Tab do not reach the page’s own key handlers (the menu)', async () => {
+    const menuKeys = vi.fn()
+    document.addEventListener('keydown', menuKeys)
+    await render()
+    await turnOn()
+    await press('Tab')
+    await press('Escape')
+    document.removeEventListener('keydown', menuKeys)
+    expect(coach()).toBeNull()
+    expect(menuKeys).not.toHaveBeenCalled()
+  })
+
+  it('does not open by itself over the open menu, and opens on the next turn-on', async () => {
+    const menu = document.createElement('details')
+    menu.open = true
+    menu.innerHTML = `<summary>Menü</summary><div id="${MENU_PANEL_ID}"></div>`
+    document.body.append(menu)
+    await render()
+    await turnOn()
+    expect(coach()).toBeNull()
+    await click(toggle())
+    menu.open = false
+    await turnOn()
+    expect(coach()).not.toBeNull()
+    menu.remove()
   })
 
   it('keeps Tab and Shift+Tab inside, step by step (Safari skips buttons)', async () => {

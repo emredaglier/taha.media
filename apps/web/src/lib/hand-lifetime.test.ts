@@ -10,16 +10,26 @@ import {
 } from './hand-lifetime'
 import { HAND_TUNING } from './hand-tuning'
 
-const { noHandMs, minFps, slowMs, sampleMs, graceMs, pauseMs } = HAND_TUNING.lifetime
+const { noHandMs, coachNoHandMs, minFps, slowMs, sampleMs, graceMs, pauseMs, pauseWindowMs } =
+  HAND_TUNING.lifetime
 const CAMERA_MS = 1000 / 30
 
 describe('no hand in view', () => {
-  /** Camera frames from `from` for `ms`, with or without a hand; the events and the last state. */
-  const camera = (state = startHandWatch(0), from: number, ms: number, seen: boolean) => {
+  /**
+   * Camera frames from `from` for `ms`, with or without a hand, the coach open or not; the events
+   * and the last state.
+   */
+  const camera = (
+    state = startHandWatch(0),
+    from: number,
+    ms: number,
+    seen: boolean,
+    coach = false,
+  ) => {
     const events: LifetimeEvent[] = []
     let now = from
     for (; now <= from + ms; now += CAMERA_MS) {
-      const step = watchHand(state, seen, now)
+      const step = watchHand(state, { seen, coach }, now)
       state = step.state
       if (step.event) events.push(step.event)
     }
@@ -45,6 +55,23 @@ describe('no hand in view', () => {
 
   it('a hand in view all along never turns it off', () => {
     expect(camera(startHandWatch(0), 0, noHandMs * 3, true).events).toEqual([])
+  })
+
+  it(`while the coach is open it waits ${coachNoHandMs / 1000} s instead, not for ever`, () => {
+    const reading = camera(startHandWatch(0), 0, coachNoHandMs - 1000, false, true)
+    expect(reading.events).toEqual([])
+    expect(camera(reading.state, reading.now, 2000, false, true).events).toEqual([
+      { kind: 'off', reason: 'noHand' },
+    ])
+  })
+
+  it('opening or closing the coach starts the count afresh', () => {
+    // No hand for a while, then the coach opens ("?"), is read, and closes.
+    const before = camera(startHandWatch(0), 0, noHandMs - 1000, false)
+    const reading = camera(before.state, before.now, coachNoHandMs - 1000, false, true)
+    const after = camera(reading.state, reading.now, noHandMs - 1000, false)
+    expect([...before.events, ...reading.events, ...after.events]).toEqual([])
+    expect(camera(after.state, after.now, 2000, false).events).toHaveLength(1)
   })
 })
 
@@ -92,14 +119,14 @@ describe('a page that cannot stay smooth', () => {
   })
 
   it('counts frames over time, not one interval at a time: a slow page on a 60 Hz screen', () => {
-    // Frames land on the screen's refreshes, here one, two and two refreshes apart: some single
-    // intervals look smooth, but the page draws only 36 frames a second.
+    // Frames land on the screen's refreshes, here two, three and three refreshes apart: some
+    // single intervals are at 30 fps, but the page draws only 22.5 frames a second.
     const refresh = 1000 / 60
     const start = warm()
     let { state, now } = start
     const events: LifetimeEvent[] = []
     for (let i = 0; now - start.now < slowMs * 2; i++) {
-      now += refresh * (i % 3 === 0 ? 1 : 2)
+      now += refresh * (i % 3 === 0 ? 2 : 3)
       const step = watchFrameRate(state, now)
       state = step.state
       if (step.event) events.push(step.event)
@@ -107,7 +134,8 @@ describe('a page that cannot stay smooth', () => {
     expect(events).toEqual([{ kind: 'off', reason: 'notSmooth' }])
   })
 
-  it.each([60, 120, 144])('a smooth page at %s Hz never turns it off', (hz) => {
+  it.each([30, 60, 120, 144])('a page at %s fps never turns it off', (hz) => {
+    // 30: a browser's power-saving cap (Safari's Low Power Mode, Chrome's Energy Saver).
     expect(page(startFrameRateWatch(0), 0, 20_000, hz).events).toEqual([])
   })
 
@@ -133,5 +161,23 @@ describe('a page that cannot stay smooth', () => {
     expect([...before.events, ...after.events]).toEqual([])
     // Then the count runs as usual.
     expect(page(after.state, after.now, slowMs, slowFps).events).toHaveLength(1)
+  })
+
+  it('a page at under 1 fps turns it off: recurring gaps are slow time, not pauses', () => {
+    const start = warm()
+    const crawl = page(start.state, start.now, slowMs * 4, 0.8)
+    expect(crawl.events.map(({ event }) => event)).toEqual([{ kind: 'off', reason: 'notSmooth' }])
+    expect(crawl.events[0]!.at - start.now).toBeLessThanOrEqual(slowMs * 3)
+  })
+
+  it('isolated pauses, or short freezes between smooth stretches, never turn it off', () => {
+    for (const every of [pauseWindowMs * 0.6, pauseWindowMs * 0.3]) {
+      let { state, now } = warm()
+      for (let freeze = 0; freeze < 10; freeze++) {
+        const smooth = page(state, now + pauseMs * 1.2, every, 60)
+        expect(smooth.events).toEqual([])
+        ;({ state, now } = smooth)
+      }
+    }
   })
 })

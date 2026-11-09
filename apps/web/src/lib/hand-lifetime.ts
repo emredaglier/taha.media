@@ -13,22 +13,38 @@ export type LifetimeEvent = { kind: 'off'; reason: LifetimeReason }
 
 type Step<S> = { state: S; event: LifetimeEvent | null }
 
-/** When a hand was last in view, or when the watch began. */
-export type HandWatch = { lastHandAt: number; done: boolean }
+export type HandWatch = {
+  /** When a hand was last in view, the watch began, or the coach opened or closed (ms). */
+  lastHandAt: number
+  /** Whether the coach was open at the last frame. */
+  coach: boolean
+  done: boolean
+}
 
 /** A hand watch begun at `now` (ms): the count starts there. */
-export const startHandWatch = (now: number): HandWatch => ({ lastHandAt: now, done: false })
+export const startHandWatch = (now: number): HandWatch => ({
+  lastHandAt: now,
+  coach: false,
+  done: false,
+})
 
 /**
- * One camera frame at `now`, with a hand in view or not: `noHandMs` without one turns Hand control
- * off, once. A hand in view starts the count afresh.
+ * One camera frame at `now`, with a hand in view or not, and the coach open or not: `noHandMs`
+ * without a hand turns Hand control off, once, or `coachNoHandMs` while the coach is open (the
+ * visitor may be reading it). A hand in view, or the coach opening or closing, starts the count
+ * afresh.
  */
-export function watchHand(state: HandWatch, seen: boolean, now: number): Step<HandWatch> {
-  if (seen) return { state: { ...state, lastHandAt: now }, event: null }
-  if (state.done || now - state.lastHandAt < HAND_TUNING.lifetime.noHandMs) {
-    return { state, event: null }
-  }
-  return { state: { ...state, done: true }, event: { kind: 'off', reason: 'noHand' } }
+export function watchHand(
+  state: HandWatch,
+  { seen, coach }: { seen: boolean; coach: boolean },
+  now: number,
+): Step<HandWatch> {
+  const { noHandMs, coachNoHandMs } = HAND_TUNING.lifetime
+  if (state.done) return { state, event: null }
+  const lastHandAt = seen || coach !== state.coach ? now : state.lastHandAt
+  const next = { ...state, lastHandAt, coach }
+  if (now - lastHandAt < (coach ? coachNoHandMs : noHandMs)) return { state: next, event: null }
+  return { state: { ...next, done: true }, event: { kind: 'off', reason: 'noHand' } }
 }
 
 export type FrameRateWatch = {
@@ -41,40 +57,56 @@ export type FrameRateWatch = {
   frames: number
   /** When the run of slow windows began, or null while the page keeps up. */
   slowSince: number | null
+  /** When the recent gaps of `pauseMs` or more ended (ms), within `pauseWindowMs`. */
+  gaps: number[]
   done: boolean
 }
 
-/** A frame-rate watch begun at `now` (ms), the moment Hand control turned on. */
+/**
+ * A frame-rate watch begun at `now` (ms): when Hand control turned on, or after the window's focus
+ * changed (the browser may have stopped drawing it meanwhile).
+ */
 export const startFrameRateWatch = (now: number): FrameRateWatch => ({
   measureFrom: now + HAND_TUNING.lifetime.graceMs,
   last: now,
   windowStart: now,
   frames: 0,
   slowSince: null,
+  gaps: [],
   done: false,
 })
 
 /**
  * One page frame (an animation frame) at `now`. The frame rate is counted over windows of
  * `sampleMs`, after a grace; a run of windows under `minFps` lasting `slowMs` turns Hand control
- * off, once, as not smooth, and any window that keeps up ends the run. A gap of `pauseMs` or more
- * between two frames is a pause (the browser stopped drawing), not a slow page: the grace starts
- * again after it. Display rates (60, 120, 144 Hz) don't matter: only frames per second count.
+ * off, once, as not smooth, and any window that keeps up ends the run. Display rates (60, 120,
+ * 144 Hz) don't matter: only frames per second count.
+ *
+ * A gap of `pauseMs` or more between two frames is a pause (the browser stopped drawing), not a
+ * slow page: the grace starts again after it. But when such gaps recur (`pauseRepeats` within
+ * `pauseWindowMs`), the page is simply that slow: the gap is slow time, in the same run.
  */
 export function watchFrameRate(state: FrameRateWatch, now: number): Step<FrameRateWatch> {
-  const { minFps, slowMs, sampleMs, pauseMs } = HAND_TUNING.lifetime
+  const { minFps, slowMs, sampleMs, pauseMs, pauseRepeats, pauseWindowMs } = HAND_TUNING.lifetime
   if (state.done) return { state, event: null }
-  if (now - state.last >= pauseMs) return { state: startFrameRateWatch(now), event: null }
-  if (now < state.measureFrom) {
+  let next: FrameRateWatch
+  if (now - state.last >= pauseMs) {
+    const gaps = [...state.gaps.filter((at) => now - at < pauseWindowMs), now]
+    if (gaps.length < pauseRepeats)
+      return { state: { ...startFrameRateWatch(now), gaps }, event: null }
+    const slowSince = state.slowSince ?? state.last
+    next = { ...state, last: now, windowStart: now, frames: 0, slowSince, gaps }
+  } else if (now < state.measureFrom) {
     return { state: { ...state, last: now, windowStart: now, frames: 0 }, event: null }
+  } else {
+    const frames = state.frames + 1
+    const span = now - state.windowStart
+    if (span < sampleMs) return { state: { ...state, last: now, frames }, event: null }
+    const slow = (frames * 1000) / span < minFps
+    const slowSince = slow ? (state.slowSince ?? state.windowStart) : null
+    next = { ...state, last: now, windowStart: now, frames: 0, slowSince }
   }
-  const frames = state.frames + 1
-  const span = now - state.windowStart
-  if (span < sampleMs) return { state: { ...state, last: now, frames }, event: null }
-  const slow = (frames * 1000) / span < minFps
-  const slowSince = slow ? (state.slowSince ?? state.windowStart) : null
-  const next = { ...state, last: now, windowStart: now, frames: 0, slowSince }
-  if (slowSince !== null && now - slowSince >= slowMs) {
+  if (next.slowSince !== null && now - next.slowSince >= slowMs) {
     return { state: { ...next, done: true }, event: { kind: 'off', reason: 'notSmooth' } }
   }
   return { state: next, event: null }
