@@ -258,7 +258,7 @@ describe('ci workflow (ADR-0010)', () => {
 
   it('builds arm64 natively on the ARM runner, smoke-tests those images there, then publishes on main', () => {
     const build = jobBlock('build')
-    expect(build).toMatch(/runs-on: ubuntu-24\.04-arm\n/)
+    expect(build).toMatch(/runs-on: \$\{\{ vars\.CI_RUNNER_ARM \|\| 'ubuntu-24\.04-arm' \}\}\n/)
     const at = ['infra/ci.sh build ', 'infra/ci.sh smoke ', 'infra/ci.sh publish '].map((s) =>
       build.indexOf(s),
     )
@@ -284,6 +284,15 @@ describe('ci workflow (ADR-0010)', () => {
     expect(soft).toHaveLength(1)
     expect(soft[0]).toMatch(/name: smoke-output/)
     expect(soft[0]).toMatch(/if: failure\(\)/)
+  })
+
+  it('runs every job on a variable runner that falls back to the GitHub-hosted label (#84)', () => {
+    const runsOn = (job: string) => /^ {4}runs-on: (.+)$/m.exec(jobBlock(job))?.[1]
+    expect(runsOn('build')).toBe("${{ vars.CI_RUNNER_ARM || 'ubuntu-24.04-arm' }}")
+    for (const name of ['check', 'upload', 'push', 'deploy'])
+      expect(runsOn(name), name).toBe("${{ vars.CI_RUNNER || 'ubuntu-24.04' }}")
+    // With both variables unset the labels are today's: no other runner name is spelled out.
+    expect(text.match(/runs-on:/g)).toHaveLength(5)
   })
 
   it('gives the browser install its own short timeout (a hung apt mirror fails fast)', () => {

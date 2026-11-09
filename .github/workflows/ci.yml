@@ -46,7 +46,7 @@ env:
 
 jobs:
   check:
-    runs-on: ubuntu-24.04
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
@@ -64,8 +64,9 @@ jobs:
 
   build:
     # Native arm64 (ADR-0010). If this runner is not available on the plan, see infra/README.md,
-    # "QEMU fallback".
-    runs-on: ubuntu-24.04-arm
+    # "QEMU fallback". Both runs-on values read a repository variable and fall back to GitHub's
+    # label, so with the variables unset nothing changes (infra/README.md, "Self-hosted fallback").
+    runs-on: ${{ vars.CI_RUNNER_ARM || 'ubuntu-24.04-arm' }}
     timeout-minutes: 45
     permissions:
       contents: read
@@ -94,12 +95,14 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # The browser download is cached; the system libraries are not part of ~/.cache, so they are
       # installed on a hit too. Each install has its own timeout: a hung apt mirror fails in
-      # minutes and can be re-run, instead of eating the job's 45.
+      # minutes and can be re-run, instead of eating the job's 45. The key names the runner kind:
+      # actions/cache stores ~ paths relative to the workspace, so a GitHub-hosted entry restored on
+      # the self-hosted runner (#84) lands outside ~/.cache and reports a hit with no browser.
       - uses: actions/cache@v6
         id: playwright
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ runner.arch }}-chromium-${{ hashFiles('pnpm-lock.yaml') }}
+          key: playwright-${{ runner.environment }}-${{ runner.os }}-${{ runner.arch }}-chromium-${{ hashFiles('pnpm-lock.yaml') }}
       - if: steps.playwright.outputs.cache-hit != 'true'
         timeout-minutes: 10
         run: pnpm exec playwright install --with-deps chromium
@@ -138,7 +141,7 @@ jobs:
   upload:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [check, build]
-    runs-on: ubuntu-24.04
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
     timeout-minutes: 15
     permissions:
       contents: read
@@ -173,7 +176,7 @@ jobs:
   push:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [build, upload]
-    runs-on: ubuntu-24.04
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
     timeout-minutes: 10
     permissions:
       contents: read
@@ -192,7 +195,7 @@ jobs:
   deploy:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [push, upload]
-    runs-on: ubuntu-24.04
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
     timeout-minutes: 30
     # One deploy at a time. A running deploy is never cancelled; a newer one waits.
     concurrency:
