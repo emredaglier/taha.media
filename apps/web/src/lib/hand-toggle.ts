@@ -1,7 +1,13 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 
 import { deviceReport, isWeakDevice } from './home-mode'
-import { REDUCED_MOTION, saveDataOn, subscribeToPreferences } from './loop-mode'
+import {
+  CAN_HOVER,
+  POINTER_FINE,
+  REDUCED_MOTION,
+  saveDataOn,
+  subscribeToQueries,
+} from './loop-mode'
 
 /** What decides whether the Elinle gez toggle is offered. */
 export type HandToggleInputs = {
@@ -28,8 +34,9 @@ export function showHandToggle(inputs: HandToggleInputs): boolean {
   return finePointer && hover && hasCamera && !saveData && !weakDevice
 }
 
-const FINE_POINTER = '(pointer: fine)'
-const HOVER = '(hover: hover)'
+/** Listens to exactly the queries the rule reads, and to Save-Data. */
+const subscribe = (onChange: () => void) =>
+  subscribeToQueries([POINTER_FINE, CAN_HOVER, REDUCED_MOTION], onChange)
 
 const matches = (query: string) => () => matchMedia(query).matches
 const never = () => false
@@ -65,10 +72,10 @@ function useHasCamera(enabled: boolean): boolean {
  * the toggle never flashes for visitors who don't get it, and their header never shifts.
  */
 export function useHandToggleShown(): boolean {
-  const finePointer = useSyncExternalStore(subscribeToPreferences, matches(FINE_POINTER), never)
-  const hover = useSyncExternalStore(subscribeToPreferences, matches(HOVER), never)
-  const reducedMotion = useSyncExternalStore(subscribeToPreferences, matches(REDUCED_MOTION), never)
-  const saveData = useSyncExternalStore(subscribeToPreferences, saveDataOn, never)
+  const finePointer = useSyncExternalStore(subscribe, matches(POINTER_FINE), never)
+  const hover = useSyncExternalStore(subscribe, matches(CAN_HOVER), never)
+  const reducedMotion = useSyncExternalStore(subscribe, matches(REDUCED_MOTION), never)
+  const saveData = useSyncExternalStore(subscribe, saveDataOn, never)
   const weakDevice = useSyncExternalStore(noChanges, () => isWeakDevice(deviceReport()), never)
   const hasCamera = useHasCamera(finePointer && hover && !saveData && !weakDevice)
   return showHandToggle({ finePointer, hover, hasCamera, saveData, weakDevice, reducedMotion })

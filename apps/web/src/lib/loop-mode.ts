@@ -20,7 +20,10 @@ export function chooseLoopMode(options: {
 }
 
 export const REDUCED_MOTION = '(prefers-reduced-motion: reduce)'
-const FINE_POINTER = '(hover: hover) and (pointer: fine)'
+/** A mouse or trackpad, and a pointer that can hover: Hand control's toggle reads them apart. */
+export const POINTER_FINE = '(pointer: fine)'
+export const CAN_HOVER = '(hover: hover)'
+const FINE_POINTER = `${CAN_HOVER} and ${POINTER_FINE}`
 
 type Connection = EventTarget & { saveData?: boolean }
 const connection = (): Connection | undefined =>
@@ -29,9 +32,9 @@ const connection = (): Connection | undefined =>
 /** Whether the visitor asked for Save-Data. */
 export const saveDataOn = (): boolean => connection()?.saveData === true
 
-/** Calls `onChange` when reduced motion, the pointer or Save-Data changes. Returns the undo. */
-export function subscribeToPreferences(onChange: () => void): () => void {
-  const queries = [matchMedia(REDUCED_MOTION), matchMedia(FINE_POINTER)]
+/** Calls `onChange` when any of these media queries or Save-Data changes. Returns the undo. */
+export function subscribeToQueries(media: readonly string[], onChange: () => void): () => void {
+  const queries = media.map((query) => matchMedia(query))
   const network = connection()
   for (const query of queries) query.addEventListener('change', onChange)
   network?.addEventListener('change', onChange)
@@ -40,6 +43,10 @@ export function subscribeToPreferences(onChange: () => void): () => void {
     network?.removeEventListener('change', onChange)
   }
 }
+
+/** Calls `onChange` when reduced motion, the pointer or Save-Data changes. Returns the undo. */
+export const subscribeToPreferences = (onChange: () => void): (() => void) =>
+  subscribeToQueries([REDUCED_MOTION, FINE_POINTER], onChange)
 
 const snapshot = (hoverToPlay: boolean): LoopMode =>
   chooseLoopMode({

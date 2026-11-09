@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef } from 'react'
 
-import { handStatus } from '../../lib/hand-control'
+import { handStatus, isRunning } from '../../lib/hand-control'
 import { useHandToggleShown } from '../../lib/hand-toggle'
 import { HAND_TUNING } from '../../lib/hand-tuning'
 import { ConsentNote } from './ConsentNote'
@@ -19,8 +19,9 @@ export function HandToggle() {
   const shown = useHandToggleShown()
   const state = useHandControl()
   const button = useRef<HTMLButtonElement>(null)
+  const wrapper = useRef<HTMLDivElement>(null)
   const status = handStatus(state)
-  const running = state.phase === 'asking' || state.phase === 'loading' || state.phase === 'on'
+  const running = isRunning(state)
 
   // A note clears itself after a moment; the next one starts its own timer.
   useEffect(() => {
@@ -41,7 +42,7 @@ export function HandToggle() {
 
   if (!shown && state.phase === 'off') return null
   return (
-    <div className="relative">
+    <div ref={wrapper} className="relative">
       <button
         ref={button}
         type="button"
@@ -58,7 +59,9 @@ export function HandToggle() {
       >
         {status}
       </p>
-      {state.phase === 'consenting' ? <ConsentNote onAccept={accept} onDecline={decline} /> : null}
+      {state.phase === 'consenting' ? (
+        <ConsentNote onAccept={accept} onDecline={decline} within={wrapper} />
+      ) : null}
     </div>
   )
 }

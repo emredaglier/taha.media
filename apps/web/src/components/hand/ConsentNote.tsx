@@ -1,26 +1,34 @@
 'use client'
 
-import { useEffect, useId, useRef } from 'react'
+import { useEffect, useId, useRef, type RefObject } from 'react'
 
 import { nextFocus } from '../../lib/menu-a11y'
 
 /** The note's text, exactly as decided (#45, "Hand control"). */
 export const CONSENT_TEXT = 'Kameran yalnızca elini görmek için açılır; görüntü cihazından çıkmaz'
 
+/** The note's name for assistive technology; the sentence is its description. */
+export const CONSENT_TITLE = 'Kamera izni'
+
 /**
  * The note before the browser's camera prompt: only Aç goes on to ask the browser. Focus moves to
  * its first button and stays inside: every Tab step is picked by `nextFocus`, because Safari's Tab
- * skips buttons by default and would leave the note (the `webkit-focus` lesson). Esc is Vazgeç.
- * The toggle takes focus back when the note closes.
+ * skips buttons by default and would leave the note (the `webkit-focus` lesson). Esc is Vazgeç,
+ * and so is a press anywhere outside `within` (the toggle and the note), so the note is modal for
+ * the pointer as well as the keyboard. The toggle takes focus back when the note closes.
  */
 export function ConsentNote({
   onAccept,
   onDecline,
+  within,
 }: {
   onAccept: () => void
   onDecline: () => void
+  /** The toggle with the note: a press inside it is not a press outside the note. */
+  within: RefObject<HTMLElement | null>
 }) {
   const panel = useRef<HTMLDivElement>(null)
+  const titleId = useId()
   const textId = useId()
 
   useEffect(() => {
@@ -42,18 +50,30 @@ export function ConsentNote({
         }
       }
     }
+    const onPointerDown = (event: PointerEvent) => {
+      const inside = within.current ?? note
+      if (!(event.target instanceof Node) || !inside.contains(event.target)) onDecline()
+    }
     document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [onDecline])
+    document.addEventListener('pointerdown', onPointerDown, true)
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.removeEventListener('pointerdown', onPointerDown, true)
+    }
+  }, [onDecline, within])
 
   return (
     <div
       ref={panel}
       role="dialog"
       aria-modal="true"
-      aria-labelledby={textId}
+      aria-labelledby={titleId}
+      aria-describedby={textId}
       className="absolute top-full right-0 z-50 mt-3 w-72 border border-text-muted bg-background-raised p-4 text-sm text-text"
     >
+      <h2 id={titleId} className="sr-only">
+        {CONSENT_TITLE}
+      </h2>
       <p id={textId}>{CONSENT_TEXT}</p>
       <div className="mt-4 flex justify-end gap-6">
         <button type="button" className="underline" onClick={onDecline}>

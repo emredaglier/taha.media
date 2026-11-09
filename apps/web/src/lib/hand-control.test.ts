@@ -138,6 +138,8 @@ describe('turning off', () => {
         { kind: 'cameraFailed', attempt, reason: 'refused' },
         { kind: 'trackerReady', attempt },
         { kind: 'trackerFailed', attempt },
+        { kind: 'trackingFailed', attempt },
+        { kind: 'cameraEnded', attempt },
       ])
       return [
         { kind: 'toggle' },
@@ -152,7 +154,7 @@ describe('turning off', () => {
     let frontier = [initialHandControl]
     let checked = 0
     for (let depth = 0; depth < 5; depth++) {
-      const next: HandControlState[] = []
+      const next = new Map<string, HandControlState>()
       for (const state of frontier) {
         for (const event of eventsFor(state)) {
           const step = handControl(state, event)
@@ -160,12 +162,44 @@ describe('turning off', () => {
             expect(kinds(step.effects), `${state.phase} + ${event.kind}`).toContain('stop')
             checked++
           }
-          next.push(step.state)
+          next.set(JSON.stringify(step.state), step.state)
         }
       }
-      frontier = next
+      frontier = [...next.values()]
     }
     expect(checked).toBeGreaterThan(0)
+  })
+})
+
+describe('failures while on', () => {
+  it('a tracker that keeps failing turns it off, stops the camera and says so', () => {
+    const { state, effects } = run([{ kind: 'trackingFailed', attempt: on.attempt }], on)
+    expect(state.phase).toBe('off')
+    expect(effects).toEqual([{ kind: 'stop' }])
+    expect(handStatus(state)).not.toBe('')
+  })
+
+  it.each(['loading', 'on'] as const)(
+    'a camera that ends on its own while %s turns it off and says so',
+    (phase) => {
+      const before = run(turnOn().slice(0, phase === 'loading' ? 3 : 4)).state
+      const { state, effects } = run([{ kind: 'cameraEnded', attempt: before.attempt }], before)
+      expect(state.phase).toBe('off')
+      expect(effects).toEqual([{ kind: 'stop' }])
+      expect(handStatus(state)).not.toBe('')
+      expect(handStatus(state)).not.toBe(handStatus(run([{ kind: 'close' }], on).state))
+    },
+  )
+
+  it('failures from an earlier attempt change nothing', () => {
+    const again = run(
+      turnOn(run([{ kind: 'close' }], on).state),
+      run([{ kind: 'close' }], on).state,
+    ).state
+    expect(again.phase).toBe('on')
+    for (const kind of ['trackingFailed', 'cameraEnded'] as const) {
+      expect(run([{ kind, attempt: on.attempt }], again)).toEqual({ state: again, effects: [] })
+    }
   })
 })
 
@@ -216,6 +250,12 @@ describe('the status line', () => {
   it('says when it is on, and when it was turned off', () => {
     expect(handStatus(on)).not.toBe('')
     expect(handStatus(run([{ kind: 'toggle' }], on).state)).not.toBe('')
+  })
+
+  it('dismissing when there is no note leaves the state as it is', () => {
+    expect(handControl(initialHandControl, { kind: 'dismissNotice' }).state).toBe(
+      initialHandControl,
+    )
   })
 
   it('clears a note when it is dismissed', () => {

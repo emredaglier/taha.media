@@ -14,6 +14,9 @@ import type { HandFrame } from '../../lib/hand-gesture'
  *   `apps/web/package.json`. They are handed to MediaPipe directly instead of `FilesetResolver`,
  *   whose base path is fixed. Next's loaders leave files in `node_modules` untouched, so the
  *   loader script is emitted byte for byte.
+ * - The package logs usage to Google from every task (`odml.pa.googleapis.com`); the pnpm patch in
+ *   `patches/` removes that logger and its endpoint, and `tracker.test.ts` checks the installed
+ *   bundles, so "the picture never leaves the device" holds for its metadata too.
  * - The model is MediaPipe's hand landmarker (only landmarks are needed), vendored once from
  *   https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task
  *   (float16, version 1; 7,819,105 bytes). `tracker.test.ts` checks its SHA-256, so a swapped file

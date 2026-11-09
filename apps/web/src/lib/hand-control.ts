@@ -19,6 +19,8 @@ export type HandNotice =
   | 'refused'
   | 'unavailable'
   | 'loadFailed'
+  | 'trackingFailed'
+  | 'cameraEnded'
 
 export type HandControlState = {
   phase: HandPhase
@@ -42,6 +44,10 @@ export type HandControlEvent =
   | { kind: 'cameraFailed'; attempt: number; reason: 'refused' | 'unavailable' }
   | { kind: 'trackerReady'; attempt: number }
   | { kind: 'trackerFailed'; attempt: number }
+  /** The tracker kept failing on the camera frames (`HAND_TUNING.maxFailedFrames` in a row). */
+  | { kind: 'trackingFailed'; attempt: number }
+  /** A camera track ended on its own: the camera was unplugged or the permission revoked. */
+  | { kind: 'cameraEnded'; attempt: number }
   /** The × on the preview. */
   | { kind: 'close' }
   /** The tab was hidden. */
@@ -65,6 +71,10 @@ export type HandControlEffect =
 
 export const initialHandControl: HandControlState = { phase: 'off', attempt: 0, notice: null }
 
+/** Whether the camera is asked for or on: the toggle reads pressed, and every way out stops it. */
+export const isRunning = ({ phase }: HandControlState): boolean =>
+  phase === 'asking' || phase === 'loading' || phase === 'on'
+
 type Step = { state: HandControlState; effects: HandControlEffect[] }
 
 const unchanged = (state: HandControlState): Step => ({ state, effects: [] })
@@ -85,7 +95,7 @@ const late = (state: HandControlState, attempt: number, waiting: HandPhase): boo
  * camera, and a late answer from the camera or the tracker is released.
  */
 export function handControl(state: HandControlState, event: HandControlEvent): Step {
-  const running = state.phase === 'asking' || state.phase === 'loading' || state.phase === 'on'
+  const running = isRunning(state)
   switch (event.kind) {
     case 'toggle':
       if (state.phase === 'off') return unchanged({ ...state, phase: 'consenting', notice: null })
@@ -121,6 +131,12 @@ export function handControl(state: HandControlState, event: HandControlEvent): S
       }
     case 'trackerFailed':
       return late(state, event.attempt, 'loading') ? unchanged(state) : turnOff(state, 'loadFailed')
+    case 'trackingFailed':
+      return late(state, event.attempt, 'on') ? unchanged(state) : turnOff(state, 'trackingFailed')
+    case 'cameraEnded':
+      return running && state.attempt === event.attempt
+        ? turnOff(state, 'cameraEnded')
+        : unchanged(state)
     case 'close':
       return running ? turnOff(state, 'stopped') : unchanged(state)
     case 'hidden':
@@ -128,7 +144,7 @@ export function handControl(state: HandControlState, event: HandControlEvent): S
     case 'unmount':
       return turnOff(state, null)
     case 'dismissNotice':
-      return unchanged({ ...state, notice: null })
+      return state.notice === null ? unchanged(state) : unchanged({ ...state, notice: null })
   }
 }
 
@@ -142,6 +158,8 @@ const NOTICES: Record<HandNotice, string> = {
   refused: 'Kamera izni verilmedi',
   unavailable: 'Kamera açılamadı',
   loadFailed: 'El takibi yüklenemedi',
+  trackingFailed: 'El takibi durdu',
+  cameraEnded: 'Kamera kapandı',
 }
 
 /** The status line, in Turkish, for a polite live region; empty when there is nothing to say. */

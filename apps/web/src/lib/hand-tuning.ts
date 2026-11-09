@@ -19,6 +19,8 @@ export const HAND_TUNING = {
   frame: { left: 0.15, width: 0.7, top: 0.12, height: 0.76 },
   /** Tracking is lost after this many camera frames in a row without a hand (prototype: > 4). */
   lostAfterFrames: 5,
+  /** Hand control turns off when the tracker fails on this many camera frames in a row (~1 s). */
+  maxFailedFrames: 30,
   /** The camera picture asked for, in px: enough for landmarks, cheap to track. */
   camera: { width: 640, height: 480 },
   /** A Turkish status note (refused, cancelled, turned off) clears after this long (ms). */

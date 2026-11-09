@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import type { HandControlEffect } from '../../lib/hand-control'
 import { initialGestureState, readGesture, type HandFrame } from '../../lib/hand-gesture'
@@ -89,11 +89,20 @@ export function HandControl() {
   const canvas = useRef<HTMLCanvasElement>(null)
   const ring = useRef<HTMLDivElement>(null)
   const attempts = useRef(new Map<number, Attempt>())
+  // The camera's own picture size: the preview and its dots follow it (4:3, 16:9, ...).
+  const [picture, setPicture] = useState<{ width: number; height: number }>(HAND_TUNING.camera)
 
   useEffect(() => {
     const live = attempts.current
     const explorer: Explorer = createExplorer(hitTest)
     let stopTracking: (() => void) | null = null
+    // Set on unmount: an answer that arrives later is released here, since no runner is left to
+    // act on the reducer's release.
+    let disposed = false
+
+    /** Whether an answer for `attempt` still has a place: mounted, and the attempt waiting. */
+    const wanted = (attempt: number, phase: 'asking' | 'loading') =>
+      !disposed && handState().phase === phase && handState().attempt === attempt
 
     const release = (attempt: number) => {
       const held = live.get(attempt)
@@ -115,14 +124,20 @@ export function HandControl() {
       if (!tracker || !element) return
       let gesture = initialGestureState
       let last = 0
+      let failures = 0
       stopTracking = everyVideoFrame(element, (now) => {
         const at = Math.max(now, last + 1) // the tracker needs rising timestamps
         last = at
         let hand: HandFrame | null
         try {
           hand = tracker.detect(element, at)
+          failures = 0
         } catch (error) {
-          console.error('Hand control: tracking failed on a frame', error)
+          // Logged once per run of failures; a tracker that keeps failing turns Hand control off.
+          if (failures++ === 0) console.error('Hand control: tracking failed on a frame', error)
+          if (failures === HAND_TUNING.maxFailedFrames) {
+            dispatchHand({ kind: 'trackingFailed', attempt })
+          }
           return
         }
         drawHand(canvas.current, hand)
@@ -133,8 +148,13 @@ export function HandControl() {
             showRing(null)
             explorer.release()
           } else {
-            const { clientWidth, clientHeight } = document.documentElement
-            const point = { x: event.point.x * clientWidth, y: event.point.y * clientHeight }
+            // The cursor reaches the last pixel on each side, never past it: a point on the edge
+            // itself hits nothing, and MENU sits at the right edge.
+            const { clientWidth: w, clientHeight: h } = document.documentElement
+            const point = {
+              x: Math.min(event.point.x * w, w - 1),
+              y: Math.min(event.point.y * h, h - 1),
+            }
             showRing(point)
             explorer.moveTo(point.x, point.y)
           }
@@ -157,7 +177,18 @@ export function HandControl() {
             )
             .then(
               (stream) => {
+                if (!wanted(attempt, 'asking')) {
+                  // Turned off, or unmounted, while the browser asked: stop this camera now.
+                  for (const track of stream.getTracks()) track.stop()
+                  return
+                }
                 live.set(attempt, { stream })
+                // An unplugged camera or a revoked permission ends the track on its own.
+                for (const track of stream.getVideoTracks()) {
+                  track.addEventListener('ended', () =>
+                    dispatchHand({ kind: 'cameraEnded', attempt }),
+                  )
+                }
                 dispatchHand({ kind: 'cameraGranted', attempt })
               },
               (error: unknown) =>
@@ -172,7 +203,8 @@ export function HandControl() {
             .then(
               (tracker) => {
                 const held = live.get(attempt)
-                if (!held) return tracker.close() // stopped while it loaded
+                // Stopped, or unmounted, while it loaded.
+                if (!held || !wanted(attempt, 'loading')) return tracker.close()
                 held.tracker = tracker
                 dispatchHand({ kind: 'trackerReady', attempt })
               },
@@ -207,6 +239,7 @@ export function HandControl() {
     }
     document.addEventListener('visibilitychange', onVisibility)
     return () => {
+      disposed = true
       document.removeEventListener('visibilitychange', onVisibility)
       dispatchHand({ kind: 'unmount' })
       undo()
@@ -224,7 +257,7 @@ export function HandControl() {
   }, [cameraOn])
 
   if (!cameraOn) return null
-  const { width, height } = HAND_TUNING.camera
+  const { width, height } = picture
   return (
     <>
       <div
@@ -238,6 +271,10 @@ export function HandControl() {
             playsInline
             className="absolute inset-0 size-full object-cover"
             aria-hidden="true"
+            onLoadedMetadata={(event) => {
+              const { videoWidth, videoHeight } = event.currentTarget
+              if (videoWidth && videoHeight) setPicture({ width: videoWidth, height: videoHeight })
+            }}
           />
           <canvas
             ref={canvas}

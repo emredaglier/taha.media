@@ -10,7 +10,8 @@ const tracker = vi.hoisted(() => ({
 }))
 vi.mock('./tracker', () => ({ createHandTracker: tracker.createHandTracker }))
 
-import { CONSENT_TEXT } from './ConsentNote'
+import { HAND_TUNING } from '../../lib/hand-tuning'
+import { CONSENT_TEXT, CONSENT_TITLE } from './ConsentNote'
 import { HandControl } from './HandControl'
 import { HandToggle } from './HandToggle'
 import { dispatchHand } from './store'
@@ -27,8 +28,27 @@ let container: HTMLElement
 let root: Root
 let hidden = false
 let cameras: { kind: string }[]
-let track: { stop: ReturnType<typeof vi.fn> }
+let track: EventTarget & { stop: ReturnType<typeof vi.fn> }
 let getUserMedia: ReturnType<typeof vi.fn>
+/** The animation frames waiting to run, and the camera's clock they advance. */
+let frames: ((now: number) => void)[]
+let videoTime: number
+/** The points the hand's hit test asked about. */
+let hits: [number, number][]
+
+/** A camera stream with one video track. */
+const stream = () => ({ getTracks: () => [track], getVideoTracks: () => [track] })
+
+/** Runs `count` camera frames through the controller's tracking loop. */
+const runFrames = (count: number) =>
+  act(() => {
+    for (let i = 0; i < count; i++) {
+      videoTime += 1 / 30
+      const due = frames
+      frames = []
+      for (const frame of due) frame(videoTime * 1000)
+    }
+  })
 
 const DESKTOP_QUERIES = ['(pointer: fine)', '(hover: hover)', '(hover: hover) and (pointer: fine)']
 
@@ -72,8 +92,34 @@ const turnOn = async () => {
 beforeEach(() => {
   hidden = false
   cameras = [{ kind: 'videoinput' }]
-  track = { stop: vi.fn() }
-  getUserMedia = vi.fn(async () => ({ getTracks: () => [track] }))
+  track = Object.assign(new EventTarget(), { stop: vi.fn() })
+  getUserMedia = vi.fn(async () => stream())
+  frames = []
+  videoTime = 0
+  hits = []
+  vi.stubGlobal('requestAnimationFrame', (frame: (now: number) => void) => frames.push(frame))
+  vi.stubGlobal('cancelAnimationFrame', () => {})
+  Object.defineProperty(HTMLMediaElement.prototype, 'readyState', {
+    configurable: true,
+    get: () => 4,
+  })
+  Object.defineProperty(HTMLMediaElement.prototype, 'currentTime', {
+    configurable: true,
+    get: () => videoTime,
+    set: () => {},
+  })
+  Object.defineProperty(document.documentElement, 'clientWidth', {
+    configurable: true,
+    value: 1000,
+  })
+  Object.defineProperty(document.documentElement, 'clientHeight', {
+    configurable: true,
+    value: 800,
+  })
+  document.elementsFromPoint = (x: number, y: number) => {
+    hits.push([x, y])
+    return []
+  }
   tracker.close.mockReset()
   tracker.createHandTracker.mockReset()
   tracker.createHandTracker.mockImplementation(async () => ({
@@ -225,7 +271,7 @@ describe('turning off stops every camera track and closes the tracker', () => {
     await click(toggle())
     await click(button('Aç'))
     await click(toggle()) // off while the browser still asks
-    await act(async () => grant({ getTracks: () => [track] }))
+    await act(async () => grant(stream()))
     expect(track.stop).toHaveBeenCalled()
     expect(tracker.createHandTracker).not.toHaveBeenCalled()
   })
@@ -239,5 +285,101 @@ describe('turning off stops every camera track and closes the tracker', () => {
     expect(track.stop).toHaveBeenCalled()
     await act(async () => ready({ detect: () => null, close: tracker.close }))
     expect(tracker.close).toHaveBeenCalled()
+  })
+})
+
+describe('the consent note for the pointer', () => {
+  const pointerDown = (target: Element) =>
+    act(() => {
+      target.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
+    })
+
+  it('is named by a short title and described by the sentence', async () => {
+    await render()
+    await click(toggle())
+    const title = document.getElementById(note()!.getAttribute('aria-labelledby')!)
+    const description = document.getElementById(note()!.getAttribute('aria-describedby')!)
+    expect(title!.textContent).toBe(CONSENT_TITLE)
+    expect(description!.textContent).toBe(CONSENT_TEXT)
+  })
+
+  it('a press outside it is Vazgeç', async () => {
+    await render()
+    await click(toggle())
+    await pointerDown(document.body)
+    expect(note()).toBeNull()
+    expect(status()).not.toBe('')
+    expect(getUserMedia).not.toHaveBeenCalled()
+  })
+
+  it('a press inside it, or on the toggle, is not', async () => {
+    await render()
+    await click(toggle())
+    await pointerDown(note()!.querySelector('p')!)
+    await pointerDown(toggle()!)
+    expect(note()).not.toBeNull()
+  })
+})
+
+describe('while on', () => {
+  /** A tracker whose `detect` is `detect`. */
+  const trackerWith = (detect: () => unknown) =>
+    tracker.createHandTracker.mockImplementation(async () => ({ detect, close: tracker.close }))
+
+  it(`a tracker failing ${HAND_TUNING.maxFailedFrames} frames in a row turns it off, logging once`, async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    trackerWith(() => {
+      throw new Error('graph failed')
+    })
+    await render()
+    await turnOn()
+    await runFrames(HAND_TUNING.maxFailedFrames - 1)
+    expect(toggle()!.getAttribute('aria-pressed')).toBe('true')
+    await runFrames(1)
+    expect(toggle()!.getAttribute('aria-pressed')).toBe('false')
+    expect(track.stop).toHaveBeenCalled()
+    expect(tracker.close).toHaveBeenCalled()
+    expect(status()).not.toBe('')
+    // Our log, once (jsdom adds its own "not implemented" canvas notices).
+    const ours = error.mock.calls.filter(([message]) => String(message).startsWith('Hand control'))
+    expect(ours).toHaveLength(1)
+    error.mockRestore()
+  })
+
+  it('a camera that ends on its own (unplugged, permission revoked) turns it off and says so', async () => {
+    await render()
+    await turnOn()
+    await act(() => {
+      track.dispatchEvent(new Event('ended'))
+    })
+    expect(toggle()!.getAttribute('aria-pressed')).toBe('false')
+    expect(button('Elinle gezmeyi kapat')).toBeUndefined()
+    expect(tracker.close).toHaveBeenCalled()
+    expect(status()).not.toBe('')
+  })
+
+  it('the cursor at the far edge hits the last pixel, not past it (MENU sits there)', async () => {
+    // The camera's left edge is the screen's right edge (mirrored); its bottom is the bottom.
+    const corner = Array.from({ length: 21 }, () => ({ x: 0, y: 1 }))
+    trackerWith(() => corner)
+    await render()
+    await turnOn()
+    await runFrames(1)
+    expect(hits.at(-1)).toEqual([999, 799])
+  })
+})
+
+describe('after the controller is gone', () => {
+  it('a camera granted after unmounting is stopped at once', async () => {
+    let grant: (value: unknown) => void = () => {}
+    getUserMedia.mockImplementationOnce(() => new Promise((resolve) => (grant = resolve)))
+    await render()
+    await click(toggle())
+    await click(button('Aç'))
+    await act(() => root.unmount())
+    await act(async () => grant(stream()))
+    expect(track.stop).toHaveBeenCalled()
+    expect(tracker.createHandTracker).not.toHaveBeenCalled()
+    root = createRoot(container) // a fresh root for afterEach to unmount
   })
 })

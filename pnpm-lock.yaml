@@ -12,6 +12,9 @@ overrides:
   '@tailwindcss/typography>postcss-selector-parser': '>=7.1.6'
   '@esbuild-kit/core-utils>esbuild': '>=0.25.0'
 
+patchedDependencies:
+  '@mediapipe/tasks-vision@1.2.2': ecedf0376cebbd3ea4aec08042c3c7abd10c847393c40675505a16a6c657017b
+
 importers:
 
   .:
@@ -97,7 +100,7 @@ importers:
     dependencies:
       '@mediapipe/tasks-vision':
         specifier: 1.2.2
-        version: 1.2.2
+        version: 1.2.2(patch_hash=ecedf0376cebbd3ea4aec08042c3c7abd10c847393c40675505a16a6c657017b)
       '@payloadcms/db-sqlite':
         specifier: 3.90.2
         version: 3.90.2(payload@3.90.2(graphql@16.14.2)(supports-color@8.1.1)(typescript@5.9.3))(supports-color@7.2.0)
@@ -5992,7 +5995,7 @@ snapshots:
   '@libsql/win32-x64-msvc@0.4.7':
     optional: true
 
-  '@mediapipe/tasks-vision@1.2.2': {}
+  '@mediapipe/tasks-vision@1.2.2(patch_hash=ecedf0376cebbd3ea4aec08042c3c7abd10c847393c40675505a16a6c657017b)': {}
 
   '@monaco-editor/loader@1.7.0':
     dependencies:
