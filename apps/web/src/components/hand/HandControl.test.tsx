@@ -10,6 +10,7 @@ const tracker = vi.hoisted(() => ({
 }))
 vi.mock('./tracker', () => ({ createHandTracker: tracker.createHandTracker }))
 
+import { HELIX_TUNING } from '../../lib/helix-tuning'
 import { HAND_TUNING } from '../../lib/hand-tuning'
 import { CONSENT_TEXT, CONSENT_TITLE } from './ConsentNote'
 import { HandControl } from './HandControl'
@@ -35,6 +36,14 @@ let frames: ((now: number) => void)[]
 let videoTime: number
 /** The points the hand's hit test asked about. */
 let hits: [number, number][]
+
+const { minCores, minMemoryGb } = HELIX_TUNING.weakDevice
+
+/** What the browser reports about the device (`deviceReport`), as own properties of navigator. */
+const device = ({ cores, memory }: { cores: number; memory?: number }) => {
+  Object.defineProperty(navigator, 'hardwareConcurrency', { configurable: true, value: cores })
+  Object.defineProperty(navigator, 'deviceMemory', { configurable: true, value: memory })
+}
 
 /** A camera stream with one video track. */
 const stream = () => ({ getTracks: () => [track], getVideoTracks: () => [track] })
@@ -145,6 +154,9 @@ beforeEach(() => {
     },
   })
   Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden })
+  // A capable desktop, whatever machine runs the tests: jsdom reports the host's cores (under the
+  // weak-device line on CI runners) and no memory.
+  device({ cores: minCores * 2, memory: minMemoryGb * 2 })
   HTMLMediaElement.prototype.play = vi.fn(async () => {})
   container = document.createElement('div')
   document.body.append(container)
@@ -152,6 +164,9 @@ beforeEach(() => {
 })
 
 afterEach(async () => {
+  // Back to jsdom's own navigator values.
+  delete (navigator as { hardwareConcurrency?: number }).hardwareConcurrency
+  delete (navigator as { deviceMemory?: number }).deviceMemory
   await act(() => root.unmount())
   container.remove()
   dispatchHand({ kind: 'dismissNotice' })
@@ -200,6 +215,14 @@ describe('the toggle', () => {
     const serverSlot = before.querySelector<HTMLElement>('[data-hand-toggle-slot]')!
     expect(slot()!.className).toBe(serverSlot.className)
     expect(placeholder()!.outerHTML).toBe(serverSlot.firstElementChild!.outerHTML)
+  })
+
+  it('is not offered on a weak device: the slot stays an empty gap', async () => {
+    device({ cores: minCores - 1 })
+    await render()
+    expect(toggle()).toBeNull()
+    expect(slot()).not.toBeNull()
+    expect(slot()!.querySelector('button, [role="status"]')).toBeNull()
   })
 
   it('is not offered without a camera: the slot stays an empty gap', async () => {
