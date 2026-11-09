@@ -12,6 +12,12 @@ Test behaviour where a user or caller meets it, and keep `pnpm test` near a minu
 - **Pure maths** (layouts, easings, curves) is asserted by properties (symmetry, monotonic,
   matches a brute-force sample, clamps) plus a few worked examples. A restated constant fails on
   every deliberate retune.
+- **Device capabilities** are pinned in the shared setup (`apps/web/src/test/device-setup.ts`):
+  every jsdom test starts on a capable device (twice `HELIX_TUNING.weakDevice`), because jsdom
+  reports the host's real core count and CI runners have fewer. A test of a weak device calls
+  `setDevice({ cores, memory })` from `apps/web/src/test/device.ts` (a key left out keeps the
+  pinned value; `memory: undefined` means not reported) and never defines `navigator` properties
+  itself. The setup resets it before each test.
 - **Slow checks** (a `next build`, Docker) run in the smoke spec against the image the gate
   already builds, not in unit tests.
 - **Repo guards** (for example `infra/ci.test.ts`) scan source on purpose: they enforce an ADR or
