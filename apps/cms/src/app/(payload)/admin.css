@@ -5,8 +5,8 @@
  * (in `@layer payload-default`) cuts to one line with an ellipsis and hides at 1024px
  * and below. Long refusals, such as the featured-loop replace refusal and the locked
  * Kullanım refusal, lost their remedy that way. These rules are unlayered, so they beat
- * the layered defaults without `!important`. Every selector stays under
- * `.field-error.tooltip`: other tooltips keep Payload's one-line look.
+ * the layered defaults without `!important`. Every selector targets `.field-error.tooltip`:
+ * other tooltips keep Payload's one-line look.
  */
 
 .field-error.tooltip {
@@ -15,18 +15,45 @@
   white-space: normal;
 
   /*
-   * Grow upward. Payload pins the top edge (`top: -1.25 * base`) and shifts the box up by
-   * the caret size, so a wrapped box would grow down over its field. Pin the bottom edge
-   * at the same spot instead: the top-offset (-1.25) plus one line (0.75 line height and
-   * 2 * 0.2 padding = 1.15) leaves -0.1 * base. The caret hangs off the bottom edge, so
-   * it stays where it is.
+   * Grow upward. Payload pins the top edge at `top: -1.25 * base` and moves the box up by
+   * the caret size, so a wrapped box would grow down over its field. Keep the bottom edge
+   * where a one-line box has it today: Payload's own top plus one line, which is the 15px
+   * line height plus 2 * 4px padding = 23px (fixed px in Payload's CSS, unlike `--base`).
+   * Then lift the box by its own height and the caret. The caret hangs off the bottom
+   * edge, so it stays where it is.
    */
-  top: 0;
-  transform: translateY(calc(-100% + var(--base) * -0.1 - var(--caret-size)));
+  top: calc(var(--base) * -1.25 + 23px);
+  transform: translateY(calc(-100% - var(--caret-size)));
 }
 
 .field-error.tooltip .tooltip-content {
   overflow: visible;
   text-overflow: clip;
   overflow-wrap: anywhere;
+}
+
+/*
+ * Checkbox and radio errors are `position: static` in Payload (they sit in the flow above
+ * the control), with their own transform. Keep that, do not lift them.
+ */
+.checkbox .field-error.tooltip,
+.radio-group .field-error.tooltip {
+  top: auto;
+  transform: translateY(calc(var(--caret-size) * -1));
+}
+
+/*
+ * The file upload (Media `file`, `.file-field`) is the first field in the document and
+ * sits right under the sticky `.doc-controls` bar (z-index 5, above the tooltip's 3), so
+ * an upward-growing error would hide its first lines under it. Put it in the flow instead,
+ * above the dropzone: it pushes the dropzone down and never covers anything. The caret
+ * still points down at the dropzone.
+ */
+.file-field > .field-error.tooltip {
+  position: relative;
+  top: auto;
+  transform: none;
+  width: fit-content;
+  margin-left: auto;
+  margin-bottom: calc(var(--caret-size) + 4px);
 }
