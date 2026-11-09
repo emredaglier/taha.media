@@ -24,6 +24,9 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/web/package.json apps/web/package.json
 COPY apps/cms/package.json apps/cms/package.json
 COPY packages/cms-config/package.json packages/cms-config/package.json
+# pnpm applies the patches (pnpm-workspace.yaml `patchedDependencies`) during install, so they
+# must be here first; MediaPipe's patch removes its usage logging to Google (#56).
+COPY patches patches
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile --store-dir /pnpm/store
 

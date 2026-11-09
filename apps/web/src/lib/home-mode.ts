@@ -45,8 +45,8 @@ export function chooseHomeMode(
   return 'helix'
 }
 
-/** What this browser reports about the device. */
-const deviceReport = (): DeviceReport => ({
+/** What this browser reports about the device. Hand control's toggle reads it too. */
+export const deviceReport = (): DeviceReport => ({
   deviceMemory: (navigator as Navigator & { deviceMemory?: number }).deviceMemory,
   // 0 or missing means not reported.
   cores: navigator.hardwareConcurrency || undefined,

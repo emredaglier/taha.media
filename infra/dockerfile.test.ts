@@ -39,6 +39,22 @@ describe('Dockerfile', () => {
     expect(runtime).not.toMatch(/npm install|corepack|pnpm/)
   })
 
+  it('copies every patched dependency before installing, so the image is built patched', () => {
+    const deps = stage('deps')
+    const patches = /^patchedDependencies:\n((?:  .+\n?)+)/m.exec(read('pnpm-workspace.yaml'))
+    expect(patches, 'pnpm-workspace.yaml lists patchedDependencies').not.toBeNull()
+    // Every patch lives in `patches/`, the folder the deps stage copies.
+    const files = [...patches![1]!.matchAll(/: (\S+)$/gm)].map((match) => match[1]!)
+    expect(files.length).toBeGreaterThan(0)
+    for (const file of files) {
+      expect(file).toMatch(/^patches\//)
+      expect(read(file).length, file).toBeGreaterThan(0)
+    }
+    const copy = deps.indexOf('COPY patches patches')
+    expect(copy).toBeGreaterThan(-1)
+    expect(copy).toBeLessThan(deps.indexOf('pnpm install'))
+  })
+
   it('takes the CDN prefix and deployment id as build arguments (ADR-0005)', () => {
     const build = stage('build')
     expect(build).toMatch(/^ARG ASSET_PREFIX=""$/m)

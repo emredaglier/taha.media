@@ -23,3 +23,6 @@ allowBuilds:
 minimumReleaseAge: 4320
 
 engineStrict: true
+
+patchedDependencies:
+  '@mediapipe/tasks-vision@1.2.2': patches/@mediapipe__tasks-vision@1.2.2.patch
