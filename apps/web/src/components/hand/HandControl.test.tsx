@@ -708,14 +708,20 @@ describe('pinching (#57)', () => {
 
 describe('over an external player (#59)', () => {
   const HINT = 'Oynatıcının içinde fareyi kullan'
+  const { playerShowAfterMs, playerClearAfterMs } = HAND_TUNING.hints
   let under: Element | null
   let iframe: HTMLIFrameElement
   /** The hand shows on `shown` frames, then leaves. */
   let shown: boolean
 
+  /** Camera frames that surely span `ms`, even when the first after turning on moves nothing. */
+  const framesFor = (ms: number) => Math.ceil(ms / (frameSeconds * 1000)) + 2
+
   beforeEach(() => {
+    // A loaded Vimeo or YouTube player, as `ExternalVideo` marks it.
     iframe = document.createElement('iframe')
     iframe.src = 'https://player.vimeo.com/video/1?dnt=1&autoplay=1'
+    iframe.setAttribute('data-external-player', '')
     document.body.append(iframe)
     under = null
     shown = true
@@ -730,38 +736,79 @@ describe('over an external player (#59)', () => {
   afterEach(() => iframe.remove())
 
   /** The hints' polite live region (#58), which says this hint too. */
-  const live = () => container.querySelector('[data-hand-hints][aria-live="polite"]')
+  const live = () => container.querySelector('[data-hand-hints][aria-live="polite"]')!
+  const said = () => live().textContent!.includes(HINT)
   const label = () => container.querySelector<HTMLElement>('[data-hand-ring]')!
+  const labelled = () => label().dataset.player === 'true'
 
-  it('says to use the mouse inside it, politely, with a label by the ring', async () => {
+  it('says to use the mouse inside it once the cursor has held there, with a label by the ring', async () => {
     await render()
     await turnOn()
     await runFrames(2)
-    expect(live()!.textContent).toBe('')
-    expect(label().dataset.player).toBe('false')
+    expect(said()).toBe(false)
+    expect(labelled()).toBe(false)
     under = iframe
     await runFrames(1)
-    expect(live()!.textContent).toBe(HINT)
-    expect(label().dataset.player).toBe('true')
+    expect(labelled()).toBe(false) // a cursor passing over doesn't flash it
+    await runFrames(framesFor(playerShowAfterMs))
+    expect(said()).toBe(true)
+    expect(labelled()).toBe(true)
     expect(label().textContent).toContain(HINT)
   })
 
-  it('clears it when the cursor leaves the player, or the hand leaves the camera', async () => {
+  it('clears it once the cursor has stayed off the player, and at once when the hand leaves', async () => {
     await render()
     await turnOn()
     under = iframe
-    await runFrames(2)
-    expect(live()!.textContent).toBe(HINT)
+    await runFrames(framesFor(playerShowAfterMs))
+    expect(said()).toBe(true)
     under = document.body
-    await runFrames(1)
-    expect(live()!.textContent).toBe('')
-    expect(label().dataset.player).toBe('false')
+    await runFrames(framesFor(playerClearAfterMs))
+    expect(said()).toBe(false)
+    expect(labelled()).toBe(false)
     under = iframe
-    await runFrames(1)
+    await runFrames(framesFor(playerShowAfterMs))
+    expect(labelled()).toBe(true)
     shown = false
     await runFrames(HAND_TUNING.lostAfterFrames)
-    expect(live()!.textContent).toBe('')
-    expect(label().dataset.player).toBe('false')
+    expect(said()).toBe(false)
+    expect(labelled()).toBe(false)
+  })
+
+  it('moving in and out, at its edge or again later, says it only once per player', async () => {
+    await render()
+    await turnOn()
+    let announced = 0
+    let before = said()
+    /** Runs frames one by one with the cursor where `at(i)` says, counting each new announcement. */
+    const frames = async (count: number, at: (i: number) => Element | null) => {
+      for (let i = 0; i < count; i++) {
+        under = at(i)
+        await runFrames(1)
+        if (said() && !before) announced++
+        before = said()
+      }
+    }
+    // Flickering at the edge, then held over it, then away and back, then flickering again.
+    await frames(30, (i) => (i % 2 === 0 ? iframe : document.body))
+    await frames(framesFor(playerShowAfterMs), () => iframe)
+    await frames(framesFor(playerClearAfterMs), () => document.body)
+    await frames(framesFor(playerShowAfterMs), () => iframe)
+    expect(labelled()).toBe(true) // the label still shows each time
+    await frames(30, (i) => (i % 2 === 0 ? document.body : iframe))
+    expect(announced).toBe(1)
+  })
+
+  it('an iframe that is not our external player gets no hint', async () => {
+    const other = document.createElement('iframe')
+    document.body.append(other)
+    await render()
+    await turnOn()
+    under = other
+    await runFrames(framesFor(playerShowAfterMs))
+    expect(said()).toBe(false)
+    expect(labelled()).toBe(false)
+    other.remove()
   })
 
   it('the click-to-load poster before it is an ordinary target: no hint', async () => {
@@ -771,8 +818,8 @@ describe('over an external player (#59)', () => {
     await render()
     await turnOn()
     under = poster
-    await runFrames(2)
-    expect(live()!.textContent).toBe('')
+    await runFrames(framesFor(playerShowAfterMs))
+    expect(said()).toBe(false)
     poster.remove()
   })
 })

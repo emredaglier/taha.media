@@ -57,6 +57,8 @@ export function ExternalVideo({
           title={title}
           allow="autoplay; fullscreen; picture-in-picture"
           allowFullScreen
+          // Hand control can't reach inside it and says so over it (#59, `hand/media.ts`).
+          data-external-player=""
           className="absolute inset-0 size-full border-0"
         />
       ) : (

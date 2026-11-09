@@ -316,7 +316,7 @@ describe('Hand control (#59)', () => {
     expect(label()).toBe('Galeri, 3 / 3: Üçüncü')
   })
 
-  it('takes the whole grab: the page neither scrolls nor glides, up or down alike', async () => {
+  it('takes the whole grab, up or down alike (move and end say so, so the page neither scrolls nor glides)', async () => {
     await open(0)
     const sink = handGrabSink()!
     let took = false

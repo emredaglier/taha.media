@@ -19,6 +19,9 @@ export const HINT_TEXT: Record<HandHint, string> = {
   dark: 'Daha çok ışık',
 }
 
+/** The hint over a loaded external player, which the hand can't reach inside (#59). */
+export const PLAYER_HINT = 'Oynatıcının içinde fareyi kullan'
+
 /** What one camera frame showed. */
 export type HintReading = {
   /** The hand, or null when none was found. */
@@ -28,7 +31,9 @@ export type HintReading = {
 }
 
 /** A hint's state: whether it shows, and since when the readings have argued for a change. */
-type Flag = { on: boolean; since: number | null }
+export type Flag = { on: boolean; since: number | null }
+
+export const initialFlag: Flag = { on: false, since: null }
 
 export type HintsState = Record<HandHint, Flag>
 
@@ -45,8 +50,13 @@ export const initialHints: HintsState = {
  * `clearAfterMs`. Any other reading, between the lines or on the far side, breaks the count, so a
  * reading between the lines never changes a hint (hysteresis).
  */
-const debounce = (flag: Flag, poor: boolean, fine: boolean, now: number): Flag => {
-  const { showAfterMs, clearAfterMs } = HAND_TUNING.hints
+const debounce = (
+  flag: Flag,
+  poor: boolean,
+  fine: boolean,
+  now: number,
+  { showAfterMs, clearAfterMs }: { showAfterMs: number; clearAfterMs: number } = HAND_TUNING.hints,
+): Flag => {
   const toward = flag.on ? fine : poor
   const since = toward ? (flag.since ?? now) : null
   if (since !== null && now - since >= (flag.on ? clearAfterMs : showAfterMs)) {
@@ -84,6 +94,18 @@ export function readHints(
     if (next[hint].on !== state[hint].on) events.push({ kind: 'hint', hint, on: next[hint].on })
   }
   return { state: next, events }
+}
+
+/**
+ * The hint over an external player (#59), debounced as the others: it shows once the cursor has
+ * been `over` one for `playerShowAfterMs`, and clears once it has been off for `playerClearAfterMs`.
+ */
+export const readPlayerHint = (flag: Flag, over: boolean, now: number): Flag => {
+  const { playerShowAfterMs, playerClearAfterMs } = HAND_TUNING.hints
+  return debounce(flag, over, !over, now, {
+    showAfterMs: playerShowAfterMs,
+    clearAfterMs: playerClearAfterMs,
+  })
 }
 
 /**

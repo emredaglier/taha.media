@@ -7,9 +7,12 @@ import { initialGestureState, readGesture, type HandFrame } from '../../lib/hand
 import {
   HINT_TEXT,
   HINTS,
+  initialFlag,
   initialHints,
   meanLuma,
+  PLAYER_HINT,
   readHints,
+  readPlayerHint,
   type HandHint,
 } from '../../lib/hand-hints'
 import {
@@ -33,7 +36,7 @@ import { isMenuOpen } from '../../lib/menu-a11y'
 import { createExplorer, type Explorer } from './explore'
 import { createGrabScroller, handGrabSink } from './grab'
 import { HandCoach } from './HandCoach'
-import { overExternalPlayer, PLAYER_HINT } from './media'
+import { externalPlayerAt } from './media'
 import type { HandTracker } from './tracker'
 import { dispatchHand, handState, setHandRunner, useHandControl } from './store'
 
@@ -51,6 +54,10 @@ const cameraFailure = (error: unknown): 'refused' | 'unavailable' =>
   (error.name === 'NotAllowedError' || error.name === 'SecurityError')
     ? 'refused'
     : 'unavailable'
+
+/** The hint over an external player (#59): whether it shows, and whether it is being said. */
+type PlayerHint = { shown: boolean; said: boolean }
+const PLAYER_OFF: PlayerHint = { shown: false, said: false }
 
 /** One attempt's camera and tracker (see `HandControlState.attempt`). */
 type Attempt = { stream?: MediaStream; tracker?: HandTracker }
@@ -197,8 +204,8 @@ export function HandControl() {
   const coachOpen = useRef(false)
   const help = useRef<HTMLButtonElement>(null)
   const [hints, setHints] = useState<readonly HandHint[]>([])
-  // Whether the cursor is over a loaded external player (#59).
-  const [overPlayer, setOverPlayer] = useState(false)
+  // The hint over a loaded external player (#59): whether it shows, and whether it is said.
+  const [player, setPlayer] = useState(PLAYER_OFF)
 
   useEffect(() => {
     const live = attempts.current
@@ -234,13 +241,34 @@ export function HandControl() {
     const fillRing = (pinched: boolean) => {
       if (ring.current) ring.current.dataset.pinched = String(pinched)
     }
-    /**
-     * Over a loaded external player the hand can't reach inside (#59): a label by the ring, and
-     * the hint said once in the hints' polite live region.
-     */
-    const showPlayerHint = (over: boolean) => {
-      if (ring.current) ring.current.dataset.player = String(over)
-      setOverPlayer(over)
+    // Over a loaded external player the hand can't reach inside (#59): a label by the ring once
+    // the cursor has held there (debounced as the hints are), and the hint said in the hints'
+    // polite live region the first time only, for each player.
+    let playerFlag = initialFlag
+    let lastPlayer: Element | null = null
+    const announced = new WeakSet<Element>()
+    let playerShown = PLAYER_OFF
+    const showPlayer = (next: PlayerHint) => {
+      if (next.shown === playerShown.shown && next.said === playerShown.said) return
+      playerShown = next
+      setPlayer(next)
+    }
+    /** The cursor is over `under` (a player, or null) at `at` (ms). */
+    const followPlayer = (under: Element | null, at: number) => {
+      if (under) lastPlayer = under
+      const was = playerFlag.on
+      playerFlag = readPlayerHint(playerFlag, under !== null, at)
+      if (playerFlag.on === was) return
+      if (!playerFlag.on || !lastPlayer) return showPlayer(PLAYER_OFF)
+      const fresh = !announced.has(lastPlayer)
+      announced.add(lastPlayer)
+      showPlayer({ shown: true, said: fresh })
+    }
+    /** No cursor (tracking lost, or Hand control off): the hint goes at once. */
+    const clearPlayer = () => {
+      playerFlag = initialFlag
+      lastPlayer = null
+      showPlayer(PLAYER_OFF)
     }
     /** Restarts the ring's ping (its animation runs only with motion allowed). */
     const pingRing = () => {
@@ -336,7 +364,7 @@ export function HandControl() {
             case 'lost':
               cursor = null
               showRing(null)
-              showPlayerHint(false)
+              clearPlayer()
               explorer.release()
               break
             case 'move': {
@@ -349,7 +377,7 @@ export function HandControl() {
               }
               showRing(cursor)
               explorer.moveTo(cursor.x, cursor.y)
-              showPlayerHint(overExternalPlayer(hitTest(cursor.x, cursor.y)))
+              followPlayer(externalPlayerAt(hitTest(cursor.x, cursor.y)), at)
               break
             }
             case 'pinch':
@@ -460,7 +488,7 @@ export function HandControl() {
           if (video.current) video.current.srcObject = null
           drawHand(canvas.current, null)
           showRing(null)
-          showPlayerHint(false)
+          clearPlayer()
           explorer.release()
           // A grab under way lets go without gliding: the Helix settles, the page stays.
           endGrab()
@@ -587,8 +615,8 @@ export function HandControl() {
               {HINT_TEXT[hint]}
             </p>
           ))}
-          {/* Seen by the ring's label; said here (#59). */}
-          {overPlayer ? <p className="sr-only">{PLAYER_HINT}</p> : null}
+          {/* Seen by the ring's label; said here, once per player (#59). */}
+          {player.said ? <p className="sr-only">{PLAYER_HINT}</p> : null}
         </div>
       </div>
       {coach !== null && phase === 'on' ? (
@@ -606,7 +634,7 @@ export function HandControl() {
           data-hand-ring=""
           data-lost="true"
           data-pinched="false"
-          data-player="false"
+          data-player={player.shown ? 'true' : 'false'}
           aria-hidden="true"
           className="group pointer-events-none fixed top-0 left-0 z-[70] -mt-3.5 -ml-3.5 size-7 rounded-full border-2 border-text opacity-100 data-[lost=true]:opacity-0 data-[pinched=true]:bg-text motion-safe:transition-opacity motion-safe:duration-300"
         >

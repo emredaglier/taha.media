@@ -29,13 +29,13 @@ export function togglePlayback(video: HTMLVideoElement) {
     .catch(() => {})
 }
 
-/** The hint over an external player (#59). */
-export const PLAYER_HINT = 'Oynatıcının içinde fareyi kullan'
+/** The mark `ExternalVideo` puts on its loaded player's iframe. */
+export const EXTERNAL_PLAYER_ATTR = 'data-external-player'
 
 /**
- * Whether the hand's cursor is over a loaded external player (Vimeo or YouTube, `ExternalVideo`):
- * an iframe, which the hand can't reach inside (browser security). The click-to-load poster
- * before it is an ordinary button.
+ * The loaded external player (Vimeo or YouTube, `ExternalVideo`) under the hand's cursor, if any:
+ * an iframe the hand can't reach inside (browser security). Only ours, by its mark, not any
+ * iframe. The click-to-load poster before it is an ordinary button.
  */
-export const overExternalPlayer = (element: Element | null): boolean =>
-  element?.tagName === 'IFRAME'
+export const externalPlayerAt = (element: Element | null): Element | null =>
+  element?.closest(`[${EXTERNAL_PLAYER_ATTR}]`) ?? null

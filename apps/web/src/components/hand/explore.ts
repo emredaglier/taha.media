@@ -147,12 +147,15 @@ export function createExplorer(
         sameTab = newTab!.href
       }
       if (newTab) window.addEventListener('click', takeOver, { once: true })
+      // Our own video, and whether it was paused before the click reached it.
+      const player = playerAt(element)
+      const wasPaused = player?.paused
       const clicked = mouse(element, 'click', false)
       if (newTab) window.removeEventListener('click', takeOver)
       if (sameTab) navigate(sameTab)
-      // Our own video plays or pauses, unless the page took the click.
-      const player = clicked ? playerAt(element) : null
-      if (player) togglePlayback(player)
+      // Our own video plays or pauses, unless the page took the click, or the page or the
+      // browser already played or paused it on the click (then toggling would undo that).
+      if (player && clicked && player.paused === wasPaused) togglePlayback(player)
     },
 
     /** The cursor is gone (tracking lost, or Hand control stopped): leave whatever it was over. */

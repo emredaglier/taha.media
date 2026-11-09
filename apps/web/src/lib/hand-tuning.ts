@@ -135,5 +135,12 @@ export const HAND_TUNING = {
     clearAfterMs: 1000,
     lumaEveryMs: 250,
     lumaSize: { width: 32, height: 24 },
+    /**
+     * The hint over an external player (#59) follows the cursor faster: it shows once the cursor
+     * has been over the player this long (ms), and clears once it has been off it this long, so a
+     * cursor passing over or shaking at its edge doesn't flash it.
+     */
+    playerShowAfterMs: 200,
+    playerClearAfterMs: 300,
   },
 } as const

@@ -289,6 +289,18 @@ describe('playing our videos with the hand (#59)', () => {
     expect(plays).toHaveLength(1)
   })
 
+  it('leaves it be when the page (or the browser) already played or paused it on the click', async () => {
+    // A player that toggles itself on a click, as some browsers' own controls do.
+    video.addEventListener('click', () => (video.paused ? void video.play() : video.pause()))
+    const hand = explorer()
+    await pinch(hand)
+    expect(paused).toBe(false) // played once, not played and paused back
+    expect(plays).toHaveLength(1)
+    await pinch(hand)
+    expect(paused).toBe(true)
+    expect(plays).toHaveLength(1)
+  })
+
   it('leaves a Preview loop alone (no controls: it plays in view or on hover)', async () => {
     video.controls = false
     await pinch()

@@ -57,6 +57,13 @@ describe('the hand stepper (#59)', () => {
     expect(steps).toEqual([1, 1, 1])
   })
 
+  it('turning back steps back: left one threshold, then right one, is next then previous', () => {
+    const { steps, stepper: s } = stepper()
+    for (const right of moves(-stepWidths * 1.05, 10)) s.move(right)
+    for (const right of moves(stepWidths * 1.05, 10)) s.move(right)
+    expect(steps).toEqual([1, -1])
+  })
+
   it('a new grab starts from nothing: a short move left over from the last one is dropped', () => {
     const { steps, stepper: s } = stepper()
     s.move(-stepWidths * 0.9)

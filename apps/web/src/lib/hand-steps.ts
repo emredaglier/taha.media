@@ -25,5 +25,3 @@ export function createHandStepper(onStep: (step: Step) => void) {
     },
   }
 }
-
-export type HandStepper = ReturnType<typeof createHandStepper>

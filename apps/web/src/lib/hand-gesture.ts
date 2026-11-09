@@ -195,7 +195,8 @@ const seeded = (value: number, now: number): OneEuroState => ({ value, speed: 0,
  *   just before the fingers began to close: closing them doesn't move it.
  * - **Click:** a pinch let go within `click.maxMs`, having moved less than `click.maxTravel`. Any
  *   other pinch becomes a grab once it is too long or too far, and reports how far the cursor moves
- *   up and right (`grab`, screen heights and widths, from the anchor on) until it lets go (`release`). Never dwell.
+ *   up and right (`grab`, screen heights and widths, from the anchor on) until it lets go
+ *   (`release`). Never dwell.
  */
 export function readGesture(
   state: GestureState,
