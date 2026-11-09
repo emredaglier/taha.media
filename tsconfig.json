@@ -4,7 +4,8 @@
     "types": ["node"],
     "allowImportingTsExtensions": true
   },
-  "include": ["infra", "smoke", "vitest.config.ts"],
+  "include": ["infra", "scripts", "smoke", "vitest.config.ts"],
   // Files of the migrate image: they import ./src/*, which only exists after `pnpm deploy`.
-  "exclude": ["infra/migrate"]
+  // scripts/check-shaders is its own project (see its tsconfig.json), checked by `pnpm typecheck`.
+  "exclude": ["infra/migrate", "scripts/check-shaders"]
 }

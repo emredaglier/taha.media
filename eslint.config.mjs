@@ -30,6 +30,7 @@ const eslintConfig = [
       '**/.next/',
       '.claude/worktrees/',
       '.scratch/',
+      '.qa/',
       '**/.output/',
       '**/dist/',
       '**/coverage/',
