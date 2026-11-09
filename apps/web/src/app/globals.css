@@ -35,6 +35,13 @@
  */
 @custom-variant over-hero (html:not([data-home='helix']) body:has([data-home-hero]) &);
 
+/*
+ * `hand-hover:` matches what Hand control's cursor is over, as `hover:` matches the mouse's
+ * (synthetic pointer events don't set `:hover`), and `group-hand-hover:` the group form. The mark
+ * is `HAND_HOVER_ATTR` in `components/hand/explore.ts`: keep the two spellings in step.
+ */
+@custom-variant hand-hover (&[data-hand-hover]);
+
 @layer base {
   html {
     color-scheme: dark;

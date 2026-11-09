@@ -17,7 +17,9 @@ export function WorkCard({ work }: { work: Work }) {
         <Picture image={work.cover} sizes={SIZES} className="h-auto w-full bg-placeholder" />
       )}
       <div className="mt-3 flex items-baseline justify-between gap-4">
-        <h2 className="font-serif text-xl group-hover:underline">{work.title}</h2>
+        <h2 className="font-serif text-xl group-hover:underline group-hand-hover:underline">
+          {work.title}
+        </h2>
         <p className="text-sm text-text-muted">{work.year}</p>
       </div>
       <p className="text-sm text-text-muted">

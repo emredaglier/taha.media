@@ -63,7 +63,9 @@ function FeaturedCard({ work }: { work: FeaturedWork }) {
         <div className="relative aspect-video overflow-hidden bg-placeholder">
           <LoopVideo video={work.previewLoop} sizes={SIZES} hoverToPlay fill />
         </div>
-        <h3 className="mt-3 font-serif text-xl group-hover:underline">{work.title}</h3>
+        <h3 className="mt-3 font-serif text-xl group-hover:underline group-hand-hover:underline">
+          {work.title}
+        </h3>
         <div className="mt-1 flex justify-between gap-4 text-sm">
           <p>{disciplineLine(work)}</p>
           {work.client ? <p className="text-text-muted">{work.client}</p> : null}
