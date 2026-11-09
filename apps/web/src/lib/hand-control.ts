@@ -21,6 +21,8 @@ export type HandNotice =
   | 'loadFailed'
   | 'trackingFailed'
   | 'cameraEnded'
+  | 'noHand'
+  | 'notSmooth'
 
 export type HandControlState = {
   phase: HandPhase
@@ -38,6 +40,11 @@ export type HandControlEvent =
   | { kind: 'toggle' }
   /** Aç in the consent note. */
   | { kind: 'accept' }
+  /**
+   * After a reload, this tab had Hand control on and the browser says the camera is granted
+   * (#58): it comes back on without the consent note, given in this tab, and without a prompt.
+   */
+  | { kind: 'resume' }
   /** Vazgeç or Esc in the consent note. */
   | { kind: 'decline' }
   | { kind: 'cameraGranted'; attempt: number }
@@ -48,6 +55,10 @@ export type HandControlEvent =
   | { kind: 'trackingFailed'; attempt: number }
   /** A camera track ended on its own: the camera was unplugged or the permission revoked. */
   | { kind: 'cameraEnded'; attempt: number }
+  /** No hand in view for `HAND_TUNING.lifetime.noHandMs` (#58). */
+  | { kind: 'noHand'; attempt: number }
+  /** The page stayed under `HAND_TUNING.lifetime.minFps` for `slowMs` (#58). */
+  | { kind: 'notSmooth'; attempt: number }
   /** The × on the preview. */
   | { kind: 'close' }
   /** The tab was hidden. */
@@ -68,6 +79,10 @@ export type HandControlEffect =
   | { kind: 'release'; attempt: number }
   /** Stop every camera track, close the tracker, take the cursor away. */
   | { kind: 'stop' }
+  /** Mark this tab as having Hand control on (`sessionStorage`), so a reload brings it back. */
+  | { kind: 'remember' }
+  /** Clear that mark: Hand control was turned off, so a reload leaves it off. */
+  | { kind: 'forget' }
 
 export const initialHandControl: HandControlState = { phase: 'off', attempt: 0, notice: null }
 
@@ -79,10 +94,14 @@ type Step = { state: HandControlState; effects: HandControlEffect[] }
 
 const unchanged = (state: HandControlState): Step => ({ state, effects: [] })
 
-/** Every way to off goes through here, so every one stops the camera. */
-const turnOff = (state: HandControlState, notice: HandNotice | null): Step => ({
+/**
+ * Every way to off goes through here, so every one stops the camera, and every one forgets that
+ * the tab had it on, except a hidden tab and unmounting (`keep`): a page hides as it unloads, so a
+ * reload passes through there, and the controller forgets a hidden tab's mark once it is shown.
+ */
+const turnOff = (state: HandControlState, notice: HandNotice | null, keep = false): Step => ({
   state: { ...state, phase: 'off', notice },
-  effects: [{ kind: 'stop' }],
+  effects: keep ? [{ kind: 'stop' }] : [{ kind: 'stop' }, { kind: 'forget' }],
 })
 
 /** A camera or tracker answer for an attempt that is not the one waiting for it. */
@@ -90,9 +109,11 @@ const late = (state: HandControlState, attempt: number, waiting: HandPhase): boo
   state.phase !== waiting || state.attempt !== attempt
 
 /**
- * Hand control's lifecycle (#56), pure: the controller runs the effects. Only Aç asks for the
- * camera; the toggle, the ×, a hidden tab and unmounting turn it off; every way to off stops the
- * camera, and a late answer from the camera or the tracker is released.
+ * Hand control's lifecycle (#56, #58), pure: the controller runs the effects. Only Aç asks for the
+ * camera, or a reload in a tab that had it on once the browser says the camera is granted
+ * (`resume`); the toggle, the ×, a hidden tab, unmounting, no hand for a while and a page that
+ * can't stay smooth turn it off; every way to off stops the camera, and a late answer from the
+ * camera or the tracker is released. The tab remembers it is on from the moment the camera is.
  */
 export function handControl(state: HandControlState, event: HandControlEvent): Step {
   const running = isRunning(state)
@@ -109,6 +130,14 @@ export function handControl(state: HandControlState, event: HandControlEvent): S
         effects: [{ kind: 'requestCamera', attempt }],
       }
     }
+    case 'resume': {
+      if (state.phase !== 'off') return unchanged(state)
+      const attempt = state.attempt + 1
+      return {
+        state: { phase: 'asking', attempt, notice: null },
+        effects: [{ kind: 'requestCamera', attempt }],
+      }
+    }
     case 'decline':
       return state.phase === 'consenting' ? turnOff(state, 'cancelled') : unchanged(state)
     case 'cameraGranted':
@@ -117,7 +146,7 @@ export function handControl(state: HandControlState, event: HandControlEvent): S
       }
       return {
         state: { ...state, phase: 'loading', notice: 'loading' },
-        effects: [{ kind: 'loadTracker', attempt: event.attempt }],
+        effects: [{ kind: 'loadTracker', attempt: event.attempt }, { kind: 'remember' }],
       }
     case 'cameraFailed':
       return late(state, event.attempt, 'asking') ? unchanged(state) : turnOff(state, event.reason)
@@ -132,7 +161,9 @@ export function handControl(state: HandControlState, event: HandControlEvent): S
     case 'trackerFailed':
       return late(state, event.attempt, 'loading') ? unchanged(state) : turnOff(state, 'loadFailed')
     case 'trackingFailed':
-      return late(state, event.attempt, 'on') ? unchanged(state) : turnOff(state, 'trackingFailed')
+    case 'noHand':
+    case 'notSmooth':
+      return late(state, event.attempt, 'on') ? unchanged(state) : turnOff(state, event.kind)
     case 'cameraEnded':
       return running && state.attempt === event.attempt
         ? turnOff(state, 'cameraEnded')
@@ -140,9 +171,9 @@ export function handControl(state: HandControlState, event: HandControlEvent): S
     case 'close':
       return running ? turnOff(state, 'stopped') : unchanged(state)
     case 'hidden':
-      return running ? turnOff(state, 'hidden') : unchanged(state)
+      return running ? turnOff(state, 'hidden', true) : unchanged(state)
     case 'unmount':
-      return turnOff(state, null)
+      return turnOff(state, null, true)
     case 'dismissNotice':
       return state.notice === null ? unchanged(state) : unchanged({ ...state, notice: null })
   }
@@ -160,6 +191,8 @@ const NOTICES: Record<HandNotice, string> = {
   loadFailed: 'El takibi yüklenemedi',
   trackingFailed: 'El takibi durdu',
   cameraEnded: 'Kamera kapandı',
+  noHand: 'Elin görünmedi, elinle gezme kapandı',
+  notSmooth: 'Bu cihazda akıcı çalışmıyor',
 }
 
 /** The status line, in Turkish, for a polite live region; empty when there is nothing to say. */

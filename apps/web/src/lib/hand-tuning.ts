@@ -79,4 +79,44 @@ export const HAND_TUNING = {
     glideStopPxPerSecond: 60,
     glideFromPxPerSecond: 250,
   },
+  /**
+   * How long Hand control lasts (#58). It turns off after `noHandMs` with no hand in view (not
+   * counted while the coach is open), and when the page can't stay smooth: its frame rate, counted
+   * over windows of `sampleMs`, stays under `minFps` for `slowMs` in a row. A window at or above
+   * it starts the count afresh, so a short dip never turns it off. The first `graceMs` after it
+   * turns on aren't measured (the tracker's first frames stall while it warms up), and a gap of
+   * `pauseMs` or more between two page frames is a pause, not a slow page (the browser stopped
+   * drawing: a system dialog, an occluded window); the grace starts again after it.
+   */
+  lifetime: {
+    noHandMs: 30_000,
+    minFps: 40,
+    slowMs: 3000,
+    sampleMs: 500,
+    graceMs: 2000,
+    pauseMs: 1000,
+  },
+  /**
+   * The hints (#58), each with hysteresis and a debounce so it never flickers: it shows once its
+   * condition has held for `showAfterMs`, and clears once the opposite has held for `clearAfterMs`.
+   *
+   * - "Biraz yaklaş": the palm (wrist to index knuckle) is under `farPalm` of the camera frame's
+   *   height, and clears above `nearPalm`.
+   * - "Daha çok ışık": the tracker's confidence in the hand is under `lowScore` (clears above
+   *   `goodScore`), or the camera picture's mean luma (0–255) is under `darkLuma` (clears above
+   *   `brightLuma`). The luma is read every `lumaEveryMs` from the picture shrunk to `lumaSize` px,
+   *   never from a full frame, and only that one number is kept.
+   */
+  hints: {
+    farPalm: 0.1,
+    nearPalm: 0.12,
+    lowScore: 0.7,
+    goodScore: 0.8,
+    darkLuma: 40,
+    brightLuma: 55,
+    showAfterMs: 1000,
+    clearAfterMs: 1000,
+    lumaEveryMs: 250,
+    lumaSize: { width: 32, height: 24 },
+  },
 } as const

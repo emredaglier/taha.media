@@ -1,12 +1,30 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
-import type { HandControlEffect } from '../../lib/hand-control'
+import { isRunning, type HandControlEffect } from '../../lib/hand-control'
 import { initialGestureState, readGesture, type HandFrame } from '../../lib/hand-gesture'
+import { HINT_TEXT, initialHints, meanLuma, readHints, type HandHint } from '../../lib/hand-hints'
+import {
+  startFrameRateWatch,
+  startHandWatch,
+  watchFrameRate,
+  watchHand,
+  type FrameRateWatch,
+  type HandWatch,
+} from '../../lib/hand-lifetime'
+import {
+  coachSeen,
+  forgetOn,
+  markCoachSeen,
+  mayResume,
+  rememberOn,
+  storageOf,
+} from '../../lib/hand-session'
 import { HAND_TUNING } from '../../lib/hand-tuning'
 import { createExplorer, type Explorer } from './explore'
 import { createGrabScroller, handGrabSink } from './grab'
+import { HandCoach } from './HandCoach'
 import type { HandTracker } from './tracker'
 import { dispatchHand, handState, setHandRunner, useHandControl } from './store'
 
@@ -62,6 +80,35 @@ function everyVideoFrame(video: VideoWithFrames, onFrame: (now: number) => void)
   }
 }
 
+/**
+ * Reads the camera picture's mean luma (0–255) cheaply: the video drawn into a tiny offscreen
+ * canvas (`HAND_TUNING.hints.lumaSize`), averaged, and only that number kept. Returns null where
+ * the browser gives no 2D canvas, and from then on doesn't try again.
+ */
+function createLumaReader() {
+  let context: CanvasRenderingContext2D | null | undefined
+  return (video: HTMLVideoElement): number | null => {
+    const { width, height } = HAND_TUNING.hints.lumaSize
+    if (context === undefined) {
+      const canvas = document.createElement('canvas')
+      canvas.width = width
+      canvas.height = height
+      try {
+        context = canvas.getContext('2d', { willReadFrequently: true })
+      } catch {
+        context = null
+      }
+    }
+    if (!context) return null
+    try {
+      context.drawImage(video, 0, 0, width, height)
+      return meanLuma(context.getImageData(0, 0, width, height).data)
+    } catch {
+      return null
+    }
+  }
+}
+
 /** Draws the hand's landmarks as dots on the preview (camera coordinates; CSS mirrors it). */
 function drawHand(canvas: HTMLCanvasElement | null, hand: HandFrame | null) {
   const context = canvas?.getContext('2d')
@@ -85,6 +132,12 @@ function drawHand(canvas: HTMLCanvasElement | null, hand: HandFrame | null) {
  * grab goes to whoever claimed it (the Helix on Home, `grab.ts`) or else scrolls the page, which
  * glides on briefly after letting go. The ring is filled while pinched and pings on a click. A
  * hidden tab, the ×, the toggle or unmounting stops every camera track and closes the task.
+ *
+ * Its lifetime (#58): it turns off after a while with no hand in view (not while the coach is
+ * open) and when the page can't stay smooth (`lib/hand-lifetime`). The tab remembers it is on in
+ * `sessionStorage`, so a reload brings it back while the browser says the camera is granted
+ * (`mayResume`, which never prompts). The coach shows once per browser on first use, and the "?"
+ * on the preview replays it. The hints ("Biraz yaklaş", "Daha çok ışık") show in the preview.
  */
 export function HandControl() {
   const { phase } = useHandControl()
@@ -94,6 +147,10 @@ export function HandControl() {
   const attempts = useRef(new Map<number, Attempt>())
   // The camera's own picture size: the preview and its dots follow it (4:3, 16:9, ...).
   const [picture, setPicture] = useState<{ width: number; height: number }>(HAND_TUNING.camera)
+  // The coach's step while it is open, else null; the tracking loop reads whether it is open.
+  const [coach, setCoach] = useState<number | null>(null)
+  const coachOpen = useRef(false)
+  const [hints, setHints] = useState<readonly HandHint[]>([])
 
   useEffect(() => {
     const live = attempts.current
@@ -162,12 +219,35 @@ export function HandControl() {
       let gesture = initialGestureState
       let last = 0
       let failures = 0
-      stopTracking = everyVideoFrame(element, (now) => {
+      // The lifetime's watches start with the first frame of each kind they see.
+      let handWatch: HandWatch | null = null
+      let frameRate: FrameRateWatch | null = null
+      let hintState = initialHints
+      let luma: number | null = null
+      let lumaAt = -Infinity
+      const readLuma = createLumaReader()
+
+      // The page's own frame rate, on its animation frames, while on.
+      let pageFrame = 0
+      let stopped = false
+      const onPageFrame = (now: number) => {
+        if (stopped) return
+        const step = frameRate ? watchFrameRate(frameRate, now) : null
+        frameRate = step?.state ?? startFrameRateWatch(now)
+        if (step?.event) return dispatchHand({ kind: step.event.reason, attempt })
+        pageFrame = requestAnimationFrame(onPageFrame)
+      }
+      pageFrame = requestAnimationFrame(onPageFrame)
+
+      const stopCamera = everyVideoFrame(element, (now) => {
         const at = Math.max(now, last + 1) // the tracker needs rising timestamps
         last = at
         let hand: HandFrame | null
+        let score: number | null
         try {
-          hand = tracker.detect(element, at)
+          const sighting = tracker.detect(element, at)
+          hand = sighting?.hand ?? null
+          score = sighting?.score ?? null
           failures = 0
         } catch (error) {
           // Logged once per run of failures; a tracker that keeps failing turns Hand control off.
@@ -176,6 +256,15 @@ export function HandControl() {
             dispatchHand({ kind: 'trackingFailed', attempt })
           }
           return
+        }
+        if (at - lumaAt >= HAND_TUNING.hints.lumaEveryMs) {
+          luma = readLuma(element) ?? luma
+          lumaAt = at
+        }
+        const hinted = readHints(hintState, { hand, score, luma }, at)
+        hintState = hinted.state
+        if (hinted.events.length > 0) {
+          setHints((['far', 'dark'] as const).filter((hint) => hintState[hint].on))
         }
         drawHand(canvas.current, hand)
         const step = readGesture(gesture, hand, at)
@@ -217,7 +306,17 @@ export function HandControl() {
               break
           }
         }
+        // Last, since turning off stops this loop. Reading the coach counts as a hand in view.
+        const seen = hand !== null || coachOpen.current
+        const watched = watchHand(handWatch ?? startHandWatch(at), seen, at)
+        handWatch = watched.state
+        if (watched.event) dispatchHand({ kind: watched.event.reason, attempt })
       })
+      stopTracking = () => {
+        stopped = true
+        stopCamera()
+        cancelAnimationFrame(pageFrame)
+      }
     }
 
     const run = (effect: HandControlEffect) => {
@@ -275,6 +374,12 @@ export function HandControl() {
         }
         case 'track':
           track(effect.attempt)
+          // The coach, once per browser, the first time Hand control is on (where local storage
+          // is refused, each time it turns on).
+          if (!coachSeen(storageOf('localStorage'))) {
+            markCoachSeen(storageOf('localStorage'))
+            setCoach(0)
+          }
           return
         case 'release':
           release(effect.attempt)
@@ -290,6 +395,14 @@ export function HandControl() {
           // A grab under way lets go without gliding: the Helix settles, the page stays.
           endGrab()
           cursor = null
+          setHints([])
+          setCoach(null)
+          return
+        case 'remember':
+          rememberOn(storageOf('sessionStorage'))
+          return
+        case 'forget':
+          forgetOn(storageOf('sessionStorage'))
           return
       }
     }
@@ -297,8 +410,18 @@ export function HandControl() {
     const undo = setHandRunner(run)
     const onVisibility = () => {
       if (document.hidden) dispatchHand({ kind: 'hidden' })
+      // A hidden tab turned it off but kept the tab's mark (a page also hides as it unloads, on
+      // the way to a reload); shown again, the tab forgets it, so a later reload stays off.
+      else if (!isRunning(handState())) forgetOn(storageOf('sessionStorage'))
     }
     document.addEventListener('visibilitychange', onVisibility)
+
+    // After a reload in a tab that had it on: back on, only if the browser says the camera is
+    // granted (so asking opens no prompt), and only in a tab that is shown.
+    void mayResume(storageOf('sessionStorage'), navigator.permissions).then((resume) => {
+      if (resume && !disposed && !document.hidden) dispatchHand({ kind: 'resume' })
+    })
+
     return () => {
       disposed = true
       document.removeEventListener('visibilitychange', onVisibility)
@@ -306,6 +429,11 @@ export function HandControl() {
       undo()
     }
   }, [])
+
+  useEffect(() => {
+    coachOpen.current = coach !== null
+  }, [coach])
+  const closeCoach = useCallback(() => setCoach(null), [])
 
   // The preview shows the camera from the moment it is on: it is the camera-on indicator.
   const cameraOn = phase === 'loading' || phase === 'on'
@@ -347,13 +475,32 @@ export function HandControl() {
         </div>
         <button
           type="button"
+          aria-label="Nasıl kullanılır"
+          className="pointer-events-auto absolute top-1 right-9 size-7 cursor-pointer bg-background-raised text-base leading-none"
+          onClick={() => setCoach(0)}
+        >
+          ?
+        </button>
+        <button
+          type="button"
           aria-label="Elinle gezmeyi kapat"
           className="pointer-events-auto absolute top-1 right-1 size-7 cursor-pointer bg-background-raised text-base leading-none"
           onClick={() => dispatchHand({ kind: 'close' })}
         >
           ×
         </button>
+        {/* The hints, announced politely as they come; each is debounced, so none flickers. */}
+        <div role="status" aria-live="polite" data-hand-hints="" className="px-2 text-xs">
+          {hints.map((hint) => (
+            <p key={hint} className="py-1">
+              {HINT_TEXT[hint]}
+            </p>
+          ))}
+        </div>
       </div>
+      {coach !== null && phase === 'on' ? (
+        <HandCoach step={coach} onStep={setCoach} onClose={closeCoach} />
+      ) : null}
       {phase === 'on' ? (
         <div
           ref={ring}
