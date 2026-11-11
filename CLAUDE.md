@@ -2,6 +2,8 @@
 
 Portfolio of Taha (video editor, motion designer, graphic designer). Terms: `GLOSSARY.md`. Decisions: `docs/adr/` (backend 0001–0099, frontend 0100+). Code and test conventions: `CODING_STANDARDS.md`.
 
+Ponytail (the smallest change that works) is on for this repo at `full`, set in `.claude/settings.json` (ADR-0014). Validation, error handling, security and accessibility are never cut.
+
 Never wipe the production database or R2 objects without confirming with the owner right before (ADR-0011).
 
 ## Memory-heavy commands

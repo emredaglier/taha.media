@@ -1,0 +1,18 @@
+{
+  "extraKnownMarketplaces": {
+    "ponytail": {
+      "source": {
+        "source": "github",
+        "repo": "DietrichGebert/ponytail",
+        "ref": "v5.3.3"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "ponytail@ponytail": true
+  },
+  "env": {
+    "PONYTAIL_DEFAULT_MODE": "full",
+    "PONYTAIL_SUBAGENT_MATCHER": "^(?!(explore|plan|researcher|reviewer|architect|mechanical|claude-code-guide|web-fetch|statusline-setup|impeccable:impeccable-finish-reviewer)$)"
+  }
+}
