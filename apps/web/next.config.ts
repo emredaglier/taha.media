@@ -24,6 +24,8 @@ const nextConfig: NextConfig = {
   // Workspace packages ship TypeScript source; list each one web imports.
   transpilePackages: ['@taha/cms-config'],
   poweredByHeader: false,
+  // `next dev` would write AGENTS.md and CLAUDE.md into apps/web for coding agents (agentRules).
+  agentRules: false,
   // Docker image only: self-contained server output, traced from the monorepo root.
   ...(process.env.NEXT_STANDALONE === '1'
     ? {

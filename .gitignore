@@ -24,6 +24,10 @@ scripts/check-shaders/.output/
 # Local CMS database
 apps/cms/data/
 
+# Written by `next dev` (Next's agentRules), not project files
+apps/web/AGENTS.md
+apps/web/CLAUDE.md
+
 # QA kit folder: seeded database and Media (scripts/qa)
 .qa/
 
