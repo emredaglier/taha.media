@@ -12,6 +12,11 @@
 # registers --ephemeral, runs one job and exits, then the next turn starts. So there is never more
 # than one runner, and never two builds at once (CLAUDE.md: parallel Next builds crash this Mac).
 #
+# The container empties the work folder and TMPDIR before it registers (entrypoint.sh); this side
+# never deletes in them (#87). Docker Desktop's VM caches what it has seen of the shared folder: a
+# folder deleted from the Mac could still look present to the next container, whose job then
+# failed in Set up job with "Could not find file '.../_work/_PipelineMapping/<owner>'".
+#
 # The work directory is mounted at the SAME absolute path inside and outside the container, and
 # TMPDIR points into it. Job steps talk to the host's Docker daemon through its socket, so every
 # `docker run -v <path>` (smoke/run.ts, Compose) is resolved by the daemon on the host side: only a
@@ -36,15 +41,11 @@ die() { echo "runner.sh: $*" >&2; exit 1; }
 cmd="${1:-}"
 
 loop() {
-  mkdir -p "$home/_work" "$home/tmp"
+  mkdir -p "$home"
   trap 'docker rm -f "$container" >/dev/null 2>&1 || true; exit 0' INT TERM
   while true; do
     token="$(gh api --method POST "repos/$repo/actions/runners/registration-token" --jq .token)" \
       || { echo "runner.sh: could not fetch a registration token, retrying in 60 s" >&2; sleep 60; continue; }
-    # Between jobs the work directory is emptied, except the tool cache. The files are owned by
-    # the container's user; on Docker Desktop that is the Mac user as well.
-    find "$home/_work" -mindepth 1 -maxdepth 1 ! -name _tool -exec rm -rf {} + 2>/dev/null || true
-    rm -rf "$home/tmp" && mkdir -p "$home/tmp"
     docker rm -f "$container" >/dev/null 2>&1 || true
     # REG_TOKEN is passed by name, so it is not on the command line.
     REG_TOKEN="$token" docker run --rm --name "$container" --network host \
