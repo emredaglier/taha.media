@@ -13,6 +13,6 @@
   },
   "env": {
     "PONYTAIL_DEFAULT_MODE": "full",
-    "PONYTAIL_SUBAGENT_MATCHER": "^(?!(explore|plan|researcher|reviewer|architect|mechanical|claude-code-guide|web-fetch|statusline-setup)$)"
+    "PONYTAIL_SUBAGENT_MATCHER": "^(?!(explore|plan|researcher|reviewer|architect|mechanical|claude-code-guide|web-fetch|statusline-setup|impeccable:impeccable-finish-reviewer)$)"
   }
 }
