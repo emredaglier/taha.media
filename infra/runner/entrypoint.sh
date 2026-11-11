@@ -7,18 +7,28 @@
 # /var/run/docker.sock) exist for infra/runner/runner.test.ts.
 set -euo pipefail
 
+die() { echo "entrypoint.sh: $*" >&2; exit 1; }
+
 : "${REG_TOKEN:?}" "${REPO_URL:?}" "${RUNNER_NAME:?}" "${RUNNER_LABELS:?}" "${RUNNER_WORKDIR:?}" "${TMPDIR:?}"
 runner_dir="${RUNNER_DIR:-/opt/runner}"
 sock="${DOCKER_SOCKET:-/var/run/docker.sock}"
 
-# Every job starts from an empty work folder and TMPDIR; only the tool cache (_tool) stays. They are
-# emptied here, inside Docker Desktop's VM, never from the Mac (#87): the VM caches what it has seen
-# of the shared folder, a folder the Mac deletes can still look present in here, and the job then
-# fails in Set up job with "Could not find file '.../_work/_PipelineMapping/<owner>'". sudo: job
-# steps' own containers (smoke, Compose) can leave root-owned files.
+# The cleanup below deletes as root: RUNNER_WORKDIR must not be /, and TMPDIR must sit inside it.
+[[ "$RUNNER_WORKDIR" =~ ^/*$ ]] && die "RUNNER_WORKDIR must not be / ($RUNNER_WORKDIR)"
+case "$TMPDIR" in
+  */..|*/../*) die "TMPDIR must not contain .. ($TMPDIR)" ;;
+  "${RUNNER_WORKDIR%/}"/?*) ;;
+  *) die "TMPDIR must be inside RUNNER_WORKDIR ($TMPDIR, $RUNNER_WORKDIR)" ;;
+esac
+
+# Why this runs here and not on the Mac: infra/README.md, "A clean work folder per job" (#87).
+# sudo: job containers can leave root-owned files. A file that won't go (a cancelled job's
+# containers still writing) is reported, not fatal, or the runner would never register again.
 mkdir -p "$RUNNER_WORKDIR/_work" "$TMPDIR"
-sudo find "$RUNNER_WORKDIR/_work" -mindepth 1 -maxdepth 1 ! -name _tool -exec rm -rf {} +
-sudo find "$TMPDIR" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+sudo find "$RUNNER_WORKDIR/_work" -mindepth 1 -maxdepth 1 ! -name _tool -exec rm -rf {} + \
+  || echo "entrypoint.sh: could not fully empty $RUNNER_WORKDIR/_work, continuing" >&2
+sudo find "$TMPDIR" -mindepth 1 -maxdepth 1 -exec rm -rf {} + \
+  || echo "entrypoint.sh: could not fully empty $TMPDIR, continuing" >&2
 
 # The host's Docker socket belongs to a group id the image does not know. Give `runner` that
 # group, or job steps could not reach the daemon.

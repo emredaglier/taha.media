@@ -12,10 +12,7 @@
 # registers --ephemeral, runs one job and exits, then the next turn starts. So there is never more
 # than one runner, and never two builds at once (CLAUDE.md: parallel Next builds crash this Mac).
 #
-# The container empties the work folder and TMPDIR before it registers (entrypoint.sh); this side
-# never deletes in them (#87). Docker Desktop's VM caches what it has seen of the shared folder: a
-# folder deleted from the Mac could still look present to the next container, whose job then
-# failed in Set up job with "Could not find file '.../_work/_PipelineMapping/<owner>'".
+# This side never deletes in _work or tmp: infra/README.md, "A clean work folder per job" (#87).
 #
 # The work directory is mounted at the SAME absolute path inside and outside the container, and
 # TMPDIR points into it. Job steps talk to the host's Docker daemon through its socket, so every
