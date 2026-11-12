@@ -1,4 +1,5 @@
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -173,7 +174,15 @@ export function buildSiteConfig(options: SiteConfigOptions): Promise<SanitizedCo
         localVideosDir(options.databasePath),
       ),
     ],
-    upload: { limits: { fileSize: UPLOAD_FILE_LIMIT }, requestSizeLimit: UPLOAD_FILE_LIMIT + MB },
+    upload: {
+      limits: { fileSize: UPLOAD_FILE_LIMIT },
+      requestSizeLimit: UPLOAD_FILE_LIMIT + MB,
+      // Spool uploads to disk, not the cms's 512 MB (#107), in the OS temp folder (/tmp in the
+      // image, writable by its uid 10001) rather than the library's default `tmp` beside the app
+      // code. Payload deletes the file after the operation, on success and on a refusal.
+      useTempFiles: true,
+      tempFileDir: os.tmpdir(),
+    },
     cors: options.origins ?? [],
     csrf: options.origins ?? [],
     email: emailAdapter,

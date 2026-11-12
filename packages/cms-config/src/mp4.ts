@@ -1,3 +1,5 @@
+import fs from 'node:fs/promises'
+
 /** What the MP4 header says about a video (ADR-0008). Read in JavaScript, no ffmpeg. */
 export type Mp4Info = {
   /** Display size in pixels: a track rotated by 90 or 270 degrees has its sides swapped. */
@@ -103,5 +105,42 @@ export function readMp4(data: Buffer): Mp4Info | undefined {
     durationSeconds,
     codec: video.codec,
     hasAudio,
+  }
+}
+
+/**
+ * `readMp4` for a file on disk (an upload Payload spooled to a temp file): reads only the box
+ * headers, `ftyp` and `moov`, never the media data, wherever in the file `moov` sits.
+ */
+export async function readMp4File(filePath: string): Promise<Mp4Info | undefined> {
+  const file = await fs.open(filePath, 'r')
+  try {
+    const end = (await file.stat()).size
+    const read = async (position: number, length: number): Promise<Buffer> => {
+      const buffer = Buffer.alloc(length)
+      const { bytesRead } = await file.read(buffer, 0, length, position)
+      return buffer.subarray(0, bytesRead)
+    }
+    const kept: Buffer[] = []
+    let offset = 0
+    while (offset + 8 <= end) {
+      const header = await read(offset, 16)
+      let size = header.readUInt32BE(0)
+      const type = header.toString('latin1', 4, 8)
+      if (size === 1) {
+        if (header.length < 16) break
+        size = Number(header.readBigUInt64BE(8))
+      } else if (size === 0) {
+        size = end - offset
+      }
+      if (size < 8 || offset + size > end) break
+      if (offset === 0 && type !== 'ftyp') return undefined
+      if (type === 'ftyp' || type === 'moov') kept.push(await read(offset, size))
+      if (type === 'moov') break
+      offset += size
+    }
+    return readMp4(Buffer.concat(kept))
+  } finally {
+    await file.close()
   }
 }
