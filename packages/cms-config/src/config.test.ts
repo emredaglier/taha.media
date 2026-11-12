@@ -1,6 +1,10 @@
+import os from 'node:os'
+import path from 'node:path'
+
 import { describe, expect, it } from 'vitest'
 
-import { siteConfigOptionsFromEnv } from './config'
+import { buildSiteConfig, siteConfigOptionsFromEnv } from './config'
+import { VIDEO_LIMITS } from './video-limits'
 
 const base = { DATABASE_PATH: 'x.db', PAYLOAD_SECRET: 's' }
 
@@ -49,5 +53,19 @@ describe('CMS_ORIGINS', () => {
       expect(siteConfigOptionsFromEnv('cms', env).origins).toEqual([])
     }
     expect(siteConfigOptionsFromEnv('web', { ...base, NODE_ENV: 'production' }).origins).toEqual([])
+  })
+})
+
+describe('upload limits', () => {
+  it('let the largest video cap through Payload multipart, so our Turkish refusal speaks first', async () => {
+    const config = await buildSiteConfig(
+      siteConfigOptionsFromEnv('cms', {
+        ...base,
+        DATABASE_PATH: path.join(os.tmpdir(), 'taha-config-test', 'site.db'),
+      }),
+    )
+    const largest = Math.max(...Object.values(VIDEO_LIMITS).map((limits) => limits.maxBytes))
+    expect(config.upload?.limits?.fileSize).toBeGreaterThanOrEqual(largest)
+    expect(config.upload?.requestSizeLimit).toBeGreaterThan(config.upload?.limits?.fileSize ?? 0)
   })
 })
