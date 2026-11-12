@@ -2,9 +2,6 @@ import { ValidationError, type Field } from 'payload'
 
 import { EXTERNAL_PROVIDERS, parseExternalVideoUrl } from './external-video'
 
-/** The Site's full Showreel link uses the same Vimeo/YouTube parser as a Work's main media. */
-export const parseShowreelUrl = parseExternalVideoUrl
-
 export const SHOWREEL_LINK_REFUSAL = 'Tam showreel bağlantısı bir Vimeo veya YouTube adresi olmalı.'
 
 /**
@@ -24,7 +21,7 @@ export const showreelLinkField = (): Field => ({
         beforeValidate: [
           ({ global, req, siblingData, value }) => {
             const url = typeof value === 'string' ? value.trim() : ''
-            const parsed = url ? parseShowreelUrl(url) : null
+            const parsed = url ? parseExternalVideoUrl(url) : null
             if (url && !parsed) {
               throw new ValidationError(
                 {
