@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto'
 import path from 'node:path'
 
 import { ValidationError, type CollectionConfig, type ImageUploadFormatOptions } from 'payload'
+import sharp from 'sharp'
 
 import { editor } from '../access'
 import { guardMediaDelete } from '../media-delete'
@@ -12,6 +13,12 @@ const MB = 1024 * 1024
  * had before. Checked before sharp decodes the file: a 45 MB PNG ran the 512 MB cms out of memory.
  */
 export const IMAGE_MAX_BYTES = 20 * MB
+
+/**
+ * Bytes don't bound pixels: a flat 20 MB PNG can be 20000 x 20000, which sharp decodes to about
+ * 1 GB. 50 MP covers any camera photo (the largest size is 2560 wide). Read from the header only.
+ */
+export const IMAGE_MAX_PIXELS = 50_000_000
 
 // Every upload and every generated size is re-encoded to WebP. `formatOptions` is not inherited
 // from `upload` by the sizes, so each one sets it.
@@ -63,16 +70,26 @@ export const Images: CollectionConfig = {
   hooks: {
     beforeDelete: [guardMediaDelete('images')],
     beforeOperation: [
-      ({ args, operation, req }) => {
+      async ({ args, operation, req }) => {
         // Also on update: replacing the file of an existing record must not reuse a key either.
         if ((operation === 'create' || operation === 'update') && req.file) {
-          if (req.file.size > IMAGE_MAX_BYTES) {
-            const size = (req.file.size / MB).toFixed(1).replace('.', ',')
-            const message = `Dosya boyutu en fazla 20 MB olabilir; bu dosya ${size} MB.`
+          const refuse = (message: string): never => {
             throw new ValidationError(
               { collection: 'images', errors: [{ path: 'file', label: 'Dosya', message }], req },
               req.t,
             )
+          }
+          if (req.file.size > IMAGE_MAX_BYTES) {
+            const size = (req.file.size / MB).toFixed(1).replace('.', ',')
+            refuse(`Dosya boyutu en fazla 20 MB olabilir; bu dosya ${size} MB.`)
+          }
+          // metadata() reads the header only. With temp files the bytes are at tempFilePath.
+          const { width = 0, height = 0 } = await sharp(req.file.tempFilePath || req.file.data)
+            .metadata()
+            .catch(() => refuse(`File type ${req.file?.mimetype} is not allowed.`))
+          if (width * height > IMAGE_MAX_PIXELS) {
+            const mp = ((width * height) / 1e6).toFixed(1).replace('.', ',')
+            refuse(`Görsel en fazla 50 megapiksel olabilir; bu görsel ${mp} megapiksel.`)
           }
           req.file.name = uniqueFilename(req.file.name)
         }
