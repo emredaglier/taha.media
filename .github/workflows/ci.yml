@@ -65,7 +65,7 @@ jobs:
   build:
     # Native arm64 (ADR-0010). If this runner is not available on the plan, see infra/README.md,
     # "QEMU fallback". Both runs-on values read a repository variable and fall back to GitHub's
-    # label, so with the variables unset nothing changes (infra/README.md, "Self-hosted fallback").
+    # label, so with the variables unset nothing changes.
     runs-on: ${{ vars.CI_RUNNER_ARM || 'ubuntu-24.04-arm' }}
     timeout-minutes: 45
     permissions:
@@ -96,8 +96,8 @@ jobs:
       # The browser download is cached; the system libraries are not part of ~/.cache, so they are
       # installed on a hit too. Each install has its own timeout: a hung apt mirror fails in
       # minutes and can be re-run, instead of eating the job's 45. The key names the runner kind:
-      # actions/cache stores ~ paths relative to the workspace, so a GitHub-hosted entry restored on
-      # the self-hosted runner (#84) lands outside ~/.cache and reports a hit with no browser.
+      # actions/cache stores ~ paths relative to the workspace, so an entry restored on another kind
+      # of runner can land outside ~/.cache and report a hit with no browser.
       - uses: actions/cache@v6
         id: playwright
         with:
