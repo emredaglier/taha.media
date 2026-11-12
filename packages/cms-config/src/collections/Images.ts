@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto'
+import fs from 'node:fs/promises'
 import path from 'node:path'
 
 import { ValidationError, type CollectionConfig, type ImageUploadFormatOptions } from 'payload'
@@ -90,6 +91,13 @@ export const Images: CollectionConfig = {
           if (width * height > IMAGE_MAX_PIXELS) {
             const mp = ((width * height) / 1e6).toFixed(1).replace('.', ',')
             refuse(`Görsel en fazla 50 megapiksel olabilir; bu görsel ${mp} megapiksel.`)
+          }
+          if (req.file.tempFilePath) {
+            // Back in memory (20 MB at most): Payload writes its full-size WebP over the temp file
+            // and decodes that once per size, which ran a 24 MP photo out of the 512 MB cms (#107).
+            req.file.data = await fs.readFile(req.file.tempFilePath)
+            await fs.unlink(req.file.tempFilePath)
+            req.file.tempFilePath = ''
           }
           req.file.name = uniqueFilename(req.file.name)
         }

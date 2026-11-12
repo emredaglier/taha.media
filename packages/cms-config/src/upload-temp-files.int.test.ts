@@ -3,10 +3,11 @@ import os from 'node:os'
 import path from 'node:path'
 
 import { handleEndpoints } from 'payload'
+import sharp from 'sharp'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { IMAGE_MAX_BYTES } from './collections/Images'
-import type { User } from './payload-types'
+import type { Image, User } from './payload-types'
 import { createTestSite, testPhoto, videoFixture, type TestSite } from './testing'
 
 // The admin's uploads arrive as multipart and spool to `os.tmpdir()` (#107). This file gets its
@@ -145,6 +146,34 @@ describe('an admin image upload, spooled to a temp file', () => {
       upload('images', await testPhoto(800, 533), 'foto.jpg', 'image/jpeg', { alt: 'Deneme' }),
     )
     expect(response.status).toBe(201)
+  })
+
+  it('makes the same sizes as an in-memory upload of the photo', async () => {
+    // With the temp file, Payload wrote its full-size WebP there and decoded that once per size,
+    // which ran the 512 MB cms out of memory on a 24 MP photo (#107). Noise makes the two differ.
+    const photo = await sharp({
+      create: {
+        width: 900,
+        height: 600,
+        channels: 3,
+        background: '#000',
+        noise: { type: 'gaussian', mean: 128, sigma: 30 },
+      },
+    })
+      .jpeg()
+      .toBuffer()
+    const response = await spooled(() =>
+      upload('images', photo, 'foto.jpg', 'image/jpeg', { alt: 'Deneme' }),
+    )
+    const { doc } = (await response.json()) as { doc: Image }
+    const inMemory = await site.cms.create({
+      collection: 'images',
+      data: { alt: 'Deneme' },
+      file: { data: photo, mimetype: 'image/jpeg', name: 'foto.jpg', size: photo.length },
+    })
+    const small = (image: Image) => site.s3.objects.get(image.sizes?.small?.filename ?? '')?.body
+    expect(small(inMemory)).toBeDefined()
+    expect(small(doc)?.equals(small(inMemory)!)).toBe(true)
   })
 
   it('over 20 MB is refused under the file and leaves no temp file', async () => {
