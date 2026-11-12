@@ -4,7 +4,8 @@
 //   1. refuses to start when the web or media port is taken, and says which process holds it
 //   2. makes a fresh QA folder (default .qa, gitignored): migrates a SQLite database there, fills
 //      it with the dev seed (Media lands in its images/ and videos/) and swaps the flat Preview
-//      loops for visible clips (make-loops.sh, needs ffmpeg). `--reuse` keeps the folder instead.
+//      loops and Showreel videos for visible clips (make-loops.sh, needs ffmpeg and ffprobe).
+//      `--reuse` keeps the folder instead.
 //   3. deletes ALL of apps/web/.next/cache (the fetch cache serves old data; the webpack cache can
 //      keep an unpatched dependency after `pnpm patch`)
 //   4. builds web with the QA database, throwaway secrets and MEDIA_ORIGIN pointing at the stand-in
@@ -62,7 +63,7 @@ async function seedQaFolder(config: QaConfig) {
 }
 
 function makeLoops(config: QaConfig): Promise<void> {
-  log('replacing the flat Preview loops with visible clips (ffmpeg)')
+  log('replacing the flat Preview loops and Showreel videos with visible clips (ffmpeg)')
   return run('sh', [path.join(repoRoot, 'scripts/qa/make-loops.sh'), config.qaDir], process.env)
 }
 
