@@ -5,6 +5,17 @@ import { seoField } from '../seo'
 import { showreelLinkField } from '../showreel-link'
 import { videoField } from '../video-field'
 
+const URL_MESSAGE = 'Adres http:// veya https:// ile başlayan tam bir bağlantı olmalı.'
+
+// Hakkımda renders the address raw as a link, so a bare "instagram.com/taha" would 404.
+const isHttpUrl = (value: string | null | undefined) => {
+  try {
+    return ['https:', 'http:'].includes(new URL(value ?? '').protocol)
+  } catch {
+    return false
+  }
+}
+
 /** Site-wide settings (GLOSSARY: Showreel): the Home hero, contact and socials. */
 export const Site: GlobalConfig = {
   slug: 'site',
@@ -31,7 +42,13 @@ export const Site: GlobalConfig = {
       labels: { singular: 'Bağlantı', plural: 'Bağlantılar' },
       fields: [
         { name: 'platform', label: 'Platform', type: 'text', required: true },
-        { name: 'url', label: 'Adres', type: 'text', required: true },
+        {
+          name: 'url',
+          label: 'Adres',
+          type: 'text',
+          required: true,
+          validate: (value: string | null | undefined) => isHttpUrl(value) || URL_MESSAGE,
+        },
       ],
     },
     seoField(),
