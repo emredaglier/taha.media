@@ -119,11 +119,12 @@ describe('Dockerfile', () => {
     expect(dockerfile).toContain(`pnpm@${pnpm}`)
   })
 
-  it('ships the migrate image its config and the production seed, and nothing from the demo seed', () => {
+  it('ships the migrate image its config, the production seed and the password reset, and nothing from the demo seed', () => {
     const migrate = stage('migrate-files')
     expect(migrate).toMatch(/pnpm --filter @taha\/cms-config deploy --prod/)
     expect(migrate).toContain('infra/migrate/payload.config.ts')
     expect(migrate).toContain('infra/migrate/seed-production.ts')
+    expect(migrate).toContain('infra/migrate/reset-password.ts')
     expect(migrate).not.toMatch(/seed\.ts/)
     expect(stage('migrate')).toMatch(/CMD \["node", "node_modules\/payload\/bin\.js", "migrate"\]/)
   })
