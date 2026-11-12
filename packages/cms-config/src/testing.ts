@@ -3,83 +3,14 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-import http from 'node:http'
-import type { AddressInfo } from 'node:net'
-
 import type { Client } from '@libsql/client'
 import { getPayload, type Payload } from 'payload'
 import sharp from 'sharp'
 
+import { startS3Stub, type S3Stub } from '../../../infra/s3-stub'
 import { buildSiteConfig } from './config'
 import type { Image, User, Video } from './payload-types'
 import type { RevalidationTransport } from './revalidation'
-
-/** One request the S3 stub received. */
-export type S3Request = { method: string; key: string; headers: http.IncomingHttpHeaders }
-
-/**
- * An in-process stand-in for R2 (no real credentials, no Docker). It records every request and
- * keeps the set of stored keys, which is all the storage assertions need.
- */
-export type S3Stub = {
-  endpoint: string
-  bucket: string
-  requests: S3Request[]
-  /** Keys currently stored. */
-  objects: Set<string>
-  /** Requests that stored a new object (copies excluded), in order. */
-  puts: () => S3Request[]
-  /** While true, copy requests (`x-amz-copy-source`) are answered with a 500. */
-  failCopies: boolean
-  close: () => Promise<void>
-}
-
-export async function startS3Stub(bucket = 'bucket'): Promise<S3Stub> {
-  const requests: S3Request[] = []
-  const objects = new Set<string>()
-  const stub: { failCopies: boolean } = { failCopies: false }
-  const server = http.createServer((req, res) => {
-    req.on('data', () => undefined)
-    req.on('end', () => {
-      const path = decodeURIComponent((req.url ?? '').split('?')[0] ?? '')
-      const key = path.replace(new RegExp(`^/${bucket}/`), '')
-      requests.push({ method: req.method ?? '', key, headers: req.headers })
-      if (stub.failCopies && typeof req.headers['x-amz-copy-source'] === 'string') {
-        res.writeHead(500, { 'Content-Type': 'application/xml' })
-        res.end('<Error><Code>InternalError</Code><Message>stub</Message></Error>')
-        return
-      }
-      if (req.method === 'PUT') objects.add(key)
-      if (req.method === 'DELETE') objects.delete(key)
-      if (typeof req.headers['x-amz-copy-source'] === 'string') {
-        res.writeHead(200, { 'Content-Type': 'application/xml' })
-        res.end('<CopyObjectResult><ETag>"stub"</ETag></CopyObjectResult>')
-        return
-      }
-      res.writeHead(req.method === 'DELETE' ? 204 : 200, { ETag: '"stub"' })
-      res.end()
-    })
-  })
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
-  const { port } = server.address() as AddressInfo
-  return {
-    endpoint: `http://127.0.0.1:${port}`,
-    bucket,
-    requests,
-    objects,
-    puts: () =>
-      requests.filter(
-        (r) => r.method === 'PUT' && typeof r.headers['x-amz-copy-source'] !== 'string',
-      ),
-    get failCopies() {
-      return stub.failCopies
-    },
-    set failCopies(v: boolean) {
-      stub.failCopies = v
-    },
-    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
-  }
-}
 
 /** A plain JPEG of the given size, as a camera export would be. */
 export const testPhoto = (width: number, height: number): Promise<Buffer> =>
@@ -181,7 +112,7 @@ export async function createTestSite({
             mediaOrigin: TEST_MEDIA_ORIGIN,
             s3: {
               endpoint: s3.endpoint,
-              bucket: s3.bucket,
+              bucket: 'bucket',
               accessKeyId: 'test-key',
               secretAccessKey: 'test-secret',
               region: 'us-east-1',
