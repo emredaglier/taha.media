@@ -87,3 +87,56 @@ describe('make-loops.sh', () => {
     expect(result.stderr).toMatch(/no videos\/demo-previewloop-/)
   })
 })
+
+// The real script on real ffmpeg (skipped where ffmpeg is missing): every clip must move, so two
+// frames 1 s apart differ. The poster is a PNG under the .webp name (ffmpeg here has no webp
+// encoder); ffmpeg reads the content, not the extension.
+const hasFfmpeg = ['ffmpeg', 'ffprobe'].every((tool) => spawnSync(tool, ['-version']).status === 0)
+
+describe.skipIf(!hasFfmpeg)('make-loops.sh with real ffmpeg', () => {
+  const ff = (...args: string[]) => {
+    const result = spawnSync('ffmpeg', ['-v', 'error', '-y', ...args], { encoding: 'utf8' })
+    expect(result.stderr).toBe('')
+    return result.stdout
+  }
+  // md5 of the decoded frame at `seconds`
+  const frame = (clip: string, seconds: number) =>
+    ff('-ss', String(seconds), '-i', clip, '-frames:v', '1', '-f', 'md5', '-')
+
+  it('makes a Preview loop and a Showreel clip whose frames 1 s apart differ', () => {
+    const dir = path.join(tmp, 'real')
+    fs.mkdirSync(path.join(dir, 'videos'), { recursive: true })
+    fs.mkdirSync(path.join(dir, 'images'), { recursive: true })
+    const poster = path.join(dir, 'images/demo-1-x-1280x853.webp')
+    ff(
+      '-f',
+      'lavfi',
+      '-i',
+      'testsrc2=size=1280x853',
+      '-frames:v',
+      '1',
+      '-f',
+      'image2',
+      '-c:v',
+      'png',
+      poster,
+    )
+    for (const name of ['previewloop-1-a', 'showreel-1', 'showreel-2']) {
+      ff(
+        '-f',
+        'lavfi',
+        '-i',
+        'color=size=640x360:rate=25',
+        '-t',
+        '1',
+        path.join(dir, `videos/demo-${name}.mp4`),
+      )
+    }
+    const result = spawnSync('/bin/sh', [script, dir], { encoding: 'utf8' })
+    expect(result.status, result.stderr).toBe(0)
+    for (const name of ['previewloop-1-a', 'showreel-1']) {
+      const clip = path.join(dir, `videos/demo-${name}.mp4`)
+      expect(frame(clip, 0.5)).not.toBe(frame(clip, 1.5))
+    }
+  })
+})
