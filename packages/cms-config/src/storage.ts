@@ -108,6 +108,9 @@ export function imagesStorage(
       region: config.region ?? 'auto',
       forcePathStyle: config.forcePathStyle ?? false,
       credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey },
+      // R2 follows Cloudflare's SDK example: no default checksum trailer on streamed PUTs.
+      requestChecksumCalculation: 'WHEN_REQUIRED',
+      responseChecksumValidation: 'WHEN_REQUIRED',
     }))
 
   const buildAdapter = (slug: string, localDir: string, contentType: string): GeneratedAdapter => {
