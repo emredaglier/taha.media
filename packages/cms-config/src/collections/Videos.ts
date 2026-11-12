@@ -1,5 +1,3 @@
-import fs from 'node:fs/promises'
-
 import {
   ValidationError,
   type CollectionBeforeValidateHook,
@@ -11,7 +9,7 @@ import { editor } from '../access'
 import { keepFeaturedLoopSixteenByNine } from '../featured-loop'
 import { guardMediaDelete } from '../media-delete'
 import { anyReferences } from '../media-references'
-import { readMp4, type Mp4Info } from '../mp4'
+import { readMp4, readMp4File, type Mp4Info } from '../mp4'
 import {
   NOT_MP4_MESSAGE,
   VIDEO_USE_LABELS,
@@ -37,12 +35,6 @@ const refuse = (
   throw new ValidationError({ collection, errors: [{ ...field, message }], req }, req.t)
 }
 
-/** The bytes of the file being uploaded (in memory, or in the temp file Payload spooled it to). */
-async function uploadedBytes(file: NonNullable<PayloadRequest['file']>): Promise<Buffer> {
-  if (file.data?.length) return file.data
-  return file.tempFilePath ? fs.readFile(file.tempFilePath) : Buffer.alloc(0)
-}
-
 /**
  * Reads the MP4 header of a new file, or takes the stored values when only the use changes, then
  * checks the caps for the use. The readings are written into the document, overriding anything
@@ -60,9 +52,14 @@ const readAndCheck: CollectionBeforeValidateHook = async ({
   let info: Mp4Info
   let bytes: number
   if (req.file) {
-    const buffer = await uploadedBytes(req.file)
-    bytes = buffer.length
-    const read = readMp4(buffer)
+    // An admin upload is in a temp file (`data` empty); a Local API one is in memory.
+    const { data: inMemory, size, tempFilePath } = req.file
+    bytes = inMemory?.length || size
+    const read = inMemory?.length
+      ? readMp4(inMemory)
+      : tempFilePath
+        ? await readMp4File(tempFilePath)
+        : undefined
     if (!read) return refuse(collection.slug, req, FILE_FIELD, NOT_MP4_MESSAGE)
     info = read
   } else if (originalDoc?.codec) {

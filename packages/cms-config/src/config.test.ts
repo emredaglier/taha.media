@@ -68,4 +68,15 @@ describe('upload limits', () => {
     expect(config.upload?.limits?.fileSize).toBeGreaterThanOrEqual(largest)
     expect(config.upload?.requestSizeLimit).toBeGreaterThan(config.upload?.limits?.fileSize ?? 0)
   })
+
+  it('spool admin uploads to the OS temp folder, which the cms image user can write, not memory', async () => {
+    const config = await buildSiteConfig(
+      siteConfigOptionsFromEnv('cms', {
+        ...base,
+        DATABASE_PATH: path.join(os.tmpdir(), 'taha-config-test', 'site.db'),
+      }),
+    )
+    expect(config.upload?.useTempFiles).toBe(true)
+    expect(config.upload?.tempFileDir).toBe(os.tmpdir())
+  })
 })

@@ -1,9 +1,12 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { crc32 } from 'node:zlib'
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { IMAGE_MAX_BYTES } from './collections/Images'
+import sharp from 'sharp'
+
+import { IMAGE_MAX_BYTES, IMAGE_MAX_PIXELS } from './collections/Images'
 import type { User } from './payload-types'
 import { createTestSite, TEST_MEDIA_ORIGIN, testPhoto, type TestSite } from './testing'
 
@@ -167,6 +170,87 @@ describe('an image over 20 MB', () => {
         message: 'Dosya boyutu en fazla 20 MB olabilir; bu dosya 20,0 MB.',
       }),
     ])
+    expect(site.s3.puts().length).toBe(before)
+  })
+})
+
+describe('an image over the pixel cap', () => {
+  const upload = async (data: Buffer, mimetype = 'image/png') =>
+    (await site.cms
+      .create({
+        collection: 'images',
+        data: { alt: 'piksel' },
+        file: { data, mimetype, name: 'piksel.png', size: data.length },
+        user: editor,
+        overrideAccess: false,
+      })
+      .catch((e: unknown) => e)) as { data?: { errors?: { path?: string; message: string }[] } }
+
+  it('is refused under the file field from its header alone, before sharp decodes it', async () => {
+    // A real 1 px PNG whose IHDR (width, height, then its CRC) says 10000 x 10000: a few hundred
+    // bytes, and a decode would need 400 MB.
+    const png = await sharp({ create: { width: 1, height: 1, channels: 3, background: '#000' } })
+      .png()
+      .toBuffer()
+    png.writeUInt32BE(10_000, 16)
+    png.writeUInt32BE(10_000, 20)
+    png.writeUInt32BE(crc32(png.subarray(12, 29)), 29)
+    expect(10_000 * 10_000).toBeGreaterThan(IMAGE_MAX_PIXELS)
+
+    const before = site.s3.puts().length
+    const error = await upload(png)
+    expect(error.data?.errors).toEqual([
+      expect.objectContaining({
+        path: 'file',
+        message: 'Görsel en fazla 50 megapiksel olabilir; bu görsel 100,0 megapiksel.',
+      }),
+    ])
+    expect(site.s3.puts().length).toBe(before)
+  })
+
+  it('is refused the same way when the header cannot be read', async () => {
+    const before = site.s3.puts().length
+    const error = await upload(Buffer.from('bu bir görsel değil'))
+    expect(error.data?.errors).toEqual([expect.objectContaining({ path: 'file' })])
+    expect(site.s3.puts().length).toBe(before)
+  })
+
+  it('counts every frame of an animated WebP, which Payload decodes in full', async () => {
+    // One frame is 4 MP, under the cap; 13 frames are 52 MP.
+    // Frames differ, or the encoder merges them into one.
+    const frames = await Promise.all(
+      Array.from({ length: 13 }, (_, i) =>
+        sharp({
+          create: {
+            width: 2000,
+            height: 2000,
+            channels: 3,
+            background: { r: i * 19, g: 40, b: 200 - i * 10 },
+          },
+        })
+          .png()
+          .toBuffer(),
+      ),
+    )
+    const webp = await sharp(frames, { join: { animated: true } })
+      .webp()
+      .toBuffer()
+
+    const before = site.s3.puts().length
+    const error = await upload(webp, 'image/webp')
+    expect(error.data?.errors).toEqual([
+      expect.objectContaining({
+        path: 'file',
+        message: 'Görsel en fazla 50 megapiksel olabilir; bu görsel 52,0 megapiksel.',
+      }),
+    ])
+    expect(site.s3.puts().length).toBe(before)
+  }, 30_000)
+
+  it('is refused the same way when the buffer is empty', async () => {
+    const before = site.s3.puts().length
+    const error = await upload(Buffer.alloc(0))
+    expect(error.data?.errors).toEqual([expect.objectContaining({ path: 'file' })])
     expect(site.s3.puts().length).toBe(before)
   })
 })
