@@ -1,5 +1,6 @@
 import { ValidationError, type UploadField } from 'payload'
 
+import { idOf, isSet } from './media-references'
 import { VIDEO_USE_LABELS, type VideoUse } from './video-limits'
 
 /**
@@ -29,9 +30,8 @@ export function videoField({
     hooks: {
       beforeValidate: [
         async ({ collection, req, value }) => {
-          const id =
-            typeof value === 'object' && value !== null ? (value as { id: unknown }).id : value
-          if (id === undefined || id === null || id === '') return value
+          const id = idOf(value)
+          if (!isSet(id)) return value
           const video = await req.payload.findByID({
             collection: 'videos',
             id: id as number,

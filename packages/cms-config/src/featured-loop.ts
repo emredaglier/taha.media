@@ -1,5 +1,7 @@
 import { ValidationError, type CollectionBeforeValidateHook } from 'payload'
 
+import { idOf, isSet } from './media-references'
+
 export const FEATURED_NEEDS_LOOP_MESSAGE = 'Öne çıkarmak için 16:9 önizleme döngüsü gerekli.'
 
 /** How far a loop's width may be from height × 16/9 and still count as 16:9, in pixels. */
@@ -10,9 +12,6 @@ export const isSixteenByNine = (width: number, height: number): boolean =>
 
 const wrongShapeMessage = (width: number, height: number): string =>
   `Öne çıkarmak için önizleme döngüsü 16:9 olmalı; bu video ${width}×${height}. 16:9 bir döngü seçin.`
-
-const idOf = (value: unknown): unknown =>
-  typeof value === 'object' && value !== null ? (value as { id: unknown }).id : value
 
 /**
  * A featured Work is shown on Home as a 16:9 Preview loop (GLOSSARY), so publishing one needs a
@@ -36,7 +35,7 @@ export const requireFeaturedLoop: CollectionBeforeValidateHook = async ({
   const loop: unknown = data.previewLoop !== undefined ? data.previewLoop : originalDoc?.previewLoop
   const id = idOf(loop)
   let message = FEATURED_NEEDS_LOOP_MESSAGE
-  if (id !== undefined && id !== null && id !== '') {
+  if (isSet(id)) {
     const video = await req.payload.findByID({
       collection: 'videos',
       id: id as number,

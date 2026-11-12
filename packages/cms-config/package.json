@@ -5,7 +5,6 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./disciplines": "./src/disciplines.ts",
     "./tags": "./src/tags.ts",
     "./testing": "./src/testing.ts",
     "./admin/featured-warning": "./src/admin/FeaturedWarning.tsx",

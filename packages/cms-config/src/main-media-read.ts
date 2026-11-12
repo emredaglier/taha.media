@@ -21,7 +21,8 @@ export type MainMedia =
     }
   | { kind: 'image'; image: ImageRead }
 
-const populated = <T>(value: number | T | null | undefined): T | null =>
+/** A populated relationship, or null when it is only an id (or empty). */
+export const populated = <T>(value: number | T | null | undefined): T | null =>
   typeof value === 'object' && value !== null ? value : null
 
 /**

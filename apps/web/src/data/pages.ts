@@ -68,9 +68,9 @@ const image = (value: unknown): ImageRead | null =>
 const video = (value: unknown): VideoRead | null =>
   typeof value === 'object' && value !== null ? toVideo(value as VideoDoc) : null
 
-const text = (value: string | null | undefined): string | null => value?.trim() || null
+export const text = (value: string | null | undefined): string | null => value?.trim() || null
 
-const richText = <T>(value: T | null | undefined): T | null =>
+export const richText = <T>(value: T | null | undefined): T | null =>
   value && richTextToPlainText(value) !== '' ? value : null
 
 /**

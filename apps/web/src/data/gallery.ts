@@ -1,5 +1,6 @@
 import {
   fullSizeUrl,
+  populated,
   toImage,
   toVideo,
   type GalleryDoc,
@@ -12,6 +13,7 @@ import { GALLERY_TAG } from '@taha/cms-config/tags'
 
 import { getWebPayload } from '../lib/payload'
 import { cachedRead, contentVersions } from './cache'
+import { text } from './pages'
 
 type Common = {
   id: number
@@ -31,11 +33,6 @@ export type GalleryItem =
       /** The silent loop with its poster, which the grid shows. */
       video: VideoRead
     })
-
-const text = (value: string | null | undefined): string | null => value?.trim() || null
-
-const populated = <T extends object>(value: number | T | null | undefined): T | null =>
-  typeof value === 'object' && value !== null ? value : null
 
 /**
  * An item whose Image or Video is not populated cannot be shown, and the save rules make that
