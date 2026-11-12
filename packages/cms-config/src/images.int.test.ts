@@ -175,12 +175,12 @@ describe('an image over 20 MB', () => {
 })
 
 describe('an image over the pixel cap', () => {
-  const upload = async (data: Buffer) =>
+  const upload = async (data: Buffer, mimetype = 'image/png') =>
     (await site.cms
       .create({
         collection: 'images',
         data: { alt: 'piksel' },
-        file: { data, mimetype: 'image/png', name: 'piksel.png', size: data.length },
+        file: { data, mimetype, name: 'piksel.png', size: data.length },
         user: editor,
         overrideAccess: false,
       })
@@ -211,6 +211,45 @@ describe('an image over the pixel cap', () => {
   it('is refused the same way when the header cannot be read', async () => {
     const before = site.s3.puts().length
     const error = await upload(Buffer.from('bu bir görsel değil'))
+    expect(error.data?.errors).toEqual([expect.objectContaining({ path: 'file' })])
+    expect(site.s3.puts().length).toBe(before)
+  })
+
+  it('counts every frame of an animated WebP, which Payload decodes in full', async () => {
+    // One frame is 4 MP, under the cap; 13 frames are 52 MP.
+    // Frames differ, or the encoder merges them into one.
+    const frames = await Promise.all(
+      Array.from({ length: 13 }, (_, i) =>
+        sharp({
+          create: {
+            width: 2000,
+            height: 2000,
+            channels: 3,
+            background: { r: i * 19, g: 40, b: 200 - i * 10 },
+          },
+        })
+          .png()
+          .toBuffer(),
+      ),
+    )
+    const webp = await sharp(frames, { join: { animated: true } })
+      .webp()
+      .toBuffer()
+
+    const before = site.s3.puts().length
+    const error = await upload(webp, 'image/webp')
+    expect(error.data?.errors).toEqual([
+      expect.objectContaining({
+        path: 'file',
+        message: 'Görsel en fazla 50 megapiksel olabilir; bu görsel 52,0 megapiksel.',
+      }),
+    ])
+    expect(site.s3.puts().length).toBe(before)
+  }, 30_000)
+
+  it('is refused the same way when the buffer is empty', async () => {
+    const before = site.s3.puts().length
+    const error = await upload(Buffer.alloc(0))
     expect(error.data?.errors).toEqual([expect.objectContaining({ path: 'file' })])
     expect(site.s3.puts().length).toBe(before)
   })

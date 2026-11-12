@@ -179,7 +179,8 @@ export function buildSiteConfig(options: SiteConfigOptions): Promise<SanitizedCo
       requestSizeLimit: UPLOAD_FILE_LIMIT + MB,
       // Spool uploads to disk, not the cms's 512 MB (#107), in the OS temp folder (/tmp in the
       // image, writable by its uid 10001) rather than the library's default `tmp` beside the app
-      // code. Payload deletes the file after the operation, on success and on a refusal.
+      // code. Payload deletes req.file after an upload collection's create or update, success or
+      // refusal. Any other multipart POST with a file leaves it there until the container is recreated.
       useTempFiles: true,
       tempFileDir: os.tmpdir(),
     },
