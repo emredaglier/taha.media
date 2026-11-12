@@ -58,7 +58,7 @@ const MB = 1024 * 1024
  * Payload's multipart defaults (20 MB a file, 50 MB a request) answer an English 413 before our
  * Turkish cap check runs, so the file limit sits 4 MB above the largest video cap.
  */
-export const UPLOAD_FILE_LIMIT =
+const UPLOAD_FILE_LIMIT =
   Math.max(...Object.values(VIDEO_LIMITS).map((limits) => limits.maxBytes)) + 4 * MB
 
 export type SiteConfigOptions = {

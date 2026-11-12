@@ -155,7 +155,7 @@ If steps 2 to 5 fail, the deploy stops with nothing swapped (the old release kee
 - `./deploy.sh status`: the release history, last line live.
 - `./deploy.sh rollback`: back one release, no migrations, checked. If the target fails, it returns to the current release and alerts.
 - **Roll forward by hand:** the server has no registry login of its own (CI's token ends with the job). If the images are still on the server (`docker image ls | grep <sha>`): `cd /opt/taha/infra/releases/<sha> && DEPLOY_PULL=0 IMAGE_PREFIX=ghcr.io/<owner>/taha ./deploy.sh deploy <sha>`. Otherwise re-run that commit's CI run.
-- **A forgotten admin password** (ADR-0013): `RELEASE="$(tail -n 1 /opt/taha/state/releases)" IMAGE_PREFIX=ghcr.io/<owner>/taha docker compose run --rm migrate node node_modules/payload/bin.js run reset-password.ts -- <email>` prints a new random password once (`-e NEW_PASSWORD` sets a chosen one from the shell instead, never printed).
+- **A forgotten admin password** (ADR-0013): `RELEASE="$(tail -n 1 /opt/taha/state/releases)" IMAGE_PREFIX=ghcr.io/<owner>/taha docker compose run --rm migrate node node_modules/payload/bin.js run reset-password.ts -- <email>` prints a new random password once (`run --rm -e NEW_PASSWORD migrate …`, with `-e` before `migrate`, sets a chosen one from the shell instead, never printed).
 - **A bad migration:** the pre-migration copy is in `/opt/taha/data/pre-migrate/`, and Litestream restores to the printed restore point ([Backups](#backups-litestream)).
 
 ### Setup (owner, once at cutover)

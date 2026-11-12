@@ -1,5 +1,5 @@
-// Resets a forgotten Editor password on the server (ADR-0013):
-//   docker compose -f infra/compose.yaml run --rm migrate node node_modules/payload/bin.js run reset-password.ts -- <email>
+// Resets a forgotten Editor password on the server (ADR-0013). Runbook: infra/README.md, Deploy,
+// "A forgotten admin password".
 // Same as `pnpm user:reset-password` (apps/cms/scripts/reset-password.ts) but against this image's
 // config. The new password is NEW_PASSWORD when set, otherwise a random one that is printed once.
 import { randomBytes } from 'node:crypto'

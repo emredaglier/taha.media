@@ -72,7 +72,7 @@ function toCover(cover: WorkDoc['cover']): ImageRead {
 }
 
 /** Populated Images only: an id (not populated) cannot be rendered, so it is skipped. */
-const populated = (value: number | ImageDoc | null | undefined): ImageRead[] =>
+const stillImages = (value: number | ImageDoc | null | undefined): ImageRead[] =>
   typeof value === 'object' && value !== null ? [toImage(value)] : []
 
 function toPreviewLoop(video: WorkDoc['previewLoop']): VideoRead | null {
@@ -96,7 +96,7 @@ const toWork = (doc: WorkDoc): Work => {
     role: doc.role || null,
     credits: (doc.credits ?? []).map(({ name, role }) => ({ name, role: role || null })),
     description: richText(doc.description),
-    stills: (doc.stills ?? []).flatMap(({ image }) => populated(image)),
+    stills: (doc.stills ?? []).flatMap(({ image }) => stillImages(image)),
     seo: resolveSeo({
       overrides: doc.seo,
       title: doc.title,

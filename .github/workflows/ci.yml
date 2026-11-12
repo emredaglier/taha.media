@@ -65,7 +65,7 @@ jobs:
   build:
     # Native arm64 (ADR-0010). If this runner is not available on the plan, see infra/README.md,
     # "QEMU fallback". Both runs-on values read a repository variable and fall back to GitHub's
-    # label, so with the variables unset nothing changes.
+    # label, so with the variables unset nothing changes. Leave both unset: the repo is public (#100).
     runs-on: ${{ vars.CI_RUNNER_ARM || 'ubuntu-24.04-arm' }}
     timeout-minutes: 45
     permissions:
