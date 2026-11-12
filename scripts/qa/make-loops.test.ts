@@ -50,7 +50,7 @@ describe('make-loops.sh', () => {
     expect(result.log).toBe('')
   })
 
-  it('turns a loop with its poster into a clip', () => {
+  it('turns a loop with its poster and each Showreel video into a clip at its own size', () => {
     const result = makeLoops('ok', [
       'videos/demo-previewloop-1-a.mp4',
       'images/demo-1-x-1280x853.webp',
@@ -60,30 +60,26 @@ describe('make-loops.sh', () => {
     expect(result.stdout).toContain(
       'ok videos/demo-previewloop-1-a.mp4 <- images/demo-1-x-1280x853.webp',
     )
+    expect(result.stdout).toContain('ok videos/demo-showreel-1.mp4 (640x360)')
+    expect(result.stdout).toContain('ok videos/demo-showreel-2.mp4 (360x640)')
     expect(result.log).toContain('images/demo-1-x-1280x853.webp')
+    expect(result.log).toContain('size=640x360')
+    expect(result.log).toContain('size=360x640')
   })
 
-  it('turns each Showreel video into a clip at its own size', () => {
-    const ok = makeLoops('reels-ok', [
-      'videos/demo-previewloop-1-a.mp4',
-      'images/demo-1-x-1280x853.webp',
-      ...reels,
-    ])
-    expect(ok.status).toBe(0)
-    expect(ok.stdout).toContain('ok videos/demo-showreel-1.mp4 (640x360)')
-    expect(ok.stdout).toContain('ok videos/demo-showreel-2.mp4 (360x640)')
-    expect(ok.log).toContain('size=640x360')
-    expect(ok.log).toContain('size=360x640')
-  })
-
-  it('names the missing Showreel videos and exits 1', () => {
-    const result = makeLoops('no-reel', [
-      'videos/demo-previewloop-1-a.mp4',
-      'images/demo-1-x-1280x853.webp',
-    ])
-    expect(result.status).toBe(1)
-    expect(result.stderr).toMatch(/no videos\/demo-showreel-/)
-  })
+  it.each([[[]], [reels.slice(0, 1)]])(
+    'fails unless both Showreel videos exist (%j)',
+    (present) => {
+      const result = makeLoops(`reels-${present.length}`, [
+        'videos/demo-previewloop-1-a.mp4',
+        'images/demo-1-x-1280x853.webp',
+        ...present,
+      ])
+      expect(result.status).toBe(1)
+      expect(result.stderr).toContain(`expected 2 videos/demo-showreel-*.mp4`)
+      expect(result.stderr).toContain(`found ${present.length}`)
+    },
+  )
 
   it('still says so when there is no loop at all', () => {
     const result = makeLoops('empty', ['images/demo-1-x-1280x853.webp'])
