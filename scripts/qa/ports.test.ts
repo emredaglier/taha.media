@@ -18,6 +18,33 @@ const listen = (host = '127.0.0.1') =>
     server.listen(0, host, () => resolve((server.address() as AddressInfo).port))
   })
 
+/**
+ * A port nobody listens on, from 20000-29999: below the ports the OS hands out by itself (Linux
+ * from 32768, macOS from 49152), which every `listen(0)` and outgoing connection on the machine
+ * draws from. A port from that pool, freed again, can go to another process's socket before the
+ * check runs (#94); this one can only be taken by a process that asks for its number. Both probes:
+ * on macOS a bind to 127.0.0.1 succeeds even while another process listens on 0.0.0.0.
+ */
+const host = '127.0.0.1'
+const bindable = (port: number) =>
+  new Promise<boolean>((resolve) => {
+    const server = net.createServer()
+    server.once('error', () => resolve(false))
+    server.listen(port, host, () => server.close(() => resolve(true)))
+  })
+const answers = (port: number) =>
+  new Promise<boolean>((resolve) => {
+    const socket = net.connect(port, host)
+    socket.once('connect', () => (socket.destroy(), resolve(true)))
+    socket.once('error', () => resolve(false))
+  })
+const unusedPort = async (): Promise<number> => {
+  for (;;) {
+    const port = 20_000 + Math.floor(Math.random() * 10_000)
+    if ((await bindable(port)) && !(await answers(port))) return port
+  }
+}
+
 describe('parseLsof', () => {
   const output = [
     'COMMAND   PID USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME',
@@ -40,9 +67,7 @@ describe('parseLsof', () => {
 
 describe('checkPorts', () => {
   it('reports nothing for free ports', async () => {
-    const free = await listen()
-    // Free it again: a port a moment ago in use is free now.
-    await Promise.all(servers.splice(0).map((s) => new Promise((resolve) => s.close(resolve))))
+    const free = await unusedPort()
     expect(await checkPorts([{ name: 'web', host: '127.0.0.1', port: free }])).toEqual([])
   })
 
@@ -94,8 +119,6 @@ describe('describePortHolder', () => {
   })
 
   it('is empty for a port nobody listens on', async () => {
-    const free = await listen()
-    await Promise.all(servers.splice(0).map((s) => new Promise((resolve) => s.close(resolve))))
-    expect(await describePortHolder(free)).toEqual([])
+    expect(await describePortHolder(await unusedPort())).toEqual([])
   })
 })

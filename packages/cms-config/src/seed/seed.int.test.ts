@@ -28,10 +28,17 @@ const counts = async () => ({
   gallery: (await site.cms.count({ collection: 'gallery' })).totalDocs,
 })
 
-describe('the local seed', () => {
-  it('fills published Works of all three main-media kinds, Disciplines and 6-12 featured', async () => {
-    await seedLocal(site.cms)
+// The seed's CPU time is nearly all WebP sizes of its photos: at full width (3000) it is about
+// 30 s of CPU, which CI's shared cores stretched past a minute. These tests check what the seed
+// creates, not the sizes (images.int.test.ts does), so small photos make it a tenth of that.
+const photoWidth = 1000
 
+describe('the local seed', () => {
+  // A hook, not the first test: a seed that runs out of time fails this block and skips its tests,
+  // instead of running them on a half-seeded database (a timed-out seed keeps running).
+  beforeAll(() => seedLocal(site.cms, { photoWidth }), 60_000)
+
+  it('fills published Works of all three main-media kinds, Disciplines and 6-12 featured', async () => {
     const { docs: works } = await site.cms.find({ collection: 'works', limit: 100, depth: 1 })
     expect(works.length).toBeGreaterThanOrEqual(8)
     expect(new Set(works.map((w) => w.mainMedia?.kind))).toEqual(
@@ -50,7 +57,7 @@ describe('the local seed', () => {
         typeof loop === 'object' && loop !== null && isSixteenByNine(loop.width!, loop.height!),
       ).toBe(true)
     }
-  }, 60_000)
+  })
 
   it('uploads Videos of every use (the caps accepted them)', async () => {
     const { docs } = await site.cms.find({ collection: 'videos', limit: 100 })
@@ -102,11 +109,11 @@ describe('the local seed', () => {
     const work = (await site.cms.find({ collection: 'works', limit: 1 })).docs[0]!
     await site.cms.update({ collection: 'works', id: work.id, data: { client: 'Düzenlendi' } })
     const before = await counts()
-    await seedLocal(site.cms)
+    await seedLocal(site.cms, { photoWidth })
     expect(await counts()).toEqual(before)
     const after = await site.cms.findByID({ collection: 'works', id: work.id })
     expect(after.client).toBe('Düzenlendi')
-  }, 60_000)
+  })
 })
 
 describe('the production seed', () => {

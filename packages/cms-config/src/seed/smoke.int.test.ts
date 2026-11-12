@@ -14,7 +14,9 @@ let manifest: SmokeManifest
 
 beforeAll(async () => {
   site = await createTestSite({ objectStorage: false })
-  await seedLocal(site.cms)
+  // Small photos, as in seed.int.test.ts (#94): the gate reads slugs and captions, not image sizes,
+  // and full-width photos took this hook to 80 s of its 120 s on slow CI runners.
+  await seedLocal(site.cms, { photoWidth: 1000 })
   manifest = await prepareSmokeContent(site.cms)
 }, 120_000)
 

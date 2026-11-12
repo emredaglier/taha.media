@@ -138,22 +138,30 @@ const HUES = [
   '#3e7a6a',
 ]
 
+/**
+ * The demo photos' width: wider than the largest srcset size (2560), so every demo image has its
+ * own pixels at every size.
+ */
+const DEMO_PHOTO_WIDTH = 3000
+
 type Seeder = {
   payload: Payload
   log: (message: string) => void
   photos: number
+  photoWidth: number
 }
 
-/** A distinct 3000×2000 JPEG, so every demo image has its own pixels at every size. */
-async function demoPhoto(index: number): Promise<Buffer> {
-  const x = 300 + (index % 8) * 300
+/** A distinct 3:2 JPEG of the given width. */
+async function demoPhoto(index: number, width: number): Promise<Buffer> {
+  const height = Math.round((width * 2) / 3)
+  const x = Math.round((width * (1 + (index % 8))) / 10)
   return sharp({
-    create: { width: 3000, height: 2000, channels: 3, background: HUES[index % HUES.length]! },
+    create: { width, height, channels: 3, background: HUES[index % HUES.length]! },
   })
     .composite([
       {
         input: Buffer.from(
-          `<svg width="3000" height="2000"><circle cx="${x}" cy="1000" r="600" fill="white" fill-opacity="0.3"/></svg>`,
+          `<svg width="${width}" height="${height}"><circle cx="${x}" cy="${height / 2}" r="${Math.round(height * 0.3)}" fill="white" fill-opacity="0.3"/></svg>`,
         ),
       },
     ])
@@ -163,7 +171,7 @@ async function demoPhoto(index: number): Promise<Buffer> {
 
 async function uploadImage(seeder: Seeder, alt: string): Promise<number> {
   seeder.photos += 1
-  const data = await demoPhoto(seeder.photos)
+  const data = await demoPhoto(seeder.photos, seeder.photoWidth)
   const image = await seeder.payload.create({
     collection: 'images',
     data: { alt },
@@ -360,12 +368,18 @@ async function seedPages(seeder: Seeder): Promise<void> {
  * with validation on. Safe to run again: it only adds what is missing and never overwrites edits.
  *
  * It does not check the environment; the command that runs it does (`assertLocalEnvironment`).
+ *
+ * `photoWidth` shrinks the demo photos. Encoding every photo's WebP sizes is nearly all of the
+ * seed's CPU time, so a test that checks what the seed creates, not the sizes, passes a small one.
  */
 export async function seedLocal(
   payload: Payload,
-  { log = () => undefined }: { log?: (message: string) => void } = {},
+  {
+    log = () => undefined,
+    photoWidth = DEMO_PHOTO_WIDTH,
+  }: { log?: (message: string) => void; photoWidth?: number } = {},
 ): Promise<void> {
-  const seeder: Seeder = { payload, log, photos: 0 }
+  const seeder: Seeder = { payload, log, photos: 0, photoWidth }
 
   if (await findEditor(payload, DEMO_EDITOR_EMAIL)) log('editor: exists')
   else {
