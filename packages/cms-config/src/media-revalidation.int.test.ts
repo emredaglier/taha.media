@@ -29,7 +29,10 @@ const as = { user: () => editor, overrideAccess: false } as const
 const image = async () => (await site.uploadImage(editor)).id
 
 let works = 0
-/** Saves a new Work as the admin does; the cover and main image default to a fresh Image. */
+/**
+ * Saves a new Work as the admin does. The cover defaults to a fresh Image that is also the main
+ * image; a given cover gets its own fresh main image, so "as cover" tests reach it only as cover.
+ */
 async function createWork(
   status: 'draft' | 'published',
   extra: Partial<Work> & { cover?: number } = {},
@@ -44,7 +47,7 @@ async function createWork(
       disciplines: ['kurgu'],
       year: 2025,
       cover,
-      mainMedia: { kind: 'image', image: cover },
+      mainMedia: { kind: 'image', image: extra.cover === undefined ? cover : await image() },
       // Publishing a featured Work needs a 16:9 Preview loop (#43).
       ...(extra.featured && !extra.previewLoop
         ? { previewLoop: (await site.uploadVideo(editor, { use: 'previewLoop' })).id }

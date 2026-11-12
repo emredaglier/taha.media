@@ -132,6 +132,7 @@ describe('with no object storage (development)', () => {
     try {
       const image = await local.uploadImage(await local.createEditor(), {
         name: 'yerel.jpg',
+        // Wide enough for five files: original, thumbnail, small, medium, large.
         width: 1920,
         height: 1280,
       })
