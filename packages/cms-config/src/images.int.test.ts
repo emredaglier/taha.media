@@ -3,6 +3,7 @@ import path from 'node:path'
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
+import { IMAGE_MAX_BYTES } from './collections/Images'
 import type { User } from './payload-types'
 import { createTestSite, TEST_MEDIA_ORIGIN, testPhoto, type TestSite } from './testing'
 
@@ -145,4 +146,27 @@ describe('with no object storage (development)', () => {
       await local.close()
     }
   }, 30_000)
+})
+
+describe('an image over 20 MB', () => {
+  it('is refused under the file field before any size is made', async () => {
+    const before = site.s3.puts().length
+    const data = Buffer.alloc(IMAGE_MAX_BYTES + 1)
+    const error = (await site.cms
+      .create({
+        collection: 'images',
+        data: { alt: 'büyük' },
+        file: { data, mimetype: 'image/png', name: 'buyuk.png', size: data.length },
+        user: editor,
+        overrideAccess: false,
+      })
+      .catch((e: unknown) => e)) as { data?: { errors?: { path?: string; message: string }[] } }
+    expect(error.data?.errors).toEqual([
+      expect.objectContaining({
+        path: 'file',
+        message: 'Dosya boyutu en fazla 20 MB olabilir; bu dosya 20,0 MB.',
+      }),
+    ])
+    expect(site.s3.puts().length).toBe(before)
+  })
 })
