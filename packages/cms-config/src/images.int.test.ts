@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import sharp from 'sharp'
 
-import { IMAGE_MAX_BYTES, IMAGE_MAX_PIXELS } from './collections/Images'
+import { IMAGE_MAX_BYTES, IMAGE_MAX_PIXELS, IMAGE_STORED_MAX } from './collections/Images'
 import type { User } from './payload-types'
 import { createTestSite, TEST_MEDIA_ORIGIN, testPhoto, type TestSite } from './testing'
 
@@ -40,6 +40,21 @@ describe('uploading an image', () => {
     expect(puts.length).toBeGreaterThanOrEqual(5)
     for (const put of puts) {
       expect(put.headers['cache-control']).toBe('public, max-age=31536000, immutable')
+    }
+  })
+
+  it('stores a photo wider than the cap no wider than the cap, and still makes the sizes', async () => {
+    const image = await site.uploadImage(editor, {
+      name: 'genis.jpg',
+      width: IMAGE_STORED_MAX + 904,
+      height: 2000,
+    })
+
+    expect(image.width).toBe(IMAGE_STORED_MAX)
+    expect(image.height).toBe(Math.round((2000 * IMAGE_STORED_MAX) / (IMAGE_STORED_MAX + 904)))
+    const sizes = image.sizes as Record<string, { filename?: string | null }>
+    for (const name of ['thumbnail', 'small', 'medium', 'large', 'xlarge']) {
+      expect(sizes[name]?.filename, name).toBeTruthy()
     }
   })
 

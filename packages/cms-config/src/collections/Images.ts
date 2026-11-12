@@ -22,6 +22,12 @@ export const IMAGE_MAX_BYTES = 20 * MB
  */
 export const IMAGE_MAX_PIXELS = 50_000_000
 
+/**
+ * The stored original is capped at this width and height (never enlarged): the largest srcset
+ * size is 2560 wide, so more pixels only cost memory when Payload decodes the original (#110).
+ */
+export const IMAGE_STORED_MAX = 4096
+
 // Every upload and every generated size is re-encoded to WebP. `formatOptions` is not inherited
 // from `upload` by the sizes, so each one sets it.
 const webp: ImageUploadFormatOptions = { format: 'webp', options: { quality: 82 } }
@@ -132,6 +138,13 @@ export const Images: CollectionConfig = {
       return typeof doc.url === 'string' ? doc.url : null
     },
     formatOptions: webp,
+    // withoutEnlargement: Payload's post-crop resize would otherwise enlarge a small crop to the cap.
+    resizeOptions: {
+      width: IMAGE_STORED_MAX,
+      height: IMAGE_STORED_MAX,
+      fit: 'inside',
+      withoutEnlargement: true,
+    },
     focalPoint: true,
     imageSizes: [
       // Admin list thumbnail only; not part of any srcset.
