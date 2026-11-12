@@ -34,8 +34,8 @@ const counts = async () => ({
 const photoWidth = 1000
 
 describe('the local seed', () => {
-  // A hook, not the first test: a seed that runs out of time fails this block without leaving a
-  // half-seeded database to the tests below, which a timed-out test would (it keeps running).
+  // A hook, not the first test: a seed that runs out of time fails this block and skips its tests,
+  // instead of running them on a half-seeded database (a timed-out seed keeps running).
   beforeAll(() => seedLocal(site.cms, { photoWidth }), 60_000)
 
   it('fills published Works of all three main-media kinds, Disciplines and 6-12 featured', async () => {

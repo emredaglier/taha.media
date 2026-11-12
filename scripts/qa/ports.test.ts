@@ -22,17 +22,26 @@ const listen = (host = '127.0.0.1') =>
  * A port nobody listens on, from 20000-29999: below the ports the OS hands out by itself (Linux
  * from 32768, macOS from 49152), which every `listen(0)` and outgoing connection on the machine
  * draws from. A port from that pool, freed again, can go to another process's socket before the
- * check runs (#94); this one can only be taken by a process that asks for its number.
+ * check runs (#94); this one can only be taken by a process that asks for its number. Both probes:
+ * on macOS a bind to 127.0.0.1 succeeds even while another process listens on 0.0.0.0.
  */
-const unusedPort = async (host = '127.0.0.1'): Promise<number> => {
+const host = '127.0.0.1'
+const bindable = (port: number) =>
+  new Promise<boolean>((resolve) => {
+    const server = net.createServer()
+    server.once('error', () => resolve(false))
+    server.listen(port, host, () => server.close(() => resolve(true)))
+  })
+const answers = (port: number) =>
+  new Promise<boolean>((resolve) => {
+    const socket = net.connect(port, host)
+    socket.once('connect', () => (socket.destroy(), resolve(true)))
+    socket.once('error', () => resolve(false))
+  })
+const unusedPort = async (): Promise<number> => {
   for (;;) {
     const port = 20_000 + Math.floor(Math.random() * 10_000)
-    const server = net.createServer()
-    const free = await new Promise<boolean>((resolve) => {
-      server.once('error', () => resolve(false))
-      server.listen(port, host, () => server.close(() => resolve(true)))
-    })
-    if (free) return port
+    if ((await bindable(port)) && !(await answers(port))) return port
   }
 }
 
