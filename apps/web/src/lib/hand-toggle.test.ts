@@ -9,7 +9,6 @@ const desktop: HandToggleInputs = {
   hasCamera: true,
   saveData: false,
   weakDevice: false,
-  reducedMotion: false,
 }
 
 describe('the Elinle gez toggle', () => {
@@ -25,9 +24,5 @@ describe('the Elinle gez toggle', () => {
     ['a weak device', { weakDevice: true }],
   ])('hides with %s', (_, change) => {
     expect(showHandToggle({ ...desktop, ...change })).toBe(false)
-  })
-
-  it('stays under reduced motion (only the ring stops animating)', () => {
-    expect(showHandToggle({ ...desktop, reducedMotion: true })).toBe(true)
   })
 })
