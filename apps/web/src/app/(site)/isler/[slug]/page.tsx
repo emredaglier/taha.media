@@ -7,8 +7,8 @@ import { ExternalVideo } from '../../../../components/ExternalVideo'
 import { Picture } from '../../../../components/Picture'
 import { RichText } from '../../../../components/RichText'
 import { getPublishedWorkSlugs, getWorkBySlug, getWorks, type Work } from '../../../../data/works'
+import { stepIndex } from '../../../../lib/lightbox-step'
 import { mediaFrameStyle } from '../../../../lib/media-frame'
-import { nextWork } from '../../../../lib/next-work'
 import { seoToMetadata } from '../../../../lib/seo'
 
 type Params = { slug: string }
@@ -88,11 +88,9 @@ export default async function WorkPage({ params }: { params: Promise<Params> }) 
 
   const { work } = found
   const works = await getWorks()
-  const nextSlug = nextWork(
-    works.map((each) => each.slug),
-    work.slug,
-  )
-  const next = works.find((each) => each.slug === nextSlug)
+  const index = works.findIndex((each) => each.slug === work.slug)
+  const next =
+    index === -1 || works.length < 2 ? undefined : works[stepIndex(index, works.length, 1)]
   const facts = [
     { label: 'Yıl', value: String(work.year) },
     { label: 'Müşteri', value: work.client },

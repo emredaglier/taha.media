@@ -1,13 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 
 import { deviceReport, isWeakDevice } from './home-mode'
-import {
-  CAN_HOVER,
-  POINTER_FINE,
-  REDUCED_MOTION,
-  saveDataOn,
-  subscribeToQueries,
-} from './loop-mode'
+import { CAN_HOVER, POINTER_FINE, saveDataOn, subscribeToQueries } from './loop-mode'
 
 /** What decides whether the Elinle gez toggle is offered. */
 export type HandToggleInputs = {
@@ -20,8 +14,6 @@ export type HandToggleInputs = {
   saveData: boolean
   /** The Helix's weak-device test (`isWeakDevice`). */
   weakDevice: boolean
-  /** Doesn't hide the toggle: under reduced motion only the ring's animations switch off. */
-  reducedMotion: boolean
 }
 
 /**
@@ -35,8 +27,7 @@ export function showHandToggle(inputs: HandToggleInputs): boolean {
 }
 
 /** Listens to exactly the queries the rule reads, and to Save-Data. */
-const subscribe = (onChange: () => void) =>
-  subscribeToQueries([POINTER_FINE, CAN_HOVER, REDUCED_MOTION], onChange)
+const subscribe = (onChange: () => void) => subscribeToQueries([POINTER_FINE, CAN_HOVER], onChange)
 
 const matches = (query: string) => () => matchMedia(query).matches
 const never = () => false
@@ -74,9 +65,8 @@ function useHasCamera(enabled: boolean): boolean {
 export function useHandToggleShown(): boolean {
   const finePointer = useSyncExternalStore(subscribe, matches(POINTER_FINE), never)
   const hover = useSyncExternalStore(subscribe, matches(CAN_HOVER), never)
-  const reducedMotion = useSyncExternalStore(subscribe, matches(REDUCED_MOTION), never)
   const saveData = useSyncExternalStore(subscribe, saveDataOn, never)
   const weakDevice = useSyncExternalStore(noChanges, () => isWeakDevice(deviceReport()), never)
   const hasCamera = useHasCamera(finePointer && hover && !saveData && !weakDevice)
-  return showHandToggle({ finePointer, hover, hasCamera, saveData, weakDevice, reducedMotion })
+  return showHandToggle({ finePointer, hover, hasCamera, saveData, weakDevice })
 }
