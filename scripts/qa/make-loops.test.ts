@@ -42,27 +42,19 @@ function makeLoops(name: string, files: string[]) {
 }
 
 describe('make-loops.sh', () => {
-  it('names the loop that has no poster and does not call ffmpeg', () => {
-    const result = makeLoops('no-poster', ['videos/demo-previewloop-3-a.mp4'])
-    expect(result.status).toBe(1)
-    expect(result.stderr).toContain('videos/demo-previewloop-3-a.mp4')
-    expect(result.stderr).toMatch(/no poster/)
-    expect(result.log).toBe('')
-  })
-
-  it('turns a loop with its poster and each Showreel video into a clip at its own size', () => {
+  it('turns each loop into a 1280x720 clip with its own hue and each Showreel video into a clip at its own size', () => {
     const result = makeLoops('ok', [
       'videos/demo-previewloop-1-a.mp4',
-      'images/demo-1-x-1280x853.webp',
+      'videos/demo-previewloop-2-b.mp4',
       ...reels,
     ])
     expect(result.status).toBe(0)
-    expect(result.stdout).toContain(
-      'ok videos/demo-previewloop-1-a.mp4 <- images/demo-1-x-1280x853.webp',
-    )
+    expect(result.stdout).toContain('ok videos/demo-previewloop-1-a.mp4 (hue 47)')
+    expect(result.stdout).toContain('ok videos/demo-previewloop-2-b.mp4 (hue 94)')
     expect(result.stdout).toContain('ok videos/demo-showreel-1.mp4 (640x360)')
     expect(result.stdout).toContain('ok videos/demo-showreel-2.mp4 (360x640)')
-    expect(result.log).toContain('images/demo-1-x-1280x853.webp')
+    expect(result.log).toContain('size=1280x720')
+    expect(result.log).toContain('hue=h=47')
     expect(result.log).toContain('size=640x360')
     expect(result.log).toContain('size=360x640')
   })
@@ -72,7 +64,6 @@ describe('make-loops.sh', () => {
     (present) => {
       const result = makeLoops(`reels-${present.length}`, [
         'videos/demo-previewloop-1-a.mp4',
-        'images/demo-1-x-1280x853.webp',
         ...present,
       ])
       expect(result.status).toBe(1)
@@ -82,15 +73,14 @@ describe('make-loops.sh', () => {
   )
 
   it('still says so when there is no loop at all', () => {
-    const result = makeLoops('empty', ['images/demo-1-x-1280x853.webp'])
+    const result = makeLoops('empty', [])
     expect(result.status).toBe(1)
     expect(result.stderr).toMatch(/no videos\/demo-previewloop-/)
   })
 })
 
 // The real script on real ffmpeg (skipped where ffmpeg is missing): every clip must move, so two
-// frames 1 s apart differ. The poster is a PNG under the .webp name (ffmpeg here has no webp
-// encoder); ffmpeg reads the content, not the extension.
+// frames 1 s apart differ, and two loops with different numbers are not the same picture.
 const hasFfmpeg = ['ffmpeg', 'ffprobe'].every((tool) => spawnSync(tool, ['-version']).status === 0)
 
 describe.skipIf(!hasFfmpeg)('make-loops.sh with real ffmpeg', () => {
@@ -106,22 +96,7 @@ describe.skipIf(!hasFfmpeg)('make-loops.sh with real ffmpeg', () => {
   it('makes a Preview loop and a Showreel clip whose frames 1 s apart differ', () => {
     const dir = path.join(tmp, 'real')
     fs.mkdirSync(path.join(dir, 'videos'), { recursive: true })
-    fs.mkdirSync(path.join(dir, 'images'), { recursive: true })
-    const poster = path.join(dir, 'images/demo-1-x-1280x853.webp')
-    ff(
-      '-f',
-      'lavfi',
-      '-i',
-      'testsrc2=size=1280x853',
-      '-frames:v',
-      '1',
-      '-f',
-      'image2',
-      '-c:v',
-      'png',
-      poster,
-    )
-    for (const name of ['previewloop-1-a', 'showreel-1', 'showreel-2']) {
+    for (const name of ['previewloop-1-a', 'previewloop-2-b', 'showreel-1', 'showreel-2']) {
       ff(
         '-f',
         'lavfi',
@@ -138,5 +113,7 @@ describe.skipIf(!hasFfmpeg)('make-loops.sh with real ffmpeg', () => {
       const clip = path.join(dir, `videos/demo-${name}.mp4`)
       expect(frame(clip, 0.5)).not.toBe(frame(clip, 1.5))
     }
+    const loop = (n: string) => path.join(dir, `videos/demo-previewloop-${n}.mp4`)
+    expect(frame(loop('1-a'), 0.5)).not.toBe(frame(loop('2-b'), 0.5))
   })
 })
