@@ -53,7 +53,12 @@ describe('with Gallery items', () => {
     const poster = await pages.site.uploadImage(pages.editor, { alt: 'Döngü kapağı' })
     const loop = await pages.site.uploadVideo(pages.editor, { use: 'gallery', poster: poster.id })
     const sabah = await pages.site.uploadImage(pages.editor, { alt: 'İstanbul sabahı' })
-    const plain = await pages.site.uploadImage(pages.editor, { alt: 'Sade görsel' })
+    // Wide enough for the largest size (2560), which is the full-size file.
+    const plain = await pages.site.uploadImage(pages.editor, {
+      alt: 'Sade görsel',
+      width: 2560,
+      height: 1707,
+    })
     // The newest item comes first: the page lists C, B, A.
     await save({ kind: 'loop', video: loop.id, caption: 'Setten bir döngü', year: 2025 })
     await save({ kind: 'image', image: sabah.id, caption: 'İstanbul, sabah', year: 2025 })

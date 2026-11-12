@@ -21,7 +21,8 @@ afterAll(async () => {
 describe('uploading an image', () => {
   it('creates the WebP sizes, stores them on R2 with an immutable cache header and serves public URLs', async () => {
     const before = site.s3.puts().length
-    const image = await site.uploadImage(editor, { name: 'kis.jpg' })
+    // Wide enough for every size (the largest is 2560).
+    const image = await site.uploadImage(editor, { name: 'kis.jpg', width: 2560, height: 1707 })
 
     const sizes = image.sizes as Record<string, { url?: string; mimeType?: string; width?: number }>
     for (const name of ['small', 'medium', 'large', 'xlarge']) {
@@ -129,7 +130,11 @@ describe('with no object storage (development)', () => {
   it('keeps the files on local disk and serves them from the admin API path', async () => {
     const local = await createTestSite({ objectStorage: false })
     try {
-      const image = await local.uploadImage(await local.createEditor(), { name: 'yerel.jpg' })
+      const image = await local.uploadImage(await local.createEditor(), {
+        name: 'yerel.jpg',
+        width: 1920,
+        height: 1280,
+      })
       expect(image.url).toBe(`/api/images/file/${image.filename}`)
       expect(local.s3.requests).toHaveLength(0)
       const onDisk = fs.readdirSync(path.join(path.dirname(local.databasePath), 'images'))

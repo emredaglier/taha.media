@@ -17,7 +17,13 @@ afterAll(async () => {
 describe('a Work’s preview loop', () => {
   it('is read with width, height, duration, audio and poster; a Work without one reads null', async () => {
     const editor = await site.createEditor()
-    const loop = await site.uploadVideo(editor, { use: 'previewLoop', file: 'portrait.mp4' })
+    // A poster of its own size, so the width read back does not depend on the upload default.
+    const poster = await site.uploadImage(editor, { width: 900, height: 600 })
+    const loop = await site.uploadVideo(editor, {
+      use: 'previewLoop',
+      file: 'portrait.mp4',
+      poster: poster.id,
+    })
     const save = async (slug: string, previewLoop?: number) =>
       site.cms.create({
         collection: 'works',
@@ -44,7 +50,7 @@ describe('a Work’s preview loop', () => {
       height: 640,
       hasAudio: false,
       src: loop.url,
-      poster: { alt: 'Bir deneme fotoğrafı', width: 3000 },
+      poster: { alt: 'Bir deneme fotoğrafı', width: 900 },
     })
     expect(withLoop.work.previewLoop?.duration).toBeCloseTo(2, 1)
 

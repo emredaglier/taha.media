@@ -29,10 +29,13 @@ const as = { user: () => editor, overrideAccess: false } as const
 const image = async () => (await site.uploadImage(editor)).id
 
 let works = 0
-/** Saves a new Work as the admin does; the cover and main image default to fresh Images. */
-async function createWork(status: 'draft' | 'published', extra: Partial<Work> = {}): Promise<Work> {
+/** Saves a new Work as the admin does; the cover and main image default to a fresh Image. */
+async function createWork(
+  status: 'draft' | 'published',
+  extra: Partial<Work> & { cover?: number } = {},
+): Promise<Work> {
   const n = ++works
-  const cover = await image()
+  const cover = extra.cover ?? (await image())
   return site.cms.create({
     collection: 'works',
     data: {

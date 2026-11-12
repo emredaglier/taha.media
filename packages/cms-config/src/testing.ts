@@ -120,7 +120,11 @@ export type TestSite = {
    * `revalidations.length = 0`. Recorded before the `revalidate` transport (if any) is called.
    */
   revalidations: string[][]
-  /** Uploads a generated photo as an Editor would; `alt` defaults to a sample text. */
+  /**
+   * Uploads a generated photo as an Editor would. The default is 800×533, the smallest photo that
+   * still gets a `small` srcset size; a test of larger sizes passes `width` and `height`. `alt`
+   * defaults to a sample text.
+   */
   uploadImage: (
     editor: User,
     options?: { name?: string; width?: number; height?: number; alt?: string },
@@ -210,7 +214,7 @@ export async function createTestSite({
       }),
     s3,
     revalidations,
-    uploadImage: async (editor, { name = 'photo.jpg', width = 3000, height = 2000, alt } = {}) => {
+    uploadImage: async (editor, { name = 'photo.jpg', width = 800, height = 533, alt } = {}) => {
       const data = await testPhoto(width, height)
       return cms.create({
         collection: 'images',
