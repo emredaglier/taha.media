@@ -15,6 +15,7 @@
     "qa": "node scripts/qa/qa.ts",
     "build": "pnpm -r build",
     "dev": "pnpm --filter @taha/web dev",
+    "dev:full": "pnpm --parallel --filter @taha/web --filter @taha/cms dev",
     "seed": "pnpm --filter @taha/cms seed",
     "seed:production": "pnpm --filter @taha/cms seed:production",
     "user:reset-password": "pnpm --filter @taha/cms user:reset-password"

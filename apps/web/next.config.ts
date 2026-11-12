@@ -38,6 +38,21 @@ const nextConfig: NextConfig = {
   ...(process.env.ASSET_PREFIX ? { assetPrefix: process.env.ASSET_PREFIX } : {}),
   ...(process.env.DEPLOYMENT_ID ? { deploymentId: process.env.DEPLOYMENT_ID } : {}),
   ...(uploadSourceMaps ? { productionBrowserSourceMaps: true } : {}),
+  // `next dev` only: the CMS's local media URLs are relative, so the browser asks web for them; same-origin also avoids CORS for WebGL textures.
+  ...(process.env.NODE_ENV === 'development'
+    ? {
+        rewrites: async () => [
+          {
+            source: '/api/images/file/:path*',
+            destination: 'http://localhost:3001/api/images/file/:path*',
+          },
+          {
+            source: '/api/videos/file/:path*',
+            destination: 'http://localhost:3001/api/videos/file/:path*',
+          },
+        ],
+      }
+    : {}),
   webpack: (config, { isServer, dev, webpack }) => {
     // Hand control's tracker (MediaPipe's WASM and the model, about 22 MB) is reached only by a
     // dynamic import in an effect after the camera grant, which never runs on the server. Without

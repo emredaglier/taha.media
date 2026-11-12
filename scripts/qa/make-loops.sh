@@ -1,10 +1,11 @@
 #!/bin/sh
 # QA only (#55): the dev seed's Preview loops are one flat brown fixture (loop-ok.mp4), so every
-# playing card looks the same. Replace each QA loop file with a 4 s, 1280x720 clip of its Work's
-# poster with a slow push-in, so playing, freezing and resuming are visible.
-# The two Showreel files (videos/demo-showreel-*.mp4) are flat too: each becomes a 4 s test-pattern
-# clip (testsrc2: timecode and moving line) at the width and height it already has, so those stay
-# true. The stored duration stays the fixture's 2 s; the web reads it from the element.
+# playing card looks the same. Replace each QA loop file with a 4 s, 1280x720 test-pattern clip
+# (testsrc2: timecode and moving line) in a hue of its own per card, so playing, freezing and
+# resuming are visible and the cards differ.
+# The two Showreel files (videos/demo-showreel-*.mp4) are flat too: each becomes the same kind of
+# 4 s test-pattern clip at the width and height it already has, so those stay true.
+# The stored duration stays the fixture's 2 s; the web reads it from the element.
 # Needs ffmpeg and ffprobe.
 # Usage: sh make-loops.sh <qa dir>
 set -e
@@ -23,20 +24,11 @@ count=0
 for loop in videos/demo-previewloop-*.mp4; do
   [ -e "$loop" ] || continue
   n=$(basename "$loop" | sed -E 's/demo-previewloop-([0-9]+)-.*/\1/')
-  poster=""
-  for candidate in images/demo-"$n"-*-1280x853.webp; do
-    [ -e "$candidate" ] && poster=$candidate
-    break
-  done
-  if [ -z "$poster" ]; then
-    echo "make-loops.sh: no poster images/demo-$n-*-1280x853.webp for $loop; was the dev seed run in $1?" >&2
-    exit 1
-  fi
-  ffmpeg -v error -y -loop 1 -framerate 25 -i "$poster" -t 4 \
-    -vf "crop=1280:720,zoompan=z='1+0.0012*on':d=1:s=1280x720:fps=25" \
+  ffmpeg -v error -y -f lavfi -i "testsrc2=size=1280x720:rate=25" -t 4 \
+    -vf "hue=h=$((n * 47 % 360))" \
     -c:v libx264 -pix_fmt yuv420p -movflags +faststart "$loop.new.mp4"
   mv "$loop.new.mp4" "$loop"
-  echo "ok $loop <- $poster"
+  echo "ok $loop (hue $((n * 47 % 360)))"
   count=$((count + 1))
 done
 if [ "$count" -eq 0 ]; then
