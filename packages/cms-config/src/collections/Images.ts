@@ -24,7 +24,8 @@ export const IMAGE_MAX_PIXELS = 50_000_000
 
 /**
  * The stored original is capped at this width and height (never enlarged): the largest srcset
- * size is 2560 wide, so more pixels only cost memory when Payload decodes the original (#110).
+ * size is 2560 wide, so more pixels only cost memory when Payload encodes the stored WebP and when
+ * it reprocesses the stored file (re-crop, focal point). The sizes are still made from the upload.
  */
 export const IMAGE_STORED_MAX = 4096
 
@@ -138,7 +139,8 @@ export const Images: CollectionConfig = {
       return typeof doc.url === 'string' ? doc.url : null
     },
     formatOptions: webp,
-    // withoutEnlargement: Payload's post-crop resize would otherwise enlarge a small crop to the cap.
+    // withoutEnlargement: smaller uploads stay as they are. It also makes Payload skip its post-crop
+    // resize, so a crop made at upload is stored at the crop's size, uncapped (as before #110).
     resizeOptions: {
       width: IMAGE_STORED_MAX,
       height: IMAGE_STORED_MAX,

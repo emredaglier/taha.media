@@ -27,6 +27,7 @@ describe('uploading an image', () => {
     const before = site.s3.puts().length
     // Wide enough for every size (the largest is 2560).
     const image = await site.uploadImage(editor, { name: 'kis.jpg', width: 2560, height: 1707 })
+    expect(image.width).toBe(2560) // under the cap: never enlarged
 
     const sizes = image.sizes as Record<string, { url?: string; mimeType?: string; width?: number }>
     for (const name of ['small', 'medium', 'large', 'xlarge']) {
@@ -44,14 +45,10 @@ describe('uploading an image', () => {
   })
 
   it('stores a photo wider than the cap no wider than the cap, and still makes the sizes', async () => {
-    const image = await site.uploadImage(editor, {
-      name: 'genis.jpg',
-      width: IMAGE_STORED_MAX + 904,
-      height: 2000,
-    })
+    const image = await site.uploadImage(editor, { name: 'genis.jpg', width: 5000, height: 2000 })
 
     expect(image.width).toBe(IMAGE_STORED_MAX)
-    expect(image.height).toBe(Math.round((2000 * IMAGE_STORED_MAX) / (IMAGE_STORED_MAX + 904)))
+    expect(image.height).toBe(1638) // 2000 * 4096 / 5000, rounded
     const sizes = image.sizes as Record<string, { filename?: string | null }>
     for (const name of ['thumbnail', 'small', 'medium', 'large', 'xlarge']) {
       expect(sizes[name]?.filename, name).toBeTruthy()
