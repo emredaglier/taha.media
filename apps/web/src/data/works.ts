@@ -1,7 +1,6 @@
 import {
   DISCIPLINES,
   resolveSeo,
-  richTextToPlainText,
   toImage,
   toMainMedia,
   toVideo,
@@ -19,6 +18,7 @@ import { HOME_TAG, WORKS_TAG, workTag } from '@taha/cms-config/tags'
 import { getWebPayload } from '../lib/payload'
 import { isPreviewInstance } from '../lib/preview'
 import { cachedRead, contentVersions } from './cache'
+import { richText } from './pages'
 
 /**
  * A published Work as the site renders it (GLOSSARY: Work); on the preview instance, its latest
@@ -72,12 +72,8 @@ function toCover(cover: WorkDoc['cover']): ImageRead {
 }
 
 /** Populated Images only: an id (not populated) cannot be rendered, so it is skipped. */
-const populated = (value: number | ImageDoc | null | undefined): ImageRead[] =>
+const stillImages = (value: number | ImageDoc | null | undefined): ImageRead[] =>
   typeof value === 'object' && value !== null ? [toImage(value)] : []
-
-/** The description counts as empty when it has no text at all (an editor state with one blank paragraph). */
-const hasText = (description: WorkDoc['description']): boolean =>
-  richTextToPlainText(description) !== ''
 
 function toPreviewLoop(video: WorkDoc['previewLoop']): VideoRead | null {
   return typeof video === 'object' && video !== null ? toVideo(video as VideoDoc) : null
@@ -99,8 +95,8 @@ const toWork = (doc: WorkDoc): Work => {
     client: doc.client || null,
     role: doc.role || null,
     credits: (doc.credits ?? []).map(({ name, role }) => ({ name, role: role || null })),
-    description: doc.description && hasText(doc.description) ? doc.description : null,
-    stills: (doc.stills ?? []).flatMap(({ image }) => populated(image)),
+    description: richText(doc.description),
+    stills: (doc.stills ?? []).flatMap(({ image }) => stillImages(image)),
     seo: resolveSeo({
       overrides: doc.seo,
       title: doc.title,

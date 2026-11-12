@@ -1,6 +1,7 @@
 import { ValidationError, type CollectionBeforeValidateHook, type GroupField } from 'payload'
 
 import { EXTERNAL_PROVIDERS, EXTERNAL_URL_REFUSAL, parseExternalVideoUrl } from './external-video'
+import { idOf, isSet } from './media-references'
 import { videoField } from './video-field'
 
 export const MAIN_MEDIA_KINDS = ['video', 'external', 'image'] as const
@@ -83,11 +84,6 @@ const KIND_FIELDS: Record<MainMediaKind, string[]> = {
 }
 const ALL_FIELDS = Object.values(KIND_FIELDS).flat()
 
-const idOf = (value: unknown): unknown =>
-  typeof value === 'object' && value !== null ? (value as { id: unknown }).id : value
-
-const present = (value: unknown): boolean => value !== undefined && value !== null && value !== ''
-
 type Row = Record<string, unknown>
 
 /**
@@ -131,13 +127,13 @@ export const mainMediaHook: CollectionBeforeValidateHook = ({
   const status = data._status ?? originalDoc?._status
   if (status === 'published' && errors.length === 0) {
     if (!kind) fail('kind', 'Tür', NO_MAIN_MEDIA_MESSAGE)
-    else if (kind === 'video' && !present(next.video))
+    else if (kind === 'video' && !isSet(next.video))
       fail('video', 'Ana video', NO_MAIN_VIDEO_MESSAGE)
-    else if (kind === 'image' && !present(next.image))
+    else if (kind === 'image' && !isSet(next.image))
       fail('image', 'Ana görsel', NO_MAIN_IMAGE_MESSAGE)
     else if (kind === 'external') {
-      if (!present(next.externalUrl)) fail('externalUrl', 'Video adresi', NO_EXTERNAL_URL_MESSAGE)
-      if (!present(next.externalPoster))
+      if (!isSet(next.externalUrl)) fail('externalUrl', 'Video adresi', NO_EXTERNAL_URL_MESSAGE)
+      if (!isSet(next.externalPoster))
         fail('externalPoster', 'Kapak görseli', NO_EXTERNAL_POSTER_MESSAGE)
     }
   }

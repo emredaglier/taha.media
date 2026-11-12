@@ -46,8 +46,12 @@ export type MediaRefs = { target: MediaCollection; ids: (number | string)[] }[]
 
 type Row = Record<string, unknown>
 
-const idOf = (value: unknown): unknown =>
+/** A relationship value is an id, or a populated document with one. */
+export const idOf = (value: unknown): unknown =>
   typeof value === 'object' && value !== null ? (value as { id: unknown }).id : value
+
+export const isSet = (value: unknown): boolean =>
+  value !== null && value !== undefined && value !== ''
 
 /** Every id stored at a dotted path, walking through arrays (`clients.logo`). */
 function idsAt(value: unknown, path: string[]): string[] {

@@ -8,6 +8,7 @@ import {
 } from 'payload'
 
 import { editor } from '../access'
+import { isSet } from '../media-references'
 import { videoField } from '../video-field'
 
 const GALLERY_YEAR_MIN = 1990
@@ -51,8 +52,6 @@ const yearField: NumberField = {
     return valid || YEAR_MESSAGE
   },
 }
-
-const isSet = (value: unknown): boolean => value !== null && value !== undefined && value !== ''
 
 /**
  * An item is exactly one of an Image or a Gallery loop (GLOSSARY: Gallery item): the field that

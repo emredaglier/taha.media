@@ -121,12 +121,12 @@ EXPOSE 3001
 CMD ["node", "apps/cms/server.js"]
 
 # --- migrate ----------------------------------------------------------------------------------
-# One-off container for `payload migrate` and the production seed (ADR-0013). Payload's CLI loads
-# the TypeScript config and migrations with its bundled tsx, so this image needs the cms-config
-# source plus its production dependencies, but not Next.js (which would add ~200 MB).
+# One-off container for `payload migrate`, the production seed and password resets (ADR-0013).
+# Payload's CLI loads the TypeScript config and migrations with its bundled tsx, so this image needs
+# the cms-config source plus its production dependencies, but not Next.js (which would add ~200 MB).
 FROM build AS migrate-files
 RUN pnpm --filter @taha/cms-config deploy --prod --legacy /deploy
-COPY infra/migrate/payload.config.ts infra/migrate/seed-production.ts /deploy/
+COPY infra/migrate/payload.config.ts infra/migrate/seed-production.ts infra/migrate/reset-password.ts /deploy/
 
 FROM runtime AS migrate
 COPY --from=migrate-files --chown=app:app /deploy ./

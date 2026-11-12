@@ -21,7 +21,7 @@ import { SiteMenu } from './SiteMenu'
 let container: HTMLElement
 let root: Root
 
-const COPYRIGHT = '© 2026 Taha Çiftçi'
+const COPYRIGHT = '© Taha Çiftçi'
 const render = () => act(() => root.render(<SiteMenu copyright={COPYRIGHT} />))
 const toggle = () => container.querySelector('summary') as HTMLElement
 const links = () => [...container.querySelectorAll<HTMLAnchorElement>('nav a')]

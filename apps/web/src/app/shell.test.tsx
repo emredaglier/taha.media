@@ -56,7 +56,7 @@ describe.each(['/', '/yok-boyle-bir-sayfa'])('the shell around %s', (url) => {
   })
 })
 
-const COPYRIGHT = `© ${new Date().getFullYear()} Taha Çiftçi`
+const COPYRIGHT = '© Taha Çiftçi'
 
 describe('the footer', () => {
   beforeAll(async () => {

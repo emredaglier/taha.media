@@ -23,6 +23,7 @@ import { About } from './globals/About'
 import { Privacy } from './globals/Privacy'
 import { Site } from './globals/Site'
 import type { PageSlug } from './tags'
+import { VIDEO_LIMITS } from './video-limits'
 import { parsePreviewUrl, withPagePreview, withWorkPreview } from './preview'
 import { buildDatabase, DEFAULT_BUSY_TIMEOUT_MS } from './db'
 import type { MediaCollection } from './media-references'
@@ -51,6 +52,14 @@ export const TYPES_FILE = path.join(here, 'payload-types.ts')
 
 /** The only content locale for now (ADR-0002). Adding `en` later is a config change. */
 export const CONTENT_LOCALE = 'tr'
+
+const MB = 1024 * 1024
+/**
+ * Payload's multipart defaults (20 MB a file, 50 MB a request) answer an English 413 before our
+ * Turkish cap check runs, so the file limit sits 4 MB above the largest video cap.
+ */
+const UPLOAD_FILE_LIMIT =
+  Math.max(...Object.values(VIDEO_LIMITS).map((limits) => limits.maxBytes)) + 4 * MB
 
 export type SiteConfigOptions = {
   /**
@@ -164,6 +173,7 @@ export function buildSiteConfig(options: SiteConfigOptions): Promise<SanitizedCo
         localVideosDir(options.databasePath),
       ),
     ],
+    upload: { limits: { fileSize: UPLOAD_FILE_LIMIT }, requestSizeLimit: UPLOAD_FILE_LIMIT + MB },
     cors: options.origins ?? [],
     csrf: options.origins ?? [],
     email: emailAdapter,
