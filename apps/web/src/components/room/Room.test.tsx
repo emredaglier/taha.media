@@ -4,6 +4,9 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 
 import { LOADING_CLASS } from '../../lib/home-loader'
+import { stopForPlace } from '../../lib/room-model'
+import { OPENING_SECONDS } from '../../lib/room-opening'
+import { rememberWork } from '../../lib/room-start'
 import type { HelixWork } from '../FeaturedWorks'
 import { Room } from './Room'
 import { RoomUnavailable, type RoomRenderer } from './renderer'
@@ -19,9 +22,15 @@ vi.mock('./renderer', async (importOriginal) => ({
   createRoomRenderer: renderer.create,
 }))
 
-const works = [{ slug: 'a' }] as HelixWork[]
+const works = [{ slug: 'a' }, { slug: 'b' }, { slug: 'c' }] as HelixWork[]
+const showreel = { src: 'https://cdn.example/reel.mp4' }
 
-type Frame = { progress: number; pointer: { nx: number; ny: number; dx: number } | null }
+type Frame = {
+  progress: number
+  pointer: { nx: number; ny: number; dx: number } | null
+  /** The opening as it was when drawn (the room reuses one object). */
+  opening: { reel: number; fly: number; settled: boolean }
+}
 let draws: Frame[]
 let loss: (() => void) | null
 let destroy: Mock<() => void>
@@ -47,7 +56,7 @@ let root: Root
 let failed: Mock<() => void>
 
 const mount = async () => {
-  await act(async () => root.render(<Room works={works} onFail={failed} />))
+  await act(async () => root.render(<Room works={works} showreel={showreel} onFail={failed} />))
   await act(async () => {}) // the stills' promise
 }
 const canvas = () => container.querySelector('canvas')!
@@ -62,7 +71,14 @@ beforeEach(() => {
   clock = 0
   const fake: RoomRenderer = {
     ready: Promise.resolve(),
-    draw: (frame) => draws.push({ progress: frame.progress, pointer: frame.pointer }),
+    draw: (frame) => {
+      const { reel, fly, settled } = frame.opening
+      draws.push({
+        progress: frame.progress,
+        pointer: frame.pointer,
+        opening: { reel, fly, settled },
+      })
+    },
     resize: vi.fn(),
     destroy,
   }
@@ -95,6 +111,8 @@ afterEach(() => {
   act(() => root.unmount())
   container.remove()
   document.documentElement.classList.remove(LOADING_CLASS)
+  delete document.documentElement.dataset.roomOpened
+  window.history.replaceState(null, '')
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
   Object.defineProperty(document, 'hidden', { value: false, configurable: true })
@@ -201,5 +219,103 @@ describe('the Edit Room on Home', () => {
     expect(document.documentElement.dataset.home).toBeUndefined()
     expect(document.documentElement.dataset.helixPhase).toBeUndefined()
     root = createRoot(container) // for the afterEach
+  })
+
+  describe('the opening (#131)', () => {
+    /** The document was loaded on Home, as the loader's script saw it. */
+    const loadedOnHome = () =>
+      vi
+        .spyOn(performance, 'getEntriesByType')
+        .mockReturnValue([{ type: 'navigate', name: 'https://taha.media/' }] as never)
+    const pointerDown = () => {
+      const event = Object.assign(new MouseEvent('pointerdown', { button: 0 }), {
+        pointerId: 1,
+        isPrimary: true,
+      })
+      canvas().setPointerCapture = vi.fn()
+      canvas().dispatchEvent(event)
+    }
+
+    it('plays on a document loaded on Home: it starts at the middle monitor and reaches rest', async () => {
+      loadedOnHome()
+      await mount()
+      runFrame()
+      expect(draws[0]!.opening).toMatchObject({ reel: 1, fly: 1, settled: false })
+      expect(renderer.create.mock.calls[0]![4]).toBe(showreel.src)
+
+      runFrames(Math.ceil((OPENING_SECONDS * 1000) / 16) + 10)
+      expect(draws.at(-1)!.opening).toMatchObject({ reel: 0, fly: 0, settled: true })
+    })
+
+    it('is skipped by a click or tap, which lands on rest and picks no Work itself', async () => {
+      loadedOnHome()
+      await mount()
+      runFrames(5)
+      expect(draws.at(-1)!.opening.settled).toBe(false)
+      pointerDown()
+      runFrame()
+      expect(draws.at(-1)!.opening).toMatchObject({ reel: 0, fly: 0, settled: true })
+    })
+
+    it('does not play on client navigation to Home: rest from the first frame, no Showreel loaded', async () => {
+      await mount() // no document load on Home: the page was reached by a client navigation
+      runFrame()
+      expect(draws[0]!.opening.settled).toBe(true)
+      expect(renderer.create.mock.calls[0]![4]).toBeNull()
+    })
+
+    it('does not play a second time in the same document', async () => {
+      loadedOnHome()
+      await mount()
+      runFrame()
+      act(() => root.unmount())
+      root = createRoot(container)
+      draws.length = 0
+      await mount()
+      runFrame()
+      expect(draws[0]!.opening.settled).toBe(true)
+    })
+
+    it("does not play coming back from a Work page, and rests at that Work's stop", async () => {
+      loadedOnHome()
+      rememberWork('c')
+      await mount()
+      runFrame()
+      expect(draws[0]!.opening.settled).toBe(true)
+      expect(draws[0]!.progress).toBeCloseTo(stopForPlace(2, false).progress, 5)
+      expect(renderer.create.mock.calls[0]![4]).toBeNull()
+    })
+
+    it('remembers the Work whose link is followed, for the way back', async () => {
+      await mount()
+      runFrame()
+      const link = document.createElement('a')
+      link.href = '/isler/b'
+      link.setAttribute('data-work-slug', 'b')
+      link.addEventListener('click', (event) => event.preventDefault())
+      document.body.append(link)
+      link.click()
+      link.remove()
+      expect(window.history.state).toMatchObject({ roomWork: 'b' })
+    })
+
+    it('keeps the loader until the room has what it waits for', async () => {
+      let ready!: () => void
+      renderer.create.mockImplementation((_canvas, _works, _touch, onFail: () => void) => {
+        loss = onFail
+        return {
+          ready: new Promise<void>((resolve) => (ready = resolve)),
+          draw: () => {},
+          resize: vi.fn(),
+          destroy,
+        } satisfies RoomRenderer
+      })
+      await mount()
+      expect(runFrame()).toBe(false)
+      expect(document.documentElement.classList.contains(LOADING_CLASS)).toBe(true)
+      await act(async () => ready())
+      runFrame()
+      expect(document.documentElement.classList.contains(LOADING_CLASS)).toBe(false)
+    })
   })
 })

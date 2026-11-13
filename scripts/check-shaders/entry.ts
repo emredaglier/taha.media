@@ -9,6 +9,7 @@ import {
   type HelixFrame,
 } from '../../apps/web/src/components/helix/renderer'
 import { createRoomRenderer } from '../../apps/web/src/components/room/renderer'
+import { createOpeningState, openingAt } from '../../apps/web/src/lib/room-opening'
 import {
   pixelStats,
   roomStats,
@@ -171,13 +172,19 @@ async function checkRoom(
   if (!gl) throw new Error('The room canvas has no WebGL2 context')
   room.resize()
   await room.ready
+  const opening = createOpeningState()
   const draw = (progress: number) =>
     room.draw({
       seconds: 1,
       dt: 1 / 60,
       progress,
       pointer: { nx: 0.3, ny: -0.2, dx: 8 },
+      opening,
     })
+  // The opening a second in (the camera still pulling back, half the screens awake), then at rest.
+  openingAt(1.2, opening)
+  for (let step = 0; step < 5; step++) draw(0)
+  openingAt(Infinity, opening)
   for (const progress of [0.5, 1, 0.5]) for (let step = 0; step < 30; step++) draw(progress)
   const glError = gl.getError()
   draw(0)

@@ -2,12 +2,15 @@ import * as THREE from 'three'
 
 import { STATEMENT_SELECTOR } from '../../lib/home-marks'
 import { livePlaces } from '../../lib/room-model'
+import { createOpeningState } from '../../lib/room-opening'
 import { pixelRatioFor, throughGlass } from '../../lib/room-motion'
 import { ROOM_TUNING } from '../../lib/room-tuning'
 import type { HelixWork } from '../FeaturedWorks'
 import { createGlass } from './glass'
 import { createRoomLoops } from './loops'
+import { readyWithin } from './ready'
 import { createRoomScene, RoomUnavailable, type RoomFrame, type RoomPalette } from './scene'
+import { createShowreel } from './showreel'
 
 export { RoomUnavailable }
 
@@ -15,7 +18,12 @@ export { RoomUnavailable }
 export type RoomMedia = Pick<HelixWork, 'poster' | 'previewLoop'>
 
 export type RoomRenderer = {
-  /** Resolves once the stills have loaded or failed, or after `ROOM_TUNING.stillsWaitMs`: a place without its still keeps the placeholder grey. */
+  /**
+   * Resolves once the Statement's font, the stills and the Showreel (when the room opens) have
+   * loaded or failed, or after `ROOM_TUNING.stillsWaitMs`: a place without its still keeps the
+   * placeholder grey, and a Showreel that can't be read leaves the opening on the middle
+   * monitor's own Work.
+   */
   ready: Promise<void>
   draw(frame: RoomFrame): void
   /** Matches the drawing buffer to the canvas's size on screen (device pixel ratio capped, lower on touch). */
@@ -72,6 +80,8 @@ export function createRoomRenderer(
   works: readonly RoomMedia[],
   touch: boolean,
   onFail: (error: RoomUnavailable) => void,
+  /** The Showreel's file, when the room opens with it (the opening is the only place it is used). */
+  showreel: string | null = null,
 ): RoomRenderer {
   let renderer: THREE.WebGLRenderer
   try {
@@ -135,16 +145,16 @@ export function createRoomRenderer(
       else room.clearStill(place)
     },
   })
+  const reel = showreel
+    ? createShowreel(showreel, canvas.parentElement ?? document.body, room)
+    : null
   const hasWork = Array.from({ length: ROOM_TUNING.places }, (_, place) => place < placed.length)
   const live: boolean[] = []
-  // A still that hangs doesn't hold the room back: after the wait it draws with that place's placeholder.
-  let waiting: ReturnType<typeof setTimeout> | undefined
-  const give = new Promise<void>((resolve) => {
-    waiting = setTimeout(resolve, ROOM_TUNING.stillsWaitMs)
-  })
-  const ready = Promise.race([
-    Promise.all([
+  // The room draws once all it waits for is in, or after `stillsWaitMs`: what hangs (a still, the Showreel) is left out.
+  const ready = readyWithin(
+    [
       statementReady,
+      reel?.ready,
       ...placed.map(async ({ poster }, place) => {
         const image = await loadStill(poster.src)
         if (!image || destroyed) return
@@ -152,12 +162,18 @@ export function createRoomRenderer(
         // A still that comes late (after the wait) never paints over a loop's frame.
         if (!loops.showsFrame(place)) room.setStill(place, image, poster.focalPoint)
       }),
-    ]).then(() => undefined),
-    give,
-  ]).finally(() => clearTimeout(waiting))
+    ],
+    ROOM_TUNING.stillsWaitMs,
+  )
 
   // What a frame hands the scene: the pointer mapped back through the bend (one object, reused).
-  const seen: RoomFrame = { seconds: 0, dt: 0, progress: 0, pointer: null }
+  const seen: RoomFrame = {
+    seconds: 0,
+    dt: 0,
+    progress: 0,
+    pointer: null,
+    opening: createOpeningState(),
+  }
   const seenPointer = { nx: 0, ny: 0, dx: 0 }
   let aspect = 1
 
@@ -168,10 +184,12 @@ export function createRoomRenderer(
       seen.dt = frame.dt
       seen.progress = frame.progress
       seen.pointer = frame.pointer && seenPointer
+      seen.opening = frame.opening
       if (frame.pointer) {
         throughGlass(frame.pointer.nx, frame.pointer.ny, aspect, seenPointer)
         seenPointer.dx = frame.pointer.dx
       }
+      reel?.update(seen.opening)
       room.update(seen)
       // Only the screens nearest the camera play; the others hold their last frame or their still.
       loops.update(
@@ -191,10 +209,10 @@ export function createRoomRenderer(
     },
     destroy() {
       destroyed = true
-      clearTimeout(waiting)
       canvas.removeEventListener('webglcontextlost', lost)
       glass.dispose()
       loops.destroy()
+      reel?.destroy()
       room.dispose()
       freeGl()
     },

@@ -54,17 +54,17 @@ void main(){
 #endif
 }`
 
-/** A screen: its cell of the atlas (`uRect`), at brightness `uB`, darker towards the corners. */
+/** A screen: its cell of the atlas (`uRect`), or `uReelMix` of the Showreel (`uReel`) over it, at brightness `uB`, darker towards the corners. */
 export const SCREEN_VS =
   'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.); }'
 
 export const SCREEN_FS = `
 precision highp float;
-uniform sampler2D uMap; uniform vec4 uRect; uniform float uB;
+uniform sampler2D uMap; uniform sampler2D uReel; uniform vec4 uRect; uniform float uB, uReelMix;
 varying vec2 vUv;
 void main(){
   vec2 uv = clamp(vUv, .003, .997);
-  vec3 c = texture2D(uMap, uRect.xy + uv * uRect.zw).rgb;
+  vec3 c = mix(texture2D(uMap, uRect.xy + uv * uRect.zw).rgb, texture2D(uReel, uv).rgb, uReelMix);
   vec2 q = uv - .5;
   gl_FragColor = vec4(c * uB * (1. - .5 * dot(q, q)), 1.);
 }`

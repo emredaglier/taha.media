@@ -1,0 +1,70 @@
+import type { OpeningState } from '../../lib/room-opening'
+
+/**
+ * The Showreel for the opening (#131): one more video, loaded with the room, played from the first
+ * frame of the opening and let go of once its share of the middle monitor has handed over. A file
+ * that can't be read is let go at once and the opening shows the middle monitor's own Work.
+ */
+export function createShowreel(
+  src: string,
+  /** Where the hidden `<video>` lives in the page (iOS decodes a video only when it is in the page). */
+  host: Element,
+  room: { setShowreel(video: HTMLVideoElement | null): void },
+) {
+  const video = document.createElement('video')
+  video.crossOrigin = 'anonymous'
+  video.muted = true
+  video.defaultMuted = true
+  video.loop = true
+  video.playsInline = true
+  video.preload = 'auto'
+  video.setAttribute('aria-hidden', 'true')
+  video.tabIndex = -1
+  video.style.cssText =
+    'position:absolute;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none'
+  let done = false
+  const drop = () => {
+    if (done) return
+    done = true
+    room.setShowreel(null)
+    video.pause()
+    video.removeAttribute('src')
+    video.load()
+    video.remove()
+  }
+  const ready = new Promise<void>((resolve) => {
+    // The middle monitor shows it once it has a frame; an error leaves the opening without it.
+    video.addEventListener(
+      'loadeddata',
+      () => {
+        if (!done) room.setShowreel(video)
+        resolve()
+      },
+      { once: true },
+    )
+    video.addEventListener(
+      'error',
+      () => {
+        drop()
+        resolve()
+      },
+      { once: true },
+    )
+  })
+  video.src = src
+  host.append(video)
+  let started = false
+  return {
+    ready,
+    update(opening: OpeningState) {
+      if (done) return
+      if (opening.reel <= 0) return drop()
+      if (!started && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+        started = true
+        // Refused or unreadable: the Work's own picture, not a frozen frame.
+        video.play().catch(drop)
+      }
+    },
+    destroy: drop,
+  }
+}

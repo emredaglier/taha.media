@@ -4,15 +4,28 @@ import { useEffect, useEffectEvent, useRef } from 'react'
 
 import { loaded } from '../../lib/home-loader'
 import { isMenuOpen } from '../../lib/menu-a11y'
+import { WORK_LINK_ATTRIBUTE } from '../../lib/home-marks'
 import { createScroll, scrollBy, stepScroll } from '../../lib/room-model'
-import { wheelPixels } from '../../lib/room-motion'
+import { isPortrait, wheelPixels } from '../../lib/room-motion'
+import {
+  createOpening,
+  createOpeningState,
+  isOpening,
+  openingAt,
+  skipOpening,
+  stepOpening,
+} from '../../lib/room-opening'
+import { markRoomOpened, readRoomStart, rememberWork } from '../../lib/room-start'
 import type { HelixWork } from '../FeaturedWorks'
 import { createRoomRenderer, RoomUnavailable, type RoomRenderer } from './renderer'
 import type { RoomFrame } from './scene'
 
 /**
  * The Edit Room on Home (#127), loaded only on a device that passed the capability check. It draws
- * the room at rest: each Featured Work's still on its place, spare places dark. The wheel and a
+ * the room: each Featured Work's loop or still on its place, spare places dark. A document loaded
+ * on Home opens with the middle monitor waking on the Showreel (#131, `room-opening`); a click or
+ * tap skips it. Client navigation to Home, and coming back from a Work page, start at rest, the
+ * latter at the stop that shows that Work (`room-start`). The wheel and a
  * vertical drag move the camera along the path and the page never scrolls (ADR-0103); the pointer
  * turns the view a little. The static Home stays in the page underneath, visually hidden, so
  * screen readers and keyboards still reach every Work.
@@ -21,7 +34,16 @@ import type { RoomFrame } from './scene'
  * off. If WebGL2 can't start, a shader doesn't compile or the context is lost, the loader comes
  * off, `onFail` runs and the static Home is back as it was. A hidden tab draws nothing.
  */
-export function Room({ works, onFail }: { works: HelixWork[]; onFail: () => void }) {
+export function Room({
+  works,
+  showreel,
+  onFail,
+}: {
+  works: HelixWork[]
+  /** The Showreel's 16:9 loop, for the opening; none: the opening starts on the middle monitor's own Work. */
+  showreel: { src: string } | null
+  onFail: () => void
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const fail = useEffectEvent(onFail)
 
@@ -33,9 +55,17 @@ export function Room({ works, onFail }: { works: HelixWork[]; onFail: () => void
       loaded()
       fail()
     }
+    const where = readRoomStart(works, isPortrait(window.innerWidth / window.innerHeight))
     let renderer: RoomRenderer
     try {
-      renderer = createRoomRenderer(canvas, works, touch, giveUp)
+      // The Showreel is loaded only for an opening that will use it.
+      renderer = createRoomRenderer(
+        canvas,
+        works,
+        touch,
+        giveUp,
+        where.opening ? (showreel?.src ?? null) : null,
+      )
     } catch (error) {
       if (!(error instanceof RoomUnavailable)) throw error
       giveUp()
@@ -44,8 +74,11 @@ export function Room({ works, onFail }: { works: HelixWork[]; onFail: () => void
 
     // Everything a frame reads or writes is made here once: a frame allocates nothing.
     const scroll = createScroll()
+    scroll.target = scroll.progress = where.progress
+    const clock = createOpening(!where.opening)
+    const opening = createOpeningState() // the rest state, until the opening's first frame says otherwise
     const pointer = { nx: 0, ny: 0, dx: 0, inside: false }
-    const input: RoomFrame = { seconds: 0, dt: 0, progress: 0, pointer: null }
+    const input: RoomFrame = { seconds: 0, dt: 0, progress: 0, pointer: null, opening }
     let drag: { id: number; lastY: number } | null = null
 
     let frameId = 0
@@ -57,6 +90,8 @@ export function Room({ works, onFail }: { works: HelixWork[]; onFail: () => void
       const dt = Math.min((now - last) / 1000, 0.1)
       last = now
       stepScroll(scroll, dt)
+      stepOpening(clock, dt)
+      openingAt(clock.seconds, opening)
       input.seconds = now / 1000
       input.dt = dt
       input.progress = scroll.progress
@@ -71,6 +106,7 @@ export function Room({ works, onFail }: { works: HelixWork[]; onFail: () => void
         root.dataset.home = 'room'
         root.dataset.helixPhase = 'rest'
         window.scrollTo(0, 0)
+        markRoomOpened()
         loaded()
       }
     }
@@ -94,6 +130,8 @@ export function Room({ works, onFail }: { works: HelixWork[]; onFail: () => void
     }
     const onPointerDown = (event: PointerEvent) => {
       if (!event.isPrimary || event.button !== 0 || isMenuOpen(document)) return
+      // A click or tap during the opening skips it, and only that: no Work can be chosen yet.
+      if (isOpening(clock)) return skipOpening(clock)
       try {
         canvas.setPointerCapture(event.pointerId)
       } catch {
@@ -115,6 +153,14 @@ export function Room({ works, onFail }: { works: HelixWork[]; onFail: () => void
       if (drag?.id === event.pointerId) drag = null
     }
     const onPointerLeave = () => (pointer.inside = false)
+    // A Work opened from the room is remembered on this history entry, so coming back rests at its stop.
+    const onLinkClick = (event: MouseEvent) => {
+      const slug =
+        event.target instanceof Element
+          ? event.target.closest(`[${WORK_LINK_ATTRIBUTE}]`)?.getAttribute(WORK_LINK_ATTRIBUTE)
+          : null
+      if (slug) rememberWork(slug)
+    }
 
     renderer.resize()
     const resized = new ResizeObserver(() => renderer.resize())
@@ -126,6 +172,7 @@ export function Room({ works, onFail }: { works: HelixWork[]; onFail: () => void
     canvas.addEventListener('pointercancel', onPointerEnd)
     canvas.addEventListener('pointerleave', onPointerLeave)
     document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('click', onLinkClick, { capture: true })
 
     // Drawing starts once the stills are in, or after a short wait (`stillsWaitMs`): the loader
     // goes at the first frame, and by the inline script's 4 s at the latest.
@@ -145,12 +192,13 @@ export function Room({ works, onFail }: { works: HelixWork[]; onFail: () => void
       canvas.removeEventListener('pointercancel', onPointerEnd)
       canvas.removeEventListener('pointerleave', onPointerLeave)
       document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('click', onLinkClick, { capture: true })
       renderer.destroy()
       delete root.dataset.home
       delete root.dataset.helixPhase
       loaded()
     }
-  }, [works])
+  }, [works, showreel])
 
   return (
     // Hidden until the first frame sets the marks. No landmark of its own: the static section of

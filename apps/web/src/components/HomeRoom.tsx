@@ -15,9 +15,15 @@ const Room = dynamic(() => import('./room/Room').then((module) => module.Room), 
  * nothing on the server, nor on a device that gets the static Home. If WebGL2 fails to start, or
  * its context is lost, it unmounts again and the static Home is back as it was.
  */
-export function HomeRoom({ works }: { works: HelixWork[] }) {
+export function HomeRoom({
+  works,
+  showreel,
+}: {
+  works: HelixWork[]
+  showreel: { src: string } | null
+}) {
   const mode = useHomeMode(works.length)
   const [failed, setFailed] = useState(false)
   if (mode !== 'room' || failed) return null
-  return <Room works={works} onFail={() => setFailed(true)} />
+  return <Room works={works} showreel={showreel} onFail={() => setFailed(true)} />
 }

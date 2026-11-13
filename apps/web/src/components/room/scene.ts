@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 
 import { cameraPose } from '../../lib/room-model'
+import type { OpeningState } from '../../lib/room-opening'
 import {
   atlasRect,
   fovFor,
@@ -47,6 +48,8 @@ export type RoomFrame = {
   progress: number
   /** The pointer over the room (`nx`, `ny` -1 to 1 across and up; `dx` px moved since the last frame), or null. */
   pointer: { nx: number; ny: number; dx: number } | null
+  /** Where the opening is (`createOpeningState()` is the room at rest). */
+  opening: OpeningState
 }
 
 export type RoomScene = {
@@ -66,6 +69,8 @@ export type RoomScene = {
   setFrame(place: number, video: HTMLVideoElement, focalPoint: { x: number; y: number }): void
   /** Puts Work `place`'s placeholder grey back in its cell (a failed loop with no still). */
   clearStill(place: number): void
+  /** The Showreel for the opening: the middle monitor shows `video` until the opening hands over; null lets it go (it is used only in the opening). */
+  setShowreel(video: HTMLVideoElement | null): void
   /** Where each place's screen is (its centre), for picking the screens that play. */
   screenCentres: readonly THREE.Vector3[]
   dispose(): void
@@ -272,22 +277,29 @@ export function createRoomScene({
   const bright = screenPlacement.map((_, place) =>
     places[place] ? ROOM_TUNING.screens[place]!.base : 0,
   )
+  // The Showreel's texture, set only for the opening (until then a black pixel, and none of it shows).
+  const noReel = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1)
+  noReel.needsUpdate = true
+  textures.push(noReel)
+  let reel: THREE.VideoTexture | null = null
+  const screenUniforms = screenPlacement.map((_, place) => ({
+    uMap: { value: atlas },
+    uReel: { value: noReel as THREE.Texture },
+    uRect: { value: new THREE.Vector4(...atlasRect(place)) },
+    uB: { value: bright[place]! },
+    uReelMix: { value: 0 },
+  }))
   const screenCentre = screenPlacement.map(() => new THREE.Vector3())
   const screenFacing = screenPlacement.map(() => new THREE.Vector3())
   const right = new THREE.Vector3()
   const up = new THREE.Vector3()
   screenPlacement.forEach((m, place) => {
     const { width, light, power } = ROOM_TUNING.screens[place]!
-    const [u, v, su, sv] = atlasRect(place)
     const screen = new THREE.Mesh(
       own(new THREE.PlaneGeometry(width, (width * 9) / 16)),
       ownMaterial(
         new THREE.ShaderMaterial({
-          uniforms: {
-            uMap: { value: atlas },
-            uRect: { value: new THREE.Vector4(u, v, su, sv) },
-            uB: { value: bright[place] },
-          },
+          uniforms: screenUniforms[place]!,
           vertexShader: SCREEN_VS,
           fragmentShader: SCREEN_FS,
         }),
@@ -712,14 +724,58 @@ export function createRoomScene({
   const ray = new THREE.Vector3()
   const scratch = new THREE.Vector3()
 
-  function update({ seconds, dt, progress, pointer }: RoomFrame) {
+  // The opening starts with the camera straight in front of one screen, which its picture just fills.
+  const flyPosition = new THREE.Vector3()
+  const flyQuaternion = new THREE.Quaternion()
+  const flyBasis = new THREE.Matrix4()
+  const flyFacing = new THREE.Vector3()
+  function placeFly() {
+    const place = ROOM_TUNING.opening.place
+    const width = ROOM_TUNING.screens[place]!.width
+    const reach =
+      (0.97 * Math.min(width / camera.aspect, (width * 9) / 16)) /
+      (2 * Math.tan((camera.fov * DEG) / 2))
+    screenPlacement[place]!.extractBasis(right, up, flyFacing)
+    flyPosition.copy(screenCentre[place]!).addScaledVector(flyFacing, reach)
+    flyQuaternion.setFromRotationMatrix(flyBasis.makeBasis(right, up, flyFacing))
+  }
+
+  // The screens, the lamp and the room's light follow the opening. Written while it runs, and once more when it is over.
+  const glowOwned = glowGeometry.getAttribute('aA') as THREE.BufferAttribute
+  let restApplied = false
+  function applyOpening({ screens, room, lamp, reel: reelShare, settled }: OpeningState) {
+    for (let place = 0; place < screenUniforms.length; place++) {
+      const level = bright[place]! * screens[place]!
+      screenUniforms[place]!.uB.value = level
+      if (place < 6) LP[place]!.w = ROOM_TUNING.screens[place]!.light * level
+    }
+    for (let quad = 0; quad < glows.owner.length; quad++) {
+      const level = bright[glows.owner[quad]!]! * screens[glows.owner[quad]!]!
+      for (let k = 0; k < 4; k++) glowOwned.array[(quad * 4 + k) * 2] = level * level
+    }
+    glowOwned.needsUpdate = true
+    litUniforms.uRoom.value = room
+    bulb.color.setScalar(0.93 * lamp)
+    screenUniforms[ROOM_TUNING.opening.place]!.uReelMix.value = reel && !settled ? reelShare : 0
+    restApplied = settled
+  }
+
+  function update({ seconds, dt, progress, pointer, opening }: RoomFrame) {
     const hover = pointer !== null && !touch
     cameraPose(progress, portrait, pose)
     stepLook(look, hover ? pointer : null, dt)
     camera.position.set(pose.position[0], pose.position[1], pose.position[2])
     camera.lookAt(pose.lookAt[0], pose.lookAt[1], pose.lookAt[2])
-    camera.quaternion.multiply(lookQuaternion.setFromEuler(lookEuler.set(look.y, look.x, 0, 'YXZ')))
+    const free = 1 - opening.fly // the pointer looks around only once the camera is on its path
+    camera.quaternion.multiply(
+      lookQuaternion.setFromEuler(lookEuler.set(look.y * free, look.x * free, 0, 'YXZ')),
+    )
+    if (opening.fly > 0) {
+      camera.position.lerp(flyPosition, opening.fly)
+      camera.quaternion.slerp(flyQuaternion, opening.fly)
+    }
     camera.updateMatrixWorld(true)
+    if (!opening.settled || !restApplied) applyOpening(opening)
 
     // The lamp head follows the pointer a little: it aims where the pointer's ray meets the desk.
     origin.setFromMatrixPosition(camera.matrixWorld)
@@ -738,11 +794,16 @@ export function createRoomScene({
       lampPosition.x + scratch.x * 0.07,
       lampPosition.y + scratch.y * 0.07,
       lampPosition.z + scratch.z * 0.07,
-      ROOM_TUNING.lamp.light * flicker,
+      ROOM_TUNING.lamp.light * flicker * opening.lamp,
     )
     LD[6]!.set(scratch.x, scratch.y, scratch.z, 3)
     scratch.copy(LAMP_SPOT).applyQuaternion(headQuaternion)
-    LP[7]!.set(lampPosition.x, lampPosition.y, lampPosition.z, ROOM_TUNING.lamp.spot * flicker)
+    LP[7]!.set(
+      lampPosition.x,
+      lampPosition.y,
+      lampPosition.z,
+      ROOM_TUNING.lamp.spot * flicker * opening.lamp,
+    )
     LD[7]!.set(scratch.x, scratch.y, scratch.z, 3)
     litUniforms.uT.value = seconds
 
@@ -773,11 +834,17 @@ export function createRoomScene({
       camera.aspect = aspect
       camera.fov = fovFor(aspect)
       camera.updateProjectionMatrix()
+      placeFly()
     },
     setStill: (place, image, focalPoint) =>
       paintCell(place, image, image.width, image.height, focalPoint),
     setFrame: (place, video, focalPoint) =>
       paintCell(place, video, video.videoWidth, video.videoHeight, focalPoint),
+    setShowreel(video) {
+      reel?.dispose()
+      reel = video && new THREE.VideoTexture(video)
+      screenUniforms[ROOM_TUNING.opening.place]!.uReel.value = reel ?? noReel
+    },
     clearStill(place) {
       blank(place)
       atlas.needsUpdate = true
@@ -787,6 +854,7 @@ export function createRoomScene({
       geometries.forEach((g) => g.dispose())
       materials.forEach((m) => m.dispose())
       textures.forEach((t) => t.dispose())
+      reel?.dispose()
     },
   }
 }

@@ -69,6 +69,31 @@ export const ROOM_TUNING = {
   atlas: { columns: 4, rows: 2, cellWidth: 512, cellHeight: 288 },
   /** How long the room waits for the stills (ms) before it draws without the ones still loading. */
   stillsWaitMs: 3000,
+  /**
+   * The opening (#131), seconds after the loader goes, from the prototype: the middle monitor
+   * wakes on the Showreel and fills the view; the camera pulls back from it; the room's light
+   * comes up; the other screens (`place`, its start, how long it takes) and the lamp follow; the
+   * Showreel hands over to the middle monitor's own Work. Every value only ever rises (the
+   * Showreel's share and the pull-back only fall), so no screen flashes (WCAG 2.3.1).
+   */
+  opening: {
+    /** The monitor that wakes first, and that the camera starts at: the middle one. */
+    place: 1,
+    screens: [
+      { place: 1, at: 0.2, duration: 0.7 },
+      { place: 0, at: 1.2, duration: 0.5 },
+      { place: 2, at: 1.5, duration: 0.5 },
+      { place: 4, at: 2.0, duration: 0.45 },
+      { place: 5, at: 2.1, duration: 0.45 },
+      { place: 3, at: 2.2, duration: 0.45 },
+      { place: 6, at: 2.35, duration: 0.45 },
+      { place: 7, at: 2.45, duration: 0.45 },
+    ] as readonly { place: number; at: number; duration: number }[],
+    pullBack: { at: 0.95, duration: 1.7 },
+    room: { at: 1.0, duration: 1.8 },
+    handOver: { at: 1.5, duration: 0.5 },
+    lamp: { at: 1.8, duration: 0.6 },
+  },
   /** Device pixel ratio cap: 2, and 1.5 on touch. */
   pixelRatio: { max: 2, touchMax: 1.5 },
   /** The curved glass in front of the room (#128): the CRT bend (0 none) and how much of the bright parts' glow is added back. The prototype's values. */

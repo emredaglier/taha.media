@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 
 import { FeaturedWorks, toHelixWork, withPreviewLoop } from '../components/FeaturedWorks'
-import { Hero } from '../components/Hero'
+import { Hero, toHelixShowreel } from '../components/Hero'
 import { HomeLoader } from '../components/HomeLoader'
 import { HomeRoom } from '../components/HomeRoom'
 import { PageMain } from '../components/PageFrame'
@@ -39,7 +39,7 @@ export default async function HomePage() {
       {works.length > 0 ? (
         <>
           <HomeLoader />
-          <HomeRoom works={works.map(toHelixWork)} />
+          <HomeRoom works={works.map(toHelixWork)} showreel={toHelixShowreel(site).video} />
         </>
       ) : null}
     </PageMain>
