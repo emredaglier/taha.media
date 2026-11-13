@@ -90,7 +90,8 @@ export function Room({
     const input: RoomFrame = { seconds: 0, dt: 0, progress: 0, pointer: null, opening }
     let drag: { id: number; lastY: number; startX: number; startY: number; moved: boolean } | null =
       null
-    let pushing = -1 // the Work being pushed into, once a click has picked it
+    let pushing = -1 // the Work being pushed into, once a click has picked it; stays set until unmount
+    let opened = false
 
     let frameId = 0
     let last = 0
@@ -112,10 +113,9 @@ export function Room({
       // The Drop cursor swells over a Work (site cursor: the nearest `data-cursor` names it).
       if (renderer.hot >= 0 && pushing < 0 && !touch) canvas.dataset.cursor = 'Aç'
       else delete canvas.dataset.cursor
-      if (pushing >= 0 && renderer.pushed) {
-        const slug = works[pushing]!.slug
-        pushing = -1 // opens once
-        open(slug)
+      if (pushing >= 0 && renderer.pushed && !opened) {
+        opened = true // opens once; `pushing` stays so a click while the page loads starts no new push
+        open(works[pushing]!.slug)
       }
       if (!shown) {
         shown = true

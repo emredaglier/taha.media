@@ -444,5 +444,18 @@ describe('the Edit Room on Home', () => {
       click(300, 200)
       expect(pushes).toEqual([0])
     })
+
+    it('starts no second push and opens no other page while the Work page loads', () => {
+      scene.pick.mockReturnValue(1)
+      click(300, 200)
+      scene.pushed = true
+      runFrames(3)
+      scene.pick.mockReturnValue(0)
+      click(300, 200)
+      runFrames(3)
+      expect(pushes).toEqual([1])
+      expect(router.push).toHaveBeenCalledTimes(1)
+      expect(router.push).toHaveBeenCalledWith('/isler/b')
+    })
   })
 })
