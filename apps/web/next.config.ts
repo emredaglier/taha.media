@@ -10,16 +10,6 @@ import type { NextConfig } from 'next'
 const { SENTRY_AUTH_TOKEN, SENTRY_ORG, SENTRY_PROJECT } = process.env
 const uploadSourceMaps = Boolean(SENTRY_AUTH_TOKEN && SENTRY_ORG && SENTRY_PROJECT)
 
-/**
- * `import('./tracker')` inside `components/hand`, the one import the server build skips (below).
- * Exported for its guard test: renaming the file or its folder must fail a test, not quietly ship
- * the files in the server build again.
- */
-export const handTrackerOnlyInBrowser = {
-  checkResource: (resource: string, context: string) =>
-    resource === './tracker' && /[\\/]components[\\/]hand$/.test(context),
-}
-
 const nextConfig: NextConfig = {
   // Workspace packages ship TypeScript source; list each one web imports.
   transpilePackages: ['@taha/cms-config'],
@@ -53,13 +43,7 @@ const nextConfig: NextConfig = {
         ],
       }
     : {}),
-  webpack: (config, { isServer, dev, webpack }) => {
-    // Hand control's tracker (MediaPipe's WASM and the model, about 22 MB) is reached only by a
-    // dynamic import in an effect after the camera grant, which never runs on the server. Without
-    // this the server compilation emits its three `new URL(…, import.meta.url)` files a second
-    // time, into `.next/server/chunks/static/media`, and they land in the web image (#69). Ignored,
-    // the import is a promise that rejects if it ever ran; the browser build is untouched.
-    if (isServer) config.plugins.push(new webpack.IgnorePlugin(handTrackerOnlyInBrowser))
+  webpack: (config, { isServer, dev }) => {
     // Browser bundles of a production build only: Sentry is browser-side only.
     if (uploadSourceMaps && !isServer && !dev) {
       config.plugins.push(

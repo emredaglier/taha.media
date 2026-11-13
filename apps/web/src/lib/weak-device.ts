@@ -12,7 +12,7 @@ export type DeviceReport = {
 /**
  * A weak device reports under the tuned memory or core count. A value the browser doesn't report
  * passes, so Safari and Firefox (no `deviceMemory`) are judged by their cores alone. The Home mode,
- * the melt layer and Hand control's toggle all use this test.
+ * and the melt layer all use this test.
  */
 export function isWeakDevice({ deviceMemory, cores }: DeviceReport): boolean {
   const { minMemoryGb, minCores } = WEAK_DEVICE

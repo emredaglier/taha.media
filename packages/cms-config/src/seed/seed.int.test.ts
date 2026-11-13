@@ -152,8 +152,7 @@ describe('the production seed', () => {
       const privacy = await prod.cms.findGlobal({ slug: 'privacy', draft: true })
       expect(privacy._status).toBe('draft')
       expect(JSON.stringify(privacy.body)).toContain('Gizlilik')
-      expect(JSON.stringify(privacy.body)).toContain('El kontrolü')
-      expect(JSON.stringify(privacy.body)).toContain('yalnızca elini görmek için açılır')
+      expect(JSON.stringify(privacy.body).toLowerCase()).not.toContain('kamera')
       // Visitors see no Privacy text until Taha publishes it.
       const visitor = await prod.cms.findGlobal({ slug: 'privacy', overrideAccess: false })
       expect(visitor.body).toBeFalsy()

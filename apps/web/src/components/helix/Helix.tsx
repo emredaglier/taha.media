@@ -27,9 +27,7 @@ import { loaded } from '../../lib/home-loader'
 import { isMenuOpen } from '../../lib/menu-a11y'
 import type { HelixWork } from '../FeaturedWorks'
 import type { HelixShowreel } from '../Hero'
-import { claimHandGrab } from '../hand/grab'
 import { followFocus, FrontWork, watchWorkLinks } from './FrontWork'
-import { helixGrab } from './hand-grab'
 import {
   forgetWork,
   handOverFadeMs,
@@ -62,8 +60,7 @@ const lensOf = (canvas: HTMLCanvasElement) => lensFor(canvas.clientWidth, canvas
  * It opens on the Showreel (#54): the static hero stays until the Helix's Showreel layer shows the
  * same picture, then the Helix takes over under it. Scrolling the page zooms the Showreel out into
  * the Helix (scrolling up reverses it); at the end of the scroll it melts away by itself, and from
- * then on Home locks to the screen. The wheel, a vertical drag, Hand control's grab (#57: the page
- * scroll before that, so it scrubs the zoom) and the arrow keys turn the Helix, which settles on a
+ * then on Home locks to the screen. The wheel, a vertical drag and the arrow keys turn the Helix, which settles on a
  * card when the input ends. Enter, or a click on the front card, opens its Work
  * (remembered on the history entry, so coming back starts with it in front, past the Showreel); a
  * click on another card turns it to the front. On Home the logo replays the opening.
@@ -167,12 +164,6 @@ export function Helix({
     let held: ReadonlySet<number> = new Set()
     // A press on the Helix (a drag, or a click when it doesn't travel).
     let press: { id: number; x: number; y: number; lastY: number; travel: number } | null = null
-    // Hand control's grab (#57): a drag once Home holds the screen, the page's scroll before.
-    const handGrab = helixGrab({
-      turns: () => locked() && !isMenuOpen(document),
-      apply,
-      onStart: () => (hovered = null),
-    })
 
     // --- drawing: every frame while the tab is visible (the loops and the heat trail move on)
     const { bendEase, bendMax } = HELIX_SHAPE
@@ -197,12 +188,12 @@ export function Helix({
       const target = clamp(state.speed / 60, -bendMax, bendMax)
       bend += (target - bend) * (1 - (1 - bendEase) ** (dt * 60))
 
-      // The hovered card changes only while the pointer rests, and there is none during a press or
-      // a hand's grab (cleared when it starts), while the zoom runs, or without a pointer over it.
+      // The hovered card changes only while the pointer rests, and there is none during a press,
+      // while the zoom runs, or without a pointer over it.
       const { aspect, focal } = lensOf(canvas)
       const sample = pointer.sample(dt, crt)
       if (state.phase.kind === 'hero' || !sample.point) hovered = null
-      else if (sample.resting && !press && !handGrab.holding) {
+      else if (sample.resting && !press) {
         const card = cardAt(sample.point, shownCards(state), focal, aspect)
         hovered = card >= 0 ? card : null
       }
@@ -343,7 +334,6 @@ export function Helix({
       if (focused) apply({ kind: 'focus', work })
     })
 
-    const unclaimGrab = claimHandGrab(handGrab)
     window.addEventListener('wheel', onWheel, { passive: false })
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('scroll', onScroll, { passive: true })
@@ -357,7 +347,6 @@ export function Helix({
 
     return () => {
       stop()
-      unclaimGrab()
       pointer.destroy()
       unwatchLinks()
       unwatchPageLinks()

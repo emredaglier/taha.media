@@ -11,7 +11,7 @@ These are structural decisions only. The look (type, color, layout feel, motion)
 | `/isler/[slug]` | Main media (MP4, click-to-load external video, or image, in its own aspect ratio: 16:9, 9:16 or square) → title, Disciplines, year, client → role and credits → short description → gallery of stills → next Work. Only title and main media are required. Old slugs get a 301. |
 | `/galeri` (menu: Galeri) | All **Gallery items** (photography plus personal and experimental pieces, never Works) in Editor drag order, newest first as fallback, no filters. Clicking one opens it full-screen over the grid (a lightbox dialog: arrows, swipe, Esc closes, focus stays inside, Safari focus fix). There is no page per item. Loops follow the Preview loop rules (silent, play in view, poster under reduced motion). Without JS, items link to the full-size file. |
 | `/hakkimda` (menu: Hakkımda) | The full About: portrait + bio → one line per Discipline → client list (names or logos) → contact (email + socials). This is contact's main home; later designs may add it elsewhere too. |
-| `/gizlilik` | Short notice naming Cloudflare Web Analytics and Sentry. Nothing is collected from visitors. Once Hand control ships, a paragraph on its on-device camera use (see "Hand control"). |
+| `/gizlilik` | Short notice naming Cloudflare Web Analytics and Sentry. Nothing is collected from visitors. |
 | 404 | Server-rendered not-found page |
 
 No blog route and no nav slot until a blog is built.
@@ -89,7 +89,9 @@ Replaces the Home FLOW below. Decision record: ADR-0103 (Home holds the screen).
   - On narrow screens the front card fits within about 86% of the width.
   - Starting values (prototype sliders): sharp band 0.25, far cards 0.7, cards not pointed at 0.55, Showreel melt 1.3 s, zoom scroll length 140vh.
 
-## Hand control (grill 2026-11-08): an optional follow-up after the Helix launches
+## Hand control (grill 2026-11-08; removed 2026-11-13, ADR-0105)
+
+History only: Hand control, its camera and its model files are gone from the site, and Gizlilik says nothing about a camera.
 
 **Hand control** (GLOSSARY) lets a desktop visitor browse the whole site with a hand in front of the camera. It ships after the Home Helix, as its own tickets, and the Helix launch doesn't wait for it. The behaviour was tested in `docs/design/prototype-home-helix.html` (Home only there). Research behind it:
   - [WCAG 2.2, SC 2.5.4 Motion Actuation](https://www.w3.org/WAI/WCAG22/Understanding/motion-actuation): functions driven by user motion need a normal control and a way to turn the motion off.

@@ -12,7 +12,7 @@ const wanted = () =>
   typeof WebGL2RenderingContext !== 'undefined' &&
   !isWeakDevice(deviceReport())
 
-/** Hand control sends synthetic pointer events; only a real mouse melts. */
+/** Only a real mouse melts. */
 const real = (event: PointerEvent) => event.isTrusted && event.pointerType === 'mouse'
 
 const VERTEX = `#version 300 es

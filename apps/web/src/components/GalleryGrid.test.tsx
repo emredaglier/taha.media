@@ -15,9 +15,7 @@ vi.mock('./LoopVideo', async () => {
 })
 
 import type { GalleryItem } from '../data/gallery'
-import { HAND_TUNING } from '../lib/hand-tuning'
 import { GalleryGrid } from './GalleryGrid'
-import { handGrabSink } from './hand/grab'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -284,48 +282,6 @@ describe('closing', () => {
     press('Escape')
     click(links()[2]!)
     expect(label()).toBe('Galeri, 3 / 3: Üçüncü')
-  })
-})
-
-describe('Hand control (#59)', () => {
-  const { stepWidths } = HAND_TUNING.grab
-  /** Hand control's grab moving `right` screen widths, in ten moves, then letting go. */
-  const grab = (right: number) =>
-    act(() => {
-      const sink = handGrabSink()!
-      for (let i = 0; i < 10; i++) sink.move(0, right / 10)
-      sink.end()
-    })
-
-  it('claims the grab only while the lightbox is open, and lets it go on closing', async () => {
-    await render()
-    expect(handGrabSink()).toBeNull()
-    click(links()[0]!)
-    expect(handGrabSink()).not.toBeNull()
-    click(button('Kapat'))
-    expect(dialog()).toBeNull()
-    expect(handGrabSink()).toBeNull()
-  })
-
-  it('a grab moving left steps to the next item, one moving right to the previous', async () => {
-    await open(0)
-    grab(-stepWidths * 1.2)
-    expect(label()).toBe('Galeri, 2 / 3')
-    grab(stepWidths * 1.2)
-    grab(stepWidths * 1.2)
-    expect(label()).toBe('Galeri, 3 / 3: Üçüncü')
-  })
-
-  it('takes the whole grab, up or down alike (move and end say so, so the page neither scrolls nor glides)', async () => {
-    await open(0)
-    const sink = handGrabSink()!
-    let took = false
-    act(() => {
-      took = sink.move(0.2, 0)
-    })
-    expect(took).toBe(true)
-    expect(sink.end()).toBe(true)
-    expect(label()).toBe('Galeri, 1 / 3: Birinci')
   })
 })
 

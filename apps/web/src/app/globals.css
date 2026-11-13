@@ -16,29 +16,6 @@
   --font-serif: 'Instrument Serif', ui-serif, Georgia, 'Times New Roman', serif;
   --font-sans:
     'Geist Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-
-  /* Hand control's toggle fades into its reserved slot (only with motion allowed). */
-  --animate-hand-in: hand-in 200ms ease-out;
-
-  @keyframes hand-in {
-    from {
-      opacity: 0;
-    }
-  }
-
-  /* Hand control's ring pings on a click (only with motion allowed). */
-  --animate-hand-ping: hand-ping 350ms ease-out forwards;
-
-  @keyframes hand-ping {
-    from {
-      opacity: 1;
-      transform: scale(0.5);
-    }
-    to {
-      opacity: 0;
-      transform: scale(1);
-    }
-  }
 }
 
 /*
@@ -58,20 +35,6 @@
  * two spellings in step.
  */
 @custom-variant over-hero (html:not([data-home='room']) body:has([data-home-hero]) &);
-
-/*
- * `hand-hover:` matches what Hand control's cursor is over, as `hover:` matches the mouse's
- * (synthetic pointer events don't set `:hover`), and `group-hand-hover:` the group form. The mark
- * is `HAND_HOVER_ATTR` in `components/hand/explore.ts`: keep the two spellings in step.
- */
-@custom-variant hand-hover (&[data-hand-hover]);
-
-/*
- * `fine-hover:` applies on a desktop pointer (a mouse or trackpad that hovers), the only devices
- * that may get Hand control: the header reserves its toggle's slot there from the first paint.
- * The same query as `POINTER_FINE` and `CAN_HOVER` in `lib/loop-mode.ts`.
- */
-@custom-variant fine-hover (@media (hover: hover) and (pointer: fine));
 
 /*
  * TV screen over every page (`<div class="crt">` in layout.tsx): grain, scanlines and a vignette.

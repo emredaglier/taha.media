@@ -47,7 +47,7 @@ function meltMap(): string {
 const wanted = () =>
   matchMedia(`${CAN_HOVER} and ${POINTER_FINE}`).matches && !matchMedia(REDUCED_MOTION).matches
 
-/** Hand control sends synthetic pointer events; only a real mouse moves the drop. */
+/** Only a real mouse moves the drop. */
 const real = (event: PointerEvent) => event.isTrusted && event.pointerType === 'mouse'
 
 /**
