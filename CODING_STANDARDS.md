@@ -13,7 +13,7 @@ Test behaviour where a user or caller meets it, and keep `pnpm test` near a minu
   matches a brute-force sample, clamps) plus a few worked examples. A restated constant fails on
   every deliberate retune.
 - **Device capabilities** are pinned in the shared setup (`apps/web/src/test/device-setup.ts`):
-  every jsdom test starts on a capable device (twice `HELIX_TUNING.weakDevice`), because jsdom
+  every jsdom test starts on a capable device (twice `WEAK_DEVICE`), because jsdom
   reports the host's real core count and CI runners have fewer. A test of a weak device calls
   `setDevice({ cores, memory })` from `apps/web/src/test/device.ts` (a key left out keeps the
   pinned value; `memory: undefined` means not reported) and never defines `navigator` properties
