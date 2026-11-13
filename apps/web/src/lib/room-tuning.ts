@@ -102,4 +102,19 @@ export const ROOM_TUNING = {
     { width: 0.64, base: 0.66, light: 0, power: 1 },
     { width: 0.64, base: 0.66, light: 0, power: 1 },
   ] as readonly { width: number; base: number; light: number; power: number }[],
+  /**
+   * Pointing at a screen (#130): a ray counts as on a screen that is `margin` times its size (a
+   * finger is blunter, `touchMargin`) plus `slack` metres. The hot Work's screen goes to `bright`
+   * (past full) and the others to `others` of their rest brightness, following at `rate` per
+   * second; the hot Work changes at most once per `holdSeconds`, so brightness never flashes more than
+   * 3 times a second (WCAG 2.3.1).
+   */
+  pick: { margin: 1.12, touchMargin: 1.6, slack: 0.012 },
+  hot: { bright: 1.22, others: 0.5, rate: 9, holdSeconds: 0.25 },
+  /** The push-in: how long the camera takes to reach the screen, and how much of the view the screen's limiting side fills (the prototype's fly-in). */
+  push: { seconds: 0.8, fill: 0.97 },
+  /** A press that moves further than this (CSS px) before it ends is a drag, not a click. */
+  clickSlopPx: 6,
+  /** The tag beside the hot screen: its gap to the screen, the view's edges and (under or over a screen) `below`, the room it leaves at the top (the header; more on a phone), and how fast it fades (per second). */
+  tag: { gap: 18, edge: 16, below: 14, top: 96, phoneTop: 130, fadeRate: 12 },
 }

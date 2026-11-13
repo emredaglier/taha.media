@@ -19,7 +19,15 @@ vi.mock('./renderer', async (importOriginal) => ({
   createRoomRenderer: renderer.create,
 }))
 
-const works = [{ slug: 'a' }] as HelixWork[]
+// The router is a stand-in too: the room only asks it to open a Work's page.
+const router = vi.hoisted(() => ({ push: vi.fn() }))
+vi.mock('next/navigation', () => ({ useRouter: () => router }))
+
+const works = [{ slug: 'a' }, { slug: 'b' }] as HelixWork[]
+
+// What the stand-in renderer answers: the place under the pointer, the hot one, and the push-in's arrival.
+const scene = { pick: vi.fn<(nx: number, ny: number) => number>(), hot: -1, pushed: false }
+let pushes: number[]
 
 type Frame = { progress: number; pointer: { nx: number; ny: number; dx: number } | null }
 let draws: Frame[]
@@ -54,6 +62,11 @@ const canvas = () => container.querySelector('canvas')!
 
 beforeEach(() => {
   draws = []
+  pushes = []
+  scene.pick.mockReset().mockReturnValue(-1)
+  scene.hot = -1
+  scene.pushed = false
+  router.push.mockReset()
   loss = null
   destroy = vi.fn()
   failed = vi.fn()
@@ -63,6 +76,14 @@ beforeEach(() => {
   const fake: RoomRenderer = {
     ready: Promise.resolve(),
     draw: (frame) => draws.push({ progress: frame.progress, pointer: frame.pointer }),
+    pick: scene.pick,
+    push: (place) => pushes.push(place),
+    get hot() {
+      return scene.hot
+    },
+    get pushed() {
+      return scene.pushed
+    },
     resize: vi.fn(),
     destroy,
   }
@@ -201,5 +222,75 @@ describe('the Edit Room on Home', () => {
     expect(document.documentElement.dataset.home).toBeUndefined()
     expect(document.documentElement.dataset.helixPhase).toBeUndefined()
     root = createRoot(container) // for the afterEach
+  })
+
+  describe('pointing', () => {
+    // jsdom has no PointerEvent: a mouse event with the fields the room reads stands in.
+    const asPointer = (event: Event) => Object.assign(event, { pointerId: 1, isPrimary: true })
+    const press = (type: string, x: number, y: number) =>
+      canvas().dispatchEvent(asPointer(new MouseEvent(type, { clientX: x, clientY: y, button: 0 })))
+    const click = (x: number, y: number) => {
+      press('pointerdown', x, y)
+      press('pointerup', x, y)
+    }
+
+    beforeEach(async () => {
+      await mount()
+      canvas().setPointerCapture = vi.fn()
+      runFrame()
+    })
+
+    it('swells the Drop cursor over a Work and lets go when the pointer leaves it', () => {
+      scene.hot = 1
+      runFrame()
+      expect(canvas().dataset.cursor).toBe('Aç')
+      scene.hot = -1
+      runFrame()
+      expect(canvas().dataset.cursor).toBeUndefined()
+    })
+
+    it('pushes into the Work under a click, and opens its page once the camera has arrived', () => {
+      scene.pick.mockReturnValue(1)
+      click(300, 200)
+      expect(pushes).toEqual([1])
+      runFrames(3)
+      expect(router.push).not.toHaveBeenCalled()
+      scene.pushed = true
+      runFrames(3)
+      expect(router.push).toHaveBeenCalledTimes(1)
+      expect(router.push).toHaveBeenCalledWith('/isler/b')
+    })
+
+    it('does nothing for a click on no screen', () => {
+      click(300, 200)
+      expect(pushes).toEqual([])
+    })
+
+    it('takes a drag for no click, and a slip of the hand for a click', () => {
+      scene.pick.mockReturnValue(0)
+      press('pointerdown', 300, 600)
+      press('pointermove', 300, 200)
+      press('pointerup', 300, 200)
+      expect(pushes).toEqual([])
+      press('pointerdown', 300, 200)
+      press('pointermove', 302, 203)
+      press('pointerup', 302, 203)
+      expect(pushes).toEqual([0])
+    })
+
+    it('holds the camera and the cursor still once pushing: no wheel, no second push', () => {
+      scene.pick.mockReturnValue(0)
+      click(300, 200)
+      scene.hot = 0
+      runFrame()
+      expect(canvas().dataset.cursor).toBeUndefined()
+      const wheel = new WheelEvent('wheel', { deltaY: 400, cancelable: true })
+      window.dispatchEvent(wheel)
+      expect(wheel.defaultPrevented).toBe(true)
+      runFrames(30)
+      expect(draws.at(-1)!.progress).toBe(0)
+      click(300, 200)
+      expect(pushes).toEqual([0])
+    })
   })
 })
