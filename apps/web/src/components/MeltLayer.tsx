@@ -118,7 +118,7 @@ export function MeltLayer() {
     gl.enableVertexAttribArray(position)
     gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0)
 
-    const textures: WebGLTexture[] = []
+    const textures = new Map<HTMLImageElement | HTMLVideoElement, WebGLTexture>()
     const images = new WeakMap<HTMLImageElement, Source | 'loading' | 'bad'>()
     const videos = new WeakMap<HTMLVideoElement, Source | 'bad'>()
     let spring: Spring = { power: 0, speed: 0 }
@@ -130,7 +130,15 @@ export function MeltLayer() {
     let last = 0
     let raf = 0
 
-    const newTexture = (mipmap: boolean) => {
+    const newTexture = (el: HTMLImageElement | HTMLVideoElement, mipmap: boolean) => {
+      // The layer outlives route changes: media that left the page frees its texture first.
+      for (const [old, texture] of textures) {
+        if (old.isConnected) continue
+        gl.deleteTexture(texture)
+        textures.delete(old)
+        if (old instanceof HTMLVideoElement) videos.delete(old)
+        else images.delete(old)
+      }
       const texture = gl.createTexture()
       gl.bindTexture(gl.TEXTURE_2D, texture)
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
@@ -141,7 +149,7 @@ export function MeltLayer() {
         gl.TEXTURE_MIN_FILTER,
         mipmap ? gl.LINEAR_MIPMAP_LINEAR : gl.LINEAR,
       )
-      textures.push(texture)
+      if (texture) textures.set(el, texture)
       return texture
     }
 
@@ -156,7 +164,7 @@ export function MeltLayer() {
       copy.onerror = () => images.set(img, 'bad')
       copy.onload = () => {
         if (dead) return
-        const texture = newTexture(true)
+        const texture = newTexture(img, true)
         try {
           gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, copy)
           gl.generateMipmap(gl.TEXTURE_2D)
@@ -178,7 +186,7 @@ export function MeltLayer() {
       if (known === 'bad' || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return null
       if (!video.videoWidth) return null
       known ??= {
-        texture: newTexture(false),
+        texture: newTexture(video, false),
         width: video.videoWidth,
         height: video.videoHeight,
         time: NaN,
@@ -254,6 +262,8 @@ export function MeltLayer() {
     const frame = (now: number) => {
       raf = 0
       if (dead) return
+      // The mouse left while this frame was queued.
+      if (!present) return clear()
       const dt = Math.min((now - last) / 1000, 1 / 30)
       last = now
       // The Helix has its own pointer effect.
@@ -343,9 +353,11 @@ export function MeltLayer() {
       document.removeEventListener('pointerdown', press)
       window.removeEventListener('scroll', wake)
       window.removeEventListener('resize', resize)
-      for (const texture of textures) gl.deleteTexture(texture)
+      for (const texture of textures.values()) gl.deleteTexture(texture)
       gl.deleteBuffer(buffer)
       gl.deleteProgram(program)
+      gl.deleteShader(vertex)
+      gl.deleteShader(fragment)
     }
   }, [enabled])
 

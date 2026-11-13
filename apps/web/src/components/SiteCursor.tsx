@@ -92,6 +92,8 @@ export function SiteCursor() {
     let dripV = 0
     let pressed = false
     let shown = false
+    let wordW = 0
+    let wordH = 0
 
     const frame = (now: number) => {
       const dt = Math.min((now - last) / 1000, 1 / 30)
@@ -110,8 +112,19 @@ export function SiteCursor() {
           width: `${at.width}px`,
           height: `${at.height}px`,
         })
-        text.textContent = !media && at.height > LABEL_MIN_HEIGHT ? hit.label : ''
-        if (media) word.textContent = hit.label
+        // Text is written only when it changes, so the frame doesn't force a layout.
+        const label = !media && at.height > LABEL_MIN_HEIGHT ? hit.label : ''
+        if (text.textContent !== label) text.textContent = label
+        if (media && word.textContent !== hit.label) {
+          word.textContent = hit.label
+          wordW = word.offsetWidth
+          wordH = word.offsetHeight
+          // The bend covers the word's own box.
+          for (const part of [map, ...bends]) {
+            part.setAttribute('width', `${wordW}`)
+            part.setAttribute('height', `${wordH}`)
+          }
+        }
       }
       // A loose spring: the blot overshoots and wobbles into place.
       const target = hit && !media ? 1 : 0
@@ -136,14 +149,8 @@ export function SiteCursor() {
         const melted = Math.max(0, drip)
         word.style.opacity = `${Math.min(1, melted * 1.5)}`
         if (melted > 0) {
-          const width = word.offsetWidth
-          const height = word.offsetHeight
-          word.style.transform = `translate(${mx - at.left - width / 2}px,${my - at.top - 80}px)`
-          // The bend covers the word's own box, and breathes a little.
-          for (const part of [map, ...bends]) {
-            part.setAttribute('width', `${width}`)
-            part.setAttribute('height', `${height}`)
-          }
+          word.style.transform = `translate(${mx - at.left - wordW / 2}px,${my - at.top - 80}px)`
+          // The bend breathes a little.
           bends.forEach((bend, channel) =>
             bend.setAttribute(
               'scale',
