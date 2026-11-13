@@ -28,6 +28,7 @@ export function Picture({
       alt={image.alt}
       loading={priority ? 'eager' : 'lazy'}
       decoding="async"
+      data-melt=""
       className={className}
       style={{ objectPosition: `${image.focalPoint.x}% ${image.focalPoint.y}%` }}
     />
