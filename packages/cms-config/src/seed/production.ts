@@ -8,8 +8,6 @@ const PRIVACY_PLACEHOLDER = lexical([
   'Bu metin geçici bir taslaktır. Yayınlanmadan önce Taha tarafından yazılıp gözden geçirilecektir.',
   { heading: 'Toplanan veriler' },
   'Bu sitede ziyaretçilerden kişisel veri toplanmaz. Ayrıntılar bu metin tamamlandığında burada yer alacaktır.',
-  { heading: 'El kontrolü' },
-  '"Elinle gez"i açtığında kameran yalnızca elini görmek için açılır. Görüntü cihazında işlenir; hiçbir şey kaydedilmez ya da bir yere gönderilmez. El kontrolünü istediğin an kapatabilirsin; yeni bir sekmede her zaman kapalı başlar.',
 ])
 
 export type ProductionSeedOptions = {

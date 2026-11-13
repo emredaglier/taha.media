@@ -1,15 +1,13 @@
 import Link from 'next/link'
 
 import { copyrightNotice, OWNER_NAME, TAGLINE } from '../lib/site'
-import { HandToggle } from './hand/HandToggle'
 import { SiteMenu } from './SiteMenu'
 
 /**
  * The name links Home; MENU opens the full-screen menu at every width. The © line goes to the
  * menu as a prop, so the year the server rendered is the one the client hydrates with. It stacks
  * above the Helix, which covers the whole screen on Home. On Home it sits over the full-bleed hero,
- * and while the Helix runs it stays on screen throughout, as the page scrolls the zoom. Hand
- * control's "Elinle gez" sits next to MENU, only where it is offered (desktop with a camera).
+ * and while the Helix runs it stays on screen throughout, as the page scrolls the zoom.
  */
 export function SiteHeader() {
   return (
@@ -20,7 +18,6 @@ export function SiteHeader() {
         <span className="font-serif text-xl">{TAGLINE}</span>
       </Link>
       <div className="flex items-baseline gap-6">
-        <HandToggle />
         <SiteMenu copyright={copyrightNotice()} />
       </div>
     </header>

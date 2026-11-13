@@ -12,9 +12,6 @@ overrides:
   '@tailwindcss/typography>postcss-selector-parser': '>=7.1.6'
   '@esbuild-kit/core-utils>esbuild': '>=0.25.0'
 
-patchedDependencies:
-  '@mediapipe/tasks-vision@1.2.2': ecedf0376cebbd3ea4aec08042c3c7abd10c847393c40675505a16a6c657017b
-
 importers:
 
   .:
@@ -107,9 +104,6 @@ importers:
       '@fontsource/instrument-serif':
         specifier: 5.3.0
         version: 5.3.0
-      '@mediapipe/tasks-vision':
-        specifier: 1.2.2
-        version: 1.2.2(patch_hash=ecedf0376cebbd3ea4aec08042c3c7abd10c847393c40675505a16a6c657017b)
       '@payloadcms/db-sqlite':
         specifier: 3.90.2
         version: 3.90.2(payload@3.90.2(graphql@16.14.2)(supports-color@8.1.1)(typescript@5.9.3))(supports-color@7.2.0)
@@ -1372,9 +1366,6 @@ packages:
     resolution: {integrity: sha512-7pJzOWzPm6oJUxml+PCDRzYQ4A1hTMHAciTAHfFK4fkbDZX33nWPVG7Y3vqdKtslcwAzwmrNDc6sXy2nwWnbiw==}
     cpu: [x64]
     os: [win32]
-
-  '@mediapipe/tasks-vision@1.2.2':
-    resolution: {integrity: sha512-Z7BikxnTvlKgc3d/Nw+LV6B0xyAACxYeAHHUu/xUhm1SV7jlExa9M37beiF/wZFoy0H+cs1PlIT2Z4km02UEHQ==}
 
   '@monaco-editor/loader@1.7.0':
     resolution: {integrity: sha512-gIwR1HrJrrx+vfyOhYmCZ0/JcWqG5kbfG7+d3f/C1LXk2EvzAbHSg3MQ5lO2sMlo9izoAZ04shohfKLVT6crVA==}
@@ -6045,8 +6036,6 @@ snapshots:
 
   '@libsql/win32-x64-msvc@0.4.7':
     optional: true
-
-  '@mediapipe/tasks-vision@1.2.2(patch_hash=ecedf0376cebbd3ea4aec08042c3c7abd10c847393c40675505a16a6c657017b)': {}
 
   '@monaco-editor/loader@1.7.0':
     dependencies:

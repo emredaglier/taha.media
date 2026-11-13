@@ -1,10 +1,9 @@
 import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import config, { handTrackerOnlyInBrowser } from '../next.config'
+import config from '../next.config'
 
 it('sends no Client Hints headers: Payload adds them for its admin, and Chrome re-requests the first page for Critical-CH', async () => {
   const rules = (await config.headers?.()) ?? []
@@ -70,101 +69,5 @@ describe('Sentry source maps (#35)', () => {
   it('generates source maps for the upload when the token, org and project are all set', async () => {
     const built = await load({ SENTRY_AUTH_TOKEN: 't', SENTRY_ORG: 'o', SENTRY_PROJECT: 'p' })
     expect(built.productionBrowserSourceMaps).toBe(true)
-  })
-})
-
-/** The slice of Next's compiled webpack this test calls. */
-type WebpackLib = {
-  webpack: (options: object, done: (error: Error | null, stats?: CompiledStats) => void) => void
-}
-type CompiledStats = {
-  hasErrors(): boolean
-  toString(options: object): string
-  compilation: { assets: Record<string, unknown> }
-}
-
-describe("the server build leaves Hand control's MediaPipe files out (#69)", () => {
-  /**
-   * Compiles a two-file stand-in for `components/hand` (the entry dynamically imports `./tracker`,
-   * which names a file with `new URL(…, import.meta.url)`) with the config's own webpack hook and
-   * Next's bundled webpack, the way a server or a browser build would, and lists what it emits.
-   */
-  const emitted = async (isServer: boolean) => {
-    const lib = (await import(
-      // @ts-expect-error Next's compiled webpack has no declaration file.
-      'next/dist/compiled/webpack/webpack-lib'
-    )) as unknown as WebpackLib
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'hand-build-'))
-    try {
-      const hand = path.join(root, 'src/components/hand')
-      fs.mkdirSync(hand, { recursive: true })
-      fs.writeFileSync(
-        path.join(hand, 'entry.js'),
-        "export const load = () => import('./tracker')\n",
-      )
-      fs.writeFileSync(
-        path.join(hand, 'tracker.js'),
-        "export const model = new URL('./model.task', import.meta.url)\n",
-      )
-      fs.writeFileSync(path.join(hand, 'model.task'), 'model bytes')
-      const built = config.webpack?.({ mode: 'production', plugins: [] }, {
-        isServer,
-        dev: false,
-        webpack: lib,
-      } as never) as object
-      const stats = await new Promise<CompiledStats>((resolve, reject) => {
-        lib.webpack(
-          {
-            ...built,
-            context: root,
-            target: isServer ? 'node' : 'web',
-            entry: path.join(hand, 'entry.js'),
-            output: {
-              path: path.join(root, 'out'),
-              assetModuleFilename: 'media/[name].[hash][ext]',
-            },
-            optimization: { minimize: false },
-          },
-          (error, result) => (error || !result ? reject(error) : resolve(result)),
-        )
-      })
-      expect(stats.hasErrors(), stats.toString({ errors: true })).toBe(false)
-      return Object.keys(stats.compilation.assets)
-    } finally {
-      fs.rmSync(root, { recursive: true, force: true })
-    }
-  }
-
-  it("emits the tracker's files into the browser build", async () => {
-    expect((await emitted(false)).filter((name) => name.endsWith('.task'))).toHaveLength(1)
-  })
-
-  it('emits none of them into the server build', async () => {
-    expect((await emitted(true)).filter((name) => name.endsWith('.task'))).toEqual([])
-  })
-
-  it("still matches the real tracker import: HandControl's import('./tracker') in components/hand", () => {
-    const hand = path.join(import.meta.dirname, 'components/hand')
-    const source = fs.readFileSync(path.join(hand, 'HandControl.tsx'), 'utf8')
-    const dynamic = [...source.matchAll(/import\(\s*'([^']+)'\s*\)/g)].map((match) => match[1]!)
-    expect(dynamic).toContain('./tracker')
-    expect(fs.existsSync(path.join(hand, 'tracker.ts'))).toBe(true)
-    for (const resource of dynamic) {
-      expect(handTrackerOnlyInBrowser.checkResource(resource, hand), resource).toBe(true)
-    }
-  })
-
-  it('reaches the tracker only through that dynamic import, never a static one', () => {
-    const src = import.meta.dirname
-    const files = fs
-      .readdirSync(src, { recursive: true, encoding: 'utf8' })
-      .filter((file) => /\.tsx?$/.test(file) && !/\.test\.tsx?$/.test(file))
-    const offenders = files.filter((file) =>
-      fs
-        .readFileSync(path.join(src, file), 'utf8')
-        .split('\n')
-        .some((line) => /from '[^']*\/tracker'/.test(line) && !/^\s*import type /.test(line)),
-    )
-    expect(offenders).toEqual([])
   })
 })

@@ -31,7 +31,7 @@ export const ALLOWLIST: AllowedHost[] = [
     host: 'cdn.taha.media',
     reason:
       'Our own static and media origin: the release assets prefix (ASSET_PREFIX, ADR-0005), ' +
-      'including the Hand control files, and MEDIA_ORIGIN for uploaded images and videos.',
+      'and MEDIA_ORIGIN for uploaded images and videos.',
   },
 
   // --- Analytics and error reports (the privacy notice names both) -----------------------------
@@ -124,37 +124,4 @@ export const ALLOWLIST: AllowedHost[] = [
       "A placeholder origin for parsing the preview route's `path` parameter (an open-redirect " +
       'guard): `.invalid` is reserved and never resolves, and the code only compares origins.',
   },
-  {
-    host: 'storage.googleapis.com',
-    in: /\/apps\/web\/src\/components\/hand\/tracker\.ts$/,
-    reason:
-      "A comment in tracker.ts saying where the vendored hand model came from (MediaPipe's model " +
-      'bucket). The file is vendored and SHA-256 pinned, never downloaded from there.',
-  },
-
-  // --- MediaPipe's WASM loader and binary (Hand control, #56) ------------------------------------
-  // They are emitted as `static/media/vision_wasm_internal.<hash>.js|wasm` and keep Emscripten's
-  // and TensorFlow Lite's source comments and error text, which hold documentation links. Scoped to
-  // those files, so the same hosts in our own code or any other library still fail.
-  ...[
-    'github.com',
-    'kripken.github.io',
-    'developer.mozilla.org',
-    'unicode.org',
-    'en.wikipedia.org',
-    'www.ietf.org',
-    'tools.ietf.org',
-    'pubs.opengroup.org',
-    'webkit.org',
-    'bugzil.la',
-    'www.khronos.org',
-    'www.tensorflow.org',
-    'server.com',
-  ].map((host): AllowedHost => ({
-    host,
-    in: /\/vision_wasm(?:_module)?_internal\.[^/]+$/,
-    reason:
-      'Link or example in a comment or error text of the MediaPipe WASM loader or binary ' +
-      '(Emscripten, TensorFlow Lite, a stack-trace example); never requested.',
-  })),
 ]

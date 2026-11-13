@@ -6,7 +6,7 @@
 //
 // How `in:` scopes apply: they are regexes on a file's path with forward slashes, and the source
 // scan matches them against the path of the source file (`.../apps/web/src/lib/site.ts`). The
-// scopes written for built output (`/static/chunks/`, `/static/css/`, the MediaPipe loader) never
+// scopes written for built output (`/static/chunks/`, `/static/css/`) never
 // match a source path, so they do not apply here; an entry without `in:` applies to both. A host
 // that only our source needs gets its own entry, scoped to that file.
 import fs from 'node:fs'
@@ -96,7 +96,7 @@ describe('the source scan', () => {
     write('lib/a.spec.ts', '"https://tracker.example.net/"')
     write('test/helper.ts', '"https://tracker.example.net/"')
     write('lib/__tests__/x.ts', '"https://tracker.example.net/"')
-    write('lib/hand-fixtures.ts', '"https://tracker.example.net/"')
+    write('lib/site-fixtures.ts', '"https://tracker.example.net/"')
     write('lib/fixtures/data.ts', '"https://tracker.example.net/"')
     write('lib/readme.md', 'https://tracker.example.net/')
     write('lib/data.json', '"https://tracker.example.net/"')

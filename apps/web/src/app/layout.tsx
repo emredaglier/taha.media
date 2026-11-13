@@ -4,7 +4,6 @@ import '@fontsource-variable/geist'
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 
-import { HandControl } from '../components/hand/HandControl'
 import { Observability } from '../components/Observability'
 import { SiteHeader } from '../components/SiteHeader'
 import {
@@ -29,8 +28,7 @@ export const metadata: Metadata = {
 /**
  * The shell every public route renders in: skip link and header. The `main` and the footer come
  * from the route's own layout (`PageFrame`): Home has no footer (ADR-0103), so the footer can't
- * live here. A single root layout keeps navigation between Home and the other pages client-side,
- * which also keeps Hand control's controller (camera, tracker, preview, ring) running across it.
+ * live here. A single root layout keeps navigation between Home and the other pages client-side.
  */
 export default function RootLayout({ children }: { children: ReactNode }) {
   const sentry = sentryOptions({
@@ -58,7 +56,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         </a>
         <SiteHeader />
         {children}
-        <HandControl />
         {sentry ? <Observability options={sentry} /> : null}
         {beacon ? <script defer {...beacon} /> : null}
         <div aria-hidden="true" className="crt" />

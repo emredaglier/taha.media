@@ -1,9 +1,8 @@
 /**
- * Fails when a file the browser downloads names a host outside the allowlist (#80). Hand control is
- * consent-gated and the privacy notice says nothing is collected, yet MediaPipe 1.2.x sent usage
- * logs to Google (#56). `tracker.test.ts` guards that one host in the installed package; this
- * guards the built output, so the next library that phones home, a version bump that moves an
- * endpoint or a script tag in our own code fails the build too.
+ * Fails when a file the browser downloads names a host outside the allowlist (#80). The privacy notice
+ * says nothing is collected, yet a library can phone home (MediaPipe 1.2.x did, #56). This guards
+ * the built output, so a library that phones home, a version bump that moves an endpoint or a
+ * script tag in our own code fails the build.
  *
  *   node infra/client-hosts.ts [--ext html,rsc,body] [--allow-empty] [--allowlist <file>] <folder>...
  *
@@ -267,7 +266,7 @@ export function formatFindings(findings: readonly Finding[]): string {
     '',
     blocks.join('\n\n'),
     '',
-    'A real request to one of them is a leak: Hand control, analytics and error reports are the',
+    'A real request to one of them is a leak: analytics and error reports are the',
     'only things that may reach outside, and the privacy notice says so. If it is only a comment,',
     'a documentation link or a name that is never requested, add the host to the allowlist with',
     'the reason (and `in:` to limit it to the file that holds it). Otherwise remove the code.',

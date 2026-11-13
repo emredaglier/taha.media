@@ -20,7 +20,7 @@ export function chooseLoopMode(options: {
 }
 
 export const REDUCED_MOTION = '(prefers-reduced-motion: reduce)'
-/** A mouse or trackpad, and a pointer that can hover: Hand control's toggle reads them apart. */
+/** A mouse or trackpad, and a pointer that can hover. */
 export const POINTER_FINE = '(pointer: fine)'
 export const CAN_HOVER = '(hover: hover)'
 const FINE_POINTER = `${CAN_HOVER} and ${POINTER_FINE}`
