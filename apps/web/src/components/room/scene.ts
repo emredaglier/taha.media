@@ -60,6 +60,8 @@ export type RoomFrame = {
   pointer: { nx: number; ny: number; dx: number } | null
   /** Where the opening is (`createOpeningState()` is the room at rest). */
   opening: OpeningState
+  /** The Work whose link has keyboard focus (-1 none): hot while the pointer is on no screen (#132). */
+  focus: number
 }
 
 export type RoomScene = {
@@ -918,7 +920,7 @@ export function createRoomScene({
     ray.set(nx, ny, 0.5).unproject(camera).sub(origin).normalize()
   }
 
-  function update({ seconds, dt, progress, pointer, opening }: RoomFrame) {
+  function update({ seconds, dt, progress, pointer, opening, focus }: RoomFrame) {
     const hover = pointer !== null && !touch
     if (pushing >= 0) pushSeconds += dt
     const blend = pushing >= 0 ? pushBlend(pushSeconds) : 0
@@ -948,7 +950,7 @@ export function createRoomScene({
       rayThrough(pointer.nx, pointer.ny)
       hit = pickScreen(origin, ray, planes, places, ROOM_TUNING.pick.margin)
     }
-    stepHeat(heat, pushing >= 0 ? pushing : hit, places, dt)
+    stepHeat(heat, pushing >= 0 ? pushing : hit >= 0 ? hit : focus, places, dt)
     applyHeat(opening)
     updateTag(dt)
 

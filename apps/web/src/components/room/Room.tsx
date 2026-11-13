@@ -6,7 +6,7 @@ import { useEffect, useEffectEvent, useRef } from 'react'
 import { loaded } from '../../lib/home-loader'
 import { isMenuOpen } from '../../lib/menu-a11y'
 import { WORK_LINK_ATTRIBUTE } from '../../lib/home-marks'
-import { createScroll, scrollBy, stepScroll } from '../../lib/room-model'
+import { createScroll, scrollBy, stepScroll, stopForPlace } from '../../lib/room-model'
 import { isPortrait, wheelPixels } from '../../lib/room-motion'
 import {
   createOpening,
@@ -87,11 +87,12 @@ export function Room({
     const clock = createOpening(!where.opening)
     const opening = createOpeningState() // the rest state, until the opening's first frame says otherwise
     const pointer = { nx: 0, ny: 0, dx: 0, inside: false }
-    const input: RoomFrame = { seconds: 0, dt: 0, progress: 0, pointer: null, opening }
+    const input: RoomFrame = { seconds: 0, dt: 0, progress: 0, pointer: null, opening, focus: -1 }
     let drag: { id: number; lastY: number; startX: number; startY: number; moved: boolean } | null =
       null
     let pushing = -1 // the Work being pushed into, once a click has picked it; stays set until unmount
     let opened = false
+    let focused = -1 // the Work whose link has keyboard focus (#132)
 
     let frameId = 0
     let last = 0
@@ -108,6 +109,7 @@ export function Room({
       input.dt = dt
       input.progress = scroll.progress
       input.pointer = pointer.inside ? pointer : null
+      input.focus = focused
       renderer.draw(input)
       pointer.dx = 0
       // The Drop cursor swells over a Work (site cursor: the nearest `data-cursor` names it).
@@ -194,17 +196,49 @@ export function Room({
         1 - ((event.clientY - box.top) / Math.max(1, box.height)) * 2,
       )
       if (place < 0 || place >= works.length) return
+      choose(place)
+    }
+    const onPointerLeave = () => (pointer.inside = false)
+    // The push-in, for a click on a screen and for Enter on a Work's link alike.
+    const choose = (place: number) => {
       pushing = place
       renderer.push(place)
     }
-    const onPointerLeave = () => (pointer.inside = false)
+    // The static Home's link to a Work and the place it sits on in the room (-1: not a link, or no place for it).
+    const placeOfLink = (target: EventTarget | null) => {
+      const slug =
+        target instanceof Element
+          ? target.closest(`[${WORK_LINK_ATTRIBUTE}]`)?.getAttribute(WORK_LINK_ATTRIBUTE)
+          : null
+      const place = works.findIndex((work) => work.slug === slug)
+      return place < ROOM_TUNING.places ? place : -1
+    }
+    // Tab to a link: its Work is hot and the camera goes to the stop that shows it. The opening is
+    // skipped, as a click would.
+    const onFocusIn = (event: FocusEvent) => {
+      const place = placeOfLink(event.target)
+      if (place < 0 || pushing >= 0) return
+      focused = place
+      skipOpening(clock)
+      scroll.target = stopForPlace(
+        place,
+        isPortrait(window.innerWidth / window.innerHeight),
+      ).progress
+    }
+    const onFocusOut = () => (focused = -1)
     // A Work opened from the room is remembered on this history entry, so coming back rests at its stop.
+    // Enter on its link (a click with no mouse) plays the push-in first; a modified click (new tab) is the browser's.
     const onLinkClick = (event: MouseEvent) => {
       const slug =
         event.target instanceof Element
           ? event.target.closest(`[${WORK_LINK_ATTRIBUTE}]`)?.getAttribute(WORK_LINK_ATTRIBUTE)
           : null
       if (slug) rememberWork(slug)
+      const place = placeOfLink(event.target)
+      const plain = !(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+      if (place < 0 || !plain || !shown || isMenuOpen(document)) return
+      event.preventDefault() // Link sees it and does not navigate: the push-in opens the page
+      if (pushing < 0) choose(place)
     }
 
     renderer.resize()
@@ -218,6 +252,8 @@ export function Room({
     canvas.addEventListener('pointerleave', onPointerLeave)
     document.addEventListener('visibilitychange', onVisibility)
     window.addEventListener('click', onLinkClick, { capture: true })
+    document.addEventListener('focusin', onFocusIn)
+    document.addEventListener('focusout', onFocusOut)
 
     // Drawing starts once the stills are in, or after a short wait (`stillsWaitMs`): the loader
     // goes at the first frame, and by the inline script's 4 s at the latest.
@@ -238,6 +274,8 @@ export function Room({
       canvas.removeEventListener('pointerleave', onPointerLeave)
       document.removeEventListener('visibilitychange', onVisibility)
       window.removeEventListener('click', onLinkClick, { capture: true })
+      document.removeEventListener('focusin', onFocusIn)
+      document.removeEventListener('focusout', onFocusOut)
       renderer.destroy()
       delete root.dataset.home
       delete root.dataset.helixPhase
