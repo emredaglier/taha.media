@@ -31,6 +31,9 @@ import {
  * sheet, loops, the opening, hover and the phone's light variant are later tickets.
  */
 
+/** The room can't run here (no WebGL2, no 2D canvas, a shader that doesn't compile, a lost context): the static Home stays. */
+export class RoomUnavailable extends Error {}
+
 /** The site's grey tokens the room is drawn in (0xRRGGBB), read from the page (`readPalette`). */
 export type RoomPalette = { raised: number; placeholder: number; muted: number }
 
@@ -172,7 +175,7 @@ export function createRoomScene({
   atlasCanvas.width = columns * cellWidth
   atlasCanvas.height = ROOM_TUNING.atlas.rows * cellHeight
   const paint = atlasCanvas.getContext('2d')
-  if (!paint) throw new Error('No 2D context for the room')
+  if (!paint) throw new RoomUnavailable('No 2D context for the room')
   const hexColour = (hex: number) => `#${hex.toString(16).padStart(6, '0')}`
   const cell = (place: number) => ({
     x: (place % columns) * cellWidth,
@@ -601,8 +604,9 @@ export function createRoomScene({
 
   // ---- per frame: nothing here allocates ----
   let portrait = false
-  let look: Look = { x: 0, y: 0 }
-  let swivel: ChairSwivel = { yaw: 0, speed: 0 }
+  const pose = cameraPose(0, false)
+  const look: Look = { x: 0, y: 0 }
+  const swivel: ChairSwivel = { yaw: 0, speed: 0 }
   const lookQuaternion = new THREE.Quaternion()
   const lookEuler = new THREE.Euler()
   const aim = new THREE.Vector3()
@@ -614,8 +618,8 @@ export function createRoomScene({
 
   function update({ seconds, dt, progress, pointer }: RoomFrame) {
     const hover = pointer !== null && !touch
-    const pose = cameraPose(progress, portrait)
-    look = stepLook(look, hover ? pointer : null, dt)
+    cameraPose(progress, portrait, pose)
+    stepLook(look, hover ? pointer : null, dt)
     camera.position.set(pose.position[0], pose.position[1], pose.position[2])
     camera.lookAt(pose.lookAt[0], pose.lookAt[1], pose.lookAt[2])
     camera.quaternion.multiply(lookQuaternion.setFromEuler(lookEuler.set(look.y, look.x, 0, 'YXZ')))
@@ -658,7 +662,7 @@ export function createRoomScene({
         gain *
         Math.exp(-(dx * dx + dy * dy) / reach)
     }
-    swivel = stepChair(swivel, push, dt)
+    stepChair(swivel, push, dt)
     chair.rotation.y = swivel.yaw
   }
 

@@ -8,6 +8,7 @@ import { createScroll, scrollBy, stepScroll } from '../../lib/room-model'
 import { wheelPixels } from '../../lib/room-motion'
 import type { HelixWork } from '../FeaturedWorks'
 import { createRoomRenderer, RoomUnavailable, type RoomRenderer } from './renderer'
+import type { RoomFrame } from './scene'
 
 /**
  * The Edit Room on Home (#127), loaded only on a device that passed the capability check. It draws
@@ -41,8 +42,10 @@ export function Room({ works, onFail }: { works: HelixWork[]; onFail: () => void
       return
     }
 
-    let scroll = createScroll()
+    // Everything a frame reads or writes is made here once: a frame allocates nothing.
+    const scroll = createScroll()
     const pointer = { nx: 0, ny: 0, dx: 0, inside: false }
+    const input: RoomFrame = { seconds: 0, dt: 0, progress: 0, pointer: null }
     let drag: { id: number; lastY: number } | null = null
 
     let frameId = 0
@@ -53,18 +56,18 @@ export function Room({ works, onFail }: { works: HelixWork[]; onFail: () => void
       const now = performance.now()
       const dt = Math.min((now - last) / 1000, 0.1)
       last = now
-      scroll = stepScroll(scroll, dt)
-      renderer.draw({
-        seconds: now / 1000,
-        dt,
-        progress: scroll.progress,
-        pointer: pointer.inside ? pointer : null,
-      })
+      stepScroll(scroll, dt)
+      input.seconds = now / 1000
+      input.dt = dt
+      input.progress = scroll.progress
+      input.pointer = pointer.inside ? pointer : null
+      renderer.draw(input)
       pointer.dx = 0
       if (!shown) {
         shown = true
-        // The room takes over from the static Home in this paint (`helix:` in the CSS reads these
-        // marks; the phase is anything but `hero`, so Home holds the screen), and the loader goes.
+        // The room takes over from the static Home in this paint, and the loader goes. The CSS
+        // locks Home to the screen (no page scroll) on `html[data-home='room']` with any
+        // `data-helix-phase` but `hero` (globals.css, "Home holds the screen"), so 'rest' does that.
         root.dataset.home = 'room'
         root.dataset.helixPhase = 'rest'
         window.scrollTo(0, 0)
@@ -84,9 +87,10 @@ export function Room({ works, onFail }: { works: HelixWork[]; onFail: () => void
 
     // --- input: the wheel and a vertical drag move the camera; the menu, when open, has the input.
     const onWheel = (event: WheelEvent) => {
-      if (event.ctrlKey || isMenuOpen(document)) return // ctrl + wheel is the browser's zoom
+      // Before the first frame the static Home shows and the page scrolls: the wheel is the browser's.
+      if (!shown || event.ctrlKey || isMenuOpen(document)) return // ctrl + wheel is the browser's zoom
       event.preventDefault()
-      scroll = scrollBy(scroll, wheelPixels(event.deltaY, event.deltaMode, window.innerHeight))
+      scrollBy(scroll, wheelPixels(event.deltaY, event.deltaMode, window.innerHeight))
     }
     const onPointerDown = (event: PointerEvent) => {
       if (!event.isPrimary || event.button !== 0 || isMenuOpen(document)) return
@@ -104,7 +108,7 @@ export function Room({ works, onFail }: { works: HelixWork[]; onFail: () => void
       pointer.ny = 1 - ((event.clientY - box.top) / Math.max(1, box.height)) * 2
       pointer.dx += event.movementX
       if (drag?.id !== event.pointerId) return
-      scroll = scrollBy(scroll, drag.lastY - event.clientY) // dragging up goes further in
+      scrollBy(scroll, drag.lastY - event.clientY) // dragging up goes further in
       drag.lastY = event.clientY
     }
     const onPointerEnd = (event: PointerEvent) => {
@@ -123,7 +127,8 @@ export function Room({ works, onFail }: { works: HelixWork[]; onFail: () => void
     canvas.addEventListener('pointerleave', onPointerLeave)
     document.addEventListener('visibilitychange', onVisibility)
 
-    // Drawing starts once the stills are in (the loader waits for that, and no more than 4 s).
+    // Drawing starts once the stills are in, or after a short wait (`stillsWaitMs`): the loader
+    // goes at the first frame, and by the inline script's 4 s at the latest.
     let cancelled = false
     void renderer.ready.then(() => {
       if (!cancelled && !document.hidden) start()

@@ -20,13 +20,14 @@ describe('stepLook: the pointer turns the view, with weight', () => {
     frames: number,
     from = { x: 0, y: 0 },
   ) => {
-    let at = from
-    for (let frame = 0; frame < frames; frame++) at = stepLook(at, pointer, 1 / 60)
+    const at = { ...from }
+    for (let frame = 0; frame < frames; frame++) stepLook(at, pointer, 1 / 60)
     return at
   }
 
   it('moves towards the pointer a little at a time, not at once', () => {
-    const first = stepLook({ x: 0, y: 0 }, { nx: -1, ny: 1 }, 1 / 60)
+    const first = { x: 0, y: 0 }
+    stepLook(first, { nx: -1, ny: 1 }, 1 / 60)
     expect(first.x).toBeGreaterThan(0)
     expect(first.x).toBeLessThan(look.yaw * 0.1)
   })
@@ -45,26 +46,30 @@ describe('stepLook: the pointer turns the view, with weight', () => {
   })
 
   it('is the same at any frame rate for the same time, and ignores a bad number', () => {
-    const slow = stepLook({ x: 0, y: 0 }, { nx: 1, ny: 0 }, 0.1)
-    let fast = { x: 0, y: 0 }
-    for (let step = 0; step < 10; step++) fast = stepLook(fast, { nx: 1, ny: 0 }, 0.01)
+    const slow = { x: 0, y: 0 }
+    stepLook(slow, { nx: 1, ny: 0 }, 0.1)
+    const fast = { x: 0, y: 0 }
+    for (let step = 0; step < 10; step++) stepLook(fast, { nx: 1, ny: 0 }, 0.01)
     expect(fast.x).toBeCloseTo(slow.x, 6)
-    expect(stepLook({ x: 0.05, y: 0 }, { nx: Number.NaN, ny: 0 }, 1 / 60).x).not.toBeNaN()
+    const bad = { x: 0.05, y: 0 }
+    stepLook(bad, { nx: Number.NaN, ny: 0 }, 1 / 60)
+    expect(bad.x).not.toBeNaN()
   })
 })
 
 describe('stepChair: the chair swivels as the pointer passes, then settles', () => {
   it('turns with a push and comes back to rest', () => {
-    let state = stepChair({ yaw: 0, speed: 0 }, 2, 1 / 60)
+    const state = { yaw: 0, speed: 0 }
+    stepChair(state, 2, 1 / 60)
     expect(state.yaw).not.toBe(0)
-    for (let frame = 0; frame < 20 * SECOND; frame++) state = stepChair(state, 0, 1 / 60)
+    for (let frame = 0; frame < 20 * SECOND; frame++) stepChair(state, 0, 1 / 60)
     expect(Math.abs(state.yaw)).toBeLessThan(1e-3)
   })
 
   it('never turns past its limit, whatever the push', () => {
-    let state = { yaw: 0, speed: 0 }
+    const state = { yaw: 0, speed: 0 }
     for (let frame = 0; frame < 5 * SECOND; frame++) {
-      state = stepChair(state, 1e3, 1 / 60)
+      stepChair(state, 1e3, 1 / 60)
       expect(Math.abs(state.yaw)).toBeLessThanOrEqual(chair.maxYaw)
     }
   })

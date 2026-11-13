@@ -227,7 +227,7 @@ html.is-loading .home-loader-mark {
       0.5px 0 rgb(40 220 255 / 0.35);
   }
 
-  /* From the melt on, Home holds the screen: no page scroll (ADR-0103). */
+  /* From the melt on, Home holds the screen: no page scroll (ADR-0103). The Edit Room (room/Room.tsx) sets data-helix-phase='rest' at its first frame to match this rule. */
   html[data-home='room']:not([data-helix-phase='hero']) {
     overflow: hidden;
     overscroll-behavior: none;

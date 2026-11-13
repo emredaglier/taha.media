@@ -159,6 +159,13 @@ describe('the Edit Room on Home', () => {
     expect(progress).toBeLessThanOrEqual(1)
   })
 
+  it('leaves the wheel to the page until the first frame is drawn', async () => {
+    await mount()
+    const early = new WheelEvent('wheel', { deltaY: 400, cancelable: true })
+    window.dispatchEvent(early)
+    expect(early.defaultPrevented).toBe(false)
+  })
+
   it('leaves ctrl + wheel to the browser', async () => {
     await mount()
     const zoom = new WheelEvent('wheel', { deltaY: 400, ctrlKey: true, cancelable: true })

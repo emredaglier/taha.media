@@ -63,6 +63,8 @@ export const ROOM_TUNING = {
   lamp: { pull: 0.72, rate: 3, light: 3.2, spot: 3.4 },
   /** The still of a place is painted into one atlas of `columns` by `rows` cells, each `cellWidth` by `cellHeight` px (16:9). */
   atlas: { columns: 4, rows: 2, cellWidth: 512, cellHeight: 288 },
+  /** How long the room waits for the stills (ms) before it draws without the ones still loading. */
+  stillsWaitMs: 3000,
   /** Device pixel ratio cap: 2, and 1.5 on touch. */
   pixelRatio: { max: 2, touchMax: 1.5 },
   /**

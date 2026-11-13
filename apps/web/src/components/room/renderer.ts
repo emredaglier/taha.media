@@ -2,16 +2,15 @@ import * as THREE from 'three'
 
 import { ROOM_TUNING } from '../../lib/room-tuning'
 import type { HelixWork } from '../FeaturedWorks'
-import { createRoomScene, type RoomFrame, type RoomPalette } from './scene'
+import { createRoomScene, RoomUnavailable, type RoomFrame, type RoomPalette } from './scene'
+
+export { RoomUnavailable }
 
 /** What the room needs of a Featured Work: its still (the Preview loop's poster). */
 export type RoomMedia = Pick<HelixWork, 'poster'>
 
-/** The room can't run here (no WebGL2, a shader that doesn't compile, a lost context): the static Home stays. */
-export class RoomUnavailable extends Error {}
-
 export type RoomRenderer = {
-  /** Resolves once the stills have loaded (or failed: that place keeps its placeholder grey). */
+  /** Resolves once the stills have loaded or failed, or after `ROOM_TUNING.stillsWaitMs`: a place without its still keeps the placeholder grey. */
   ready: Promise<void>
   draw(frame: RoomFrame): void
   /** Matches the drawing buffer to the canvas's size on screen (device pixel ratio capped, lower on touch). */
@@ -92,18 +91,37 @@ export function createRoomRenderer(
   }
   canvas.addEventListener('webglcontextlost', lost)
 
-  const room = createRoomScene({
-    places: Array.from({ length: ROOM_TUNING.places }, (_, place) => works[place] !== undefined),
-    palette: readPalette(canvas),
-    touch,
-  })
+  const freeGl = () => {
+    renderer.dispose()
+    renderer.forceContextLoss()
+  }
+  let room: ReturnType<typeof createRoomScene>
+  try {
+    room = createRoomScene({
+      places: Array.from({ length: ROOM_TUNING.places }, (_, place) => works[place] !== undefined),
+      palette: readPalette(canvas),
+      touch,
+    })
+  } catch (error) {
+    canvas.removeEventListener('webglcontextlost', lost)
+    freeGl()
+    throw error
+  }
   let destroyed = false
-  const ready = Promise.all(
-    works.slice(0, ROOM_TUNING.places).map(async ({ poster }, place) => {
-      const image = await loadStill(poster.src)
-      if (image && !destroyed) room.setStill(place, image, poster.focalPoint)
-    }),
-  ).then(() => undefined)
+  // A still that hangs doesn't hold the room back: after the wait it draws with that place's placeholder.
+  let waiting: ReturnType<typeof setTimeout> | undefined
+  const give = new Promise<void>((resolve) => {
+    waiting = setTimeout(resolve, ROOM_TUNING.stillsWaitMs)
+  })
+  const ready = Promise.race([
+    Promise.all(
+      works.slice(0, ROOM_TUNING.places).map(async ({ poster }, place) => {
+        const image = await loadStill(poster.src)
+        if (image && !destroyed) room.setStill(place, image, poster.focalPoint)
+      }),
+    ).then(() => undefined),
+    give,
+  ]).finally(() => clearTimeout(waiting))
 
   return {
     ready,
@@ -121,9 +139,10 @@ export function createRoomRenderer(
     },
     destroy() {
       destroyed = true
+      clearTimeout(waiting)
       canvas.removeEventListener('webglcontextlost', lost)
       room.dispose()
-      renderer.dispose()
+      freeGl()
     },
   }
 }

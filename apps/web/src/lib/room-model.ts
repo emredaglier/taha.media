@@ -3,6 +3,7 @@ import { ROOM_TUNING, type Stop } from './room-tuning'
 /**
  * The Edit Room's model (#125): pure, no Three.js and no DOM. It decides which Work sits on which
  * place and where the camera is for a scroll position; a thin renderer draws what it says.
+ * What runs every frame (`cameraPose`, `scrollBy`, `stepScroll`) allocates nothing.
  */
 
 type Vec3 = [number, number, number]
@@ -22,56 +23,68 @@ const clamp01 = (value: number) => (value > 0 ? Math.min(1, value) : 0)
 const hermite = (x1: number, x2: number, t1: number, t2: number, u: number) =>
   x1 + u * (t1 + u * (-3 * x1 + 3 * x2 - 2 * t1 - t2 + u * (2 * x1 - 2 * x2 + t1 + t2)))
 
+// Centripetal: the knot spacing is the square root of the distance.
+const gap = (a: Vec3, b: Vec3) => Math.sqrt(Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]))
+
 /**
- * A point on the centripetal Catmull-Rom spline through `points` at `t` in 0..1: the same curve
- * as Three.js `CatmullRomCurve3(points, false, 'centripetal')`, which the prototype uses.
+ * A point on the centripetal Catmull-Rom spline through `points` at `t` in 0..1, written into
+ * `out`: the same curve as Three.js `CatmullRomCurve3(points, false, 'centripetal')`, which the
+ * prototype uses.
  */
-function splinePoint(points: readonly Vec3[], t: number): Vec3 {
+function splinePoint(points: readonly Vec3[], t: number, out: Vec3): void {
   const last = points.length - 1
   const p = clamp01(t) * last
   const segment = Math.min(Math.floor(p), last - 1)
   const u = p - segment
   const p1 = points[segment]!
   const p2 = points[segment + 1]!
-  // The ends reflect their neighbour, so the curve leaves the first stop and enters the last straight.
-  const p0 = segment > 0 ? points[segment - 1]! : (p1.map((v, i) => 2 * v - p2[i]!) as Vec3)
-  const p3 = segment + 2 <= last ? points[segment + 2]! : (p2.map((v, i) => 2 * v - p1[i]!) as Vec3)
-  const gap = (a: Vec3, b: Vec3) => Math.sqrt(Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]))
+  // The ends reflect their neighbour (p0 = 2 p1 - p2), so the curve leaves the first stop and
+  // enters the last straight; a reflected point is as far from its stop as the neighbour is.
+  const before = segment > 0 ? points[segment - 1]! : null
+  const after = segment + 2 <= last ? points[segment + 2]! : null
   const dt1 = gap(p1, p2) < 1e-4 ? 1 : gap(p1, p2)
-  const dt0 = gap(p0, p1) < 1e-4 ? dt1 : gap(p0, p1)
-  const dt2 = gap(p2, p3) < 1e-4 ? dt1 : gap(p2, p3)
-  return p1.map((x1, i) => {
-    const x0 = p0[i]!
+  const gap0 = before ? gap(before, p1) : gap(p1, p2)
+  const gap2 = after ? gap(p2, after) : gap(p1, p2)
+  const dt0 = gap0 < 1e-4 ? dt1 : gap0
+  const dt2 = gap2 < 1e-4 ? dt1 : gap2
+  for (let i = 0; i < 3; i++) {
+    const x1 = p1[i]!
     const x2 = p2[i]!
-    const x3 = p3[i]!
+    const x0 = before ? before[i]! : 2 * x1 - x2
+    const x3 = after ? after[i]! : 2 * x2 - x1
     const t1 = ((x1 - x0) / dt0 - (x2 - x0) / (dt0 + dt1) + (x2 - x1) / dt1) * dt1
     const t2 = ((x2 - x1) / dt1 - (x3 - x1) / (dt1 + dt2) + (x3 - x2) / dt2) * dt1
-    return hermite(x1, x2, t1, t2, u)
-  }) as Vec3
+    out[i] = hermite(x1, x2, t1, t2, u)
+  }
 }
 
 const stopsOf = (phone: boolean): readonly Stop[] =>
   phone ? ROOM_TUNING.phoneStops : ROOM_TUNING.desktopStops
 
+/** The stops' positions and look-at points as plain vectors, made once. */
+const pathOf = (stops: readonly Stop[]) => ({
+  positions: stops.map((stop): Vec3 => [...stop.position]),
+  lookAts: stops.map((stop): Vec3 => [...stop.lookAt]),
+})
+const PATHS = { desktop: pathOf(stopsOf(false)), phone: pathOf(stopsOf(true)) }
+
 /**
  * The camera pose at `progress` along the path (0 the doorway, 1 the last stop; outside it clamps).
- * The camera lingers at each stop, then moves on, and passes through every stop exactly.
+ * The camera lingers at each stop, then moves on, and passes through every stop exactly. It is
+ * written into `out` (a new pose when none is given): a frame loop reuses one and allocates nothing.
  */
-export function cameraPose(progress: number, phone: boolean): CameraPose {
-  const stops = stopsOf(phone)
-  const turns = (stops.length - 1) * Math.PI * 2
+export function cameraPose(
+  progress: number,
+  phone: boolean,
+  out: CameraPose = { position: [0, 0, 0], lookAt: [0, 0, 0] },
+): CameraPose {
+  const path = phone ? PATHS.phone : PATHS.desktop
+  const turns = (path.positions.length - 1) * Math.PI * 2
   const p = clamp01(progress)
   const along = clamp01(p - (ROOM_TUNING.linger * Math.sin(p * turns)) / turns)
-  return {
-    position: splinePoint(
-      stops.map((stop) => [...stop.position]),
-      along,
-    ),
-    lookAt: splinePoint(
-      stops.map((stop) => [...stop.lookAt]),
-      along,
-    ),
-  }
+  splinePoint(path.positions, along, out.position)
+  splinePoint(path.lookAts, along, out.lookAt)
+  return out
 }
 
 /** The stop that shows `place`, and where on the path (0 to 1) the camera stands on it. */
@@ -88,17 +101,14 @@ export type RoomScroll = { target: number; progress: number }
 
 export const createScroll = (): RoomScroll => ({ target: 0, progress: 0 })
 
-/** The wheel or a vertical drag moved `px` CSS px (positive: further in). Stops at both ends. */
-export const scrollBy = (scroll: RoomScroll, px: number): RoomScroll => ({
-  ...scroll,
-  target: clamp01(scroll.target + (Number.isNaN(px) ? 0 : px) / ROOM_TUNING.scrollLengthPx),
-})
+/** The wheel or a vertical drag moved `px` CSS px (positive: further in). Stops at both ends. Changes `scroll` in place. */
+export function scrollBy(scroll: RoomScroll, px: number): void {
+  scroll.target = clamp01(scroll.target + (Number.isNaN(px) ? 0 : px) / ROOM_TUNING.scrollLengthPx)
+}
 
-/** Moves `progress` towards `target` for one frame of `seconds`, with time-based easing: it never overshoots. */
-export function stepScroll(scroll: RoomScroll, seconds: number): RoomScroll {
+/** Moves `progress` towards `target` for one frame of `seconds`, with time-based easing: it never overshoots. Changes `scroll` in place. */
+export function stepScroll(scroll: RoomScroll, seconds: number): void {
   const dt = Math.min(seconds > 0 ? seconds : 0, ROOM_TUNING.maxFrameSeconds)
-  const progress =
-    scroll.progress +
+  scroll.progress +=
     (scroll.target - scroll.progress) * (1 - Math.exp(-dt * ROOM_TUNING.followRate))
-  return { ...scroll, progress }
 }

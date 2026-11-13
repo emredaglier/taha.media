@@ -243,56 +243,76 @@ describe('virtual scroll', () => {
   })
 
   it('moves the target by the travel over the scroll length, and follows it with weight', () => {
-    const moved = scrollBy(createScroll(), ROOM_TUNING.scrollLengthPx / 4)
-    expect(moved.target).toBeCloseTo(0.25, 12)
-    expect(moved.progress).toBe(0)
-    const a = stepScroll(moved, 1 / 60)
-    const b = stepScroll(a, 1 / 60)
-    expect(a.progress).toBeGreaterThan(0)
-    expect(a.progress).toBeLessThan(0.25)
-    expect(b.progress).toBeGreaterThan(a.progress)
+    const state = createScroll()
+    scrollBy(state, ROOM_TUNING.scrollLengthPx / 4)
+    expect(state.target).toBeCloseTo(0.25, 12)
+    expect(state.progress).toBe(0)
+    stepScroll(state, 1 / 60)
+    const first = state.progress
+    stepScroll(state, 1 / 60)
+    expect(first).toBeGreaterThan(0)
+    expect(first).toBeLessThan(0.25)
+    expect(state.progress).toBeGreaterThan(first)
   })
 
   it('comes to rest on the target, from either side', () => {
-    let state = scrollBy(createScroll(), ROOM_TUNING.scrollLengthPx / 2)
-    for (let i = 0; i < 600; i += 1) state = stepScroll(state, 1 / 60)
+    const state = createScroll()
+    scrollBy(state, ROOM_TUNING.scrollLengthPx / 2)
+    for (let i = 0; i < 600; i += 1) stepScroll(state, 1 / 60)
     expect(state.progress).toBeCloseTo(0.5, 6)
-    state = scrollBy(state, -ROOM_TUNING.scrollLengthPx / 4)
-    for (let i = 0; i < 600; i += 1) state = stepScroll(state, 1 / 60)
+    scrollBy(state, -ROOM_TUNING.scrollLengthPx / 4)
+    for (let i = 0; i < 600; i += 1) stepScroll(state, 1 / 60)
     expect(state.progress).toBeCloseTo(0.25, 6)
   })
 
   it('stops at both ends however far the wheel goes, and never overshoots', () => {
-    let state = scrollBy(createScroll(), ROOM_TUNING.scrollLengthPx * 50)
+    const state = createScroll()
+    scrollBy(state, ROOM_TUNING.scrollLengthPx * 50)
     expect(state.target).toBe(1)
     for (let i = 0; i < 600; i += 1) {
-      state = stepScroll(state, 1 / 60)
+      stepScroll(state, 1 / 60)
       expect(state.progress).toBeLessThanOrEqual(1)
     }
-    state = scrollBy(state, -ROOM_TUNING.scrollLengthPx * 50)
+    scrollBy(state, -ROOM_TUNING.scrollLengthPx * 50)
     expect(state.target).toBe(0)
     for (let i = 0; i < 600; i += 1) {
-      state = stepScroll(state, 1 / 60)
+      stepScroll(state, 1 / 60)
       expect(state.progress).toBeGreaterThanOrEqual(0)
     }
   })
 
   it('moves the same distance in the same time at any frame rate, and survives a stalled frame', () => {
     const run = (fps: number) => {
-      let state = scrollBy(createScroll(), ROOM_TUNING.scrollLengthPx / 2)
-      for (let i = 0; i < fps / 2; i += 1) state = stepScroll(state, 1 / fps)
+      const state = createScroll()
+      scrollBy(state, ROOM_TUNING.scrollLengthPx / 2)
+      for (let i = 0; i < fps / 2; i += 1) stepScroll(state, 1 / fps)
       return state.progress
     }
     expect(run(30)).toBeCloseTo(run(144), 2)
-    const stalled = stepScroll(scrollBy(createScroll(), ROOM_TUNING.scrollLengthPx), 60)
+    const stalled = createScroll()
+    scrollBy(stalled, ROOM_TUNING.scrollLengthPx)
+    stepScroll(stalled, 60)
     expect(stalled.progress).toBeLessThanOrEqual(1)
     expect(Number.isFinite(stalled.progress)).toBe(true)
   })
 
   it('ignores a NaN input and does not stick at NaN', () => {
-    const moved = scrollBy(createScroll(), ROOM_TUNING.scrollLengthPx / 4)
-    expect(scrollBy(moved, NaN)).toEqual(moved)
-    expect(stepScroll(moved, NaN)).toEqual(moved)
+    const state = createScroll()
+    scrollBy(state, ROOM_TUNING.scrollLengthPx / 4)
+    const before = { ...state }
+    scrollBy(state, NaN)
+    stepScroll(state, NaN)
+    expect(state).toEqual(before)
     expect(cameraPose(NaN, false)).toEqual(cameraPose(0, false))
+  })
+})
+
+describe('cameraPose into a reused pose', () => {
+  it('writes into the pose it is given and returns it, with the same numbers as a new one', () => {
+    const reused = cameraPose(0, false)
+    for (const progress of [0.1, 0.5, 0.95, 1]) {
+      expect(cameraPose(progress, false, reused)).toBe(reused)
+      expect(reused).toEqual(cameraPose(progress, false))
+    }
   })
 })

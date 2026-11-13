@@ -13,32 +13,33 @@ const finite = (value: number) => (Number.isFinite(value) ? value : 0)
 export type Look = { x: number; y: number }
 
 /**
- * One frame of the pointer turning the view: towards where the pointer is (`nx`, `ny`: -1 to 1
- * across and up), or back to the middle with none (it left, or the device has no hover). Follows
- * with time-based easing, so it has weight and is the same at any frame rate.
+ * One frame of the pointer turning the view, changing `look` in place (no allocation, it runs every
+ * frame): towards where the pointer is (`nx`, `ny`: -1 to 1 across and up), or back to the middle
+ * with none (it left, or the device has no hover). Follows with time-based easing, so it has
+ * weight and is the same at any frame rate.
  */
 export function stepLook(
   look: Look,
   pointer: { nx: number; ny: number } | null,
   seconds: number,
-): Look {
+): void {
   const { yaw, pitch, rate } = ROOM_TUNING.look
-  const aim = pointer
-    ? { x: -clamp(finite(pointer.nx), -1, 1) * yaw, y: clamp(finite(pointer.ny), -1, 1) * pitch }
-    : { x: 0, y: 0 }
+  const aimX = pointer ? -clamp(finite(pointer.nx), -1, 1) * yaw : 0
+  const aimY = pointer ? clamp(finite(pointer.ny), -1, 1) * pitch : 0
   const follow = 1 - Math.exp(-Math.max(0, finite(seconds)) * rate)
-  return { x: look.x + (aim.x - look.x) * follow, y: look.y + (aim.y - look.y) * follow }
+  look.x += (aimX - look.x) * follow
+  look.y += (aimY - look.y) * follow
 }
 
 /** The chair's swivel: its angle and how fast it turns. */
 export type ChairSwivel = { yaw: number; speed: number }
 
-/** One frame of the chair: `push` is the pointer's nudge this frame; a spring brings it back. */
-export function stepChair(chair: ChairSwivel, push: number, seconds: number): ChairSwivel {
+/** One frame of the chair, changing it in place: `push` is the pointer's nudge this frame; a spring brings it back. */
+export function stepChair(chair: ChairSwivel, push: number, seconds: number): void {
   const { stiffness, damping, maxYaw } = ROOM_TUNING.chair
   const dt = Math.max(0, finite(seconds))
-  const speed = chair.speed + finite(push) + (-chair.yaw * stiffness - chair.speed * damping) * dt
-  return { yaw: clamp(chair.yaw + speed * dt, -maxYaw, maxYaw), speed }
+  chair.speed += finite(push) + (-chair.yaw * stiffness - chair.speed * damping) * dt
+  chair.yaw = clamp(chair.yaw + chair.speed * dt, -maxYaw, maxYaw)
 }
 
 /** The pixels a wheel event moved: `deltaMode` 0 is pixels, 1 lines, 2 pages of `viewportHeight`. */
