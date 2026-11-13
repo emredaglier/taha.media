@@ -50,7 +50,10 @@ void main() {
   if (r2 >= 1.) discard;
   int column = clamp(int(floor((d.x + 1.) * .5 * float(${MELT.columns}))), 0, ${MELT.columns - 1});
   float drip = uDrips[column] * (1. - d.x * d.x) * (1. - r2) * .5;
-  outColour = vec4(at(p, uShift.x * drip).r, at(p, uShift.y * drip).g, at(p, uShift.z * drip).b, 1.);
+  // A video read into WebGL comes out a shade off the browser's own drawing of it, so the patch
+  // fades out toward the rim (where nothing is bent anyway) instead of ending in a visible edge.
+  float cover = smoothstep(1., .6, r2);
+  outColour = vec4(vec3(at(p, uShift.x * drip).r, at(p, uShift.y * drip).g, at(p, uShift.z * drip).b) * cover, cover);
 }`
 
 type Source = { texture: WebGLTexture; width: number; height: number; time: number }
