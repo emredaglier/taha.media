@@ -76,4 +76,14 @@ describe('the Showreel in the opening', () => {
     expect(room.setShowreel).toHaveBeenLastCalledWith(null)
     expect(host.querySelector('video')).toBeNull()
   })
+
+  it('stays out if it comes in after the opening has begun, rather than popping in mid-opening', async () => {
+    const { reel, room, video, host } = make()
+    reel.update(at(0.5)) // the room gave up waiting and drew
+    hasFrame(video)
+    video.dispatchEvent(new Event('loadeddata'))
+    await reel.ready
+    expect(room.setShowreel).not.toHaveBeenCalledWith(video)
+    expect(host.contains(video)).toBe(false)
+  })
 })

@@ -307,6 +307,7 @@ export function createRoomScene({
     uRect: { value: new THREE.Vector4(...atlasRect(place)) },
     uB: { value: bright[place]! },
     uReelMix: { value: 0 },
+    uReelCrop: { value: new THREE.Vector4(0, 0, 1, 1) },
   }))
   const screenCentre = screenPlacement.map(() => new THREE.Vector3())
   const screenFacing = screenPlacement.map(() => new THREE.Vector3())
@@ -1019,7 +1020,14 @@ export function createRoomScene({
     setShowreel(video) {
       reel?.dispose()
       reel = video && new THREE.VideoTexture(video)
-      screenUniforms[ROOM_TUNING.opening.place]!.uReel.value = reel ?? noReel
+      const uniforms = screenUniforms[ROOM_TUNING.opening.place]!
+      uniforms.uReel.value = reel ?? noReel
+      // A file that is not 16:9 is cut to it, centred, as the stills are (never stretched).
+      if (video && video.videoWidth > 0 && video.videoHeight > 0) {
+        const { videoWidth: w, videoHeight: h } = video
+        const crop = stillCrop(w, h, { x: 50, y: 50 })
+        uniforms.uReelCrop.value.set(crop.x / w, crop.y / h, crop.width / w, crop.height / h)
+      }
     },
     clearStill(place) {
       blank(place)

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { LOADER_TIMEOUT_MS } from '../../lib/home-loader'
 import { ROOM_TUNING } from '../../lib/room-tuning'
-import { readyWithin } from './ready'
+import { readyWithin, waitBudgetMs } from './ready'
 
 afterEach(() => vi.useRealTimers())
 
@@ -43,5 +43,17 @@ describe('what the room waits for before its first frame', () => {
     vi.useFakeTimers()
     await readyWithin([Promise.resolve()], ROOM_TUNING.stillsWaitMs)
     expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('counts the cap from the page load: a room that mounts late waits less, and never below 0', () => {
+    expect(waitBudgetMs(0)).toBe(ROOM_TUNING.stillsWaitMs)
+    expect(waitBudgetMs(500)).toBe(ROOM_TUNING.stillsWaitMs)
+    expect(waitBudgetMs(2000)).toBeLessThan(ROOM_TUNING.stillsWaitMs)
+    // Whenever the wait ends, it ends before the loader's 4 s.
+    for (const now of [0, 800, 1500, 2500, 3700]) {
+      expect(now + waitBudgetMs(now)).toBeLessThan(LOADER_TIMEOUT_MS)
+      expect(waitBudgetMs(now)).toBeGreaterThanOrEqual(0)
+    }
+    expect(waitBudgetMs(9000)).toBe(0) // already past it: the first frame is not waited for
   })
 })

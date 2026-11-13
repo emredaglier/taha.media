@@ -23,6 +23,7 @@ export function createShowreel(
   video.style.cssText =
     'position:absolute;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none'
   let done = false
+  let begun = false // the opening has started: a Showreel not in by now stays out
   const drop = () => {
     if (done) return
     done = true
@@ -37,7 +38,9 @@ export function createShowreel(
     video.addEventListener(
       'loadeddata',
       () => {
-        if (!done) room.setShowreel(video)
+        // Late (the room gave up waiting and the opening began): it would pop in mid-opening.
+        if (begun) drop()
+        else if (!done) room.setShowreel(video)
         resolve()
       },
       { once: true },
@@ -57,6 +60,7 @@ export function createShowreel(
   return {
     ready,
     update(opening: OpeningState) {
+      begun = true
       if (done) return
       if (opening.reel <= 0) return drop()
       if (!started && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {

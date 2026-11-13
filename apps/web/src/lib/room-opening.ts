@@ -1,3 +1,4 @@
+import { quartInOut } from './room-pointing'
 import { ROOM_TUNING } from './room-tuning'
 
 /**
@@ -22,7 +23,6 @@ export type OpeningState = {
 
 const quadInOut = (x: number) => (x < 0.5 ? 2 * x * x : 1 - 2 * (1 - x) * (1 - x))
 const cubicOut = (x: number) => 1 - (1 - x) ** 3
-const quartInOut = (x: number) => (x < 0.5 ? 8 * x ** 4 : 1 - 8 * (1 - x) ** 4)
 
 /** `ease` of how far `seconds` is through the span that starts `at` and lasts `duration`: 0 before it, 1 after. */
 const along = (
