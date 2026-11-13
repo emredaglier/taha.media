@@ -15,7 +15,8 @@ export function placeWorks<T>(works: readonly T[]): (T | null)[] {
   return Array.from({ length: ROOM_TUNING.places }, (_, place) => works[place] ?? null)
 }
 
-const clamp01 = (value: number) => Math.min(1, Math.max(0, value))
+// NaN counts as 0, so one bad input never sticks the scroll at NaN.
+const clamp01 = (value: number) => (value > 0 ? Math.min(1, value) : 0)
 
 /** Cubic through `x1` and `x2` with end slopes `t1` and `t2` (Hermite, in coefficients). */
 const hermite = (x1: number, x2: number, t1: number, t2: number, u: number) =>
@@ -90,12 +91,12 @@ export const createScroll = (): RoomScroll => ({ target: 0, progress: 0 })
 /** The wheel or a vertical drag moved `px` CSS px (positive: further in). Stops at both ends. */
 export const scrollBy = (scroll: RoomScroll, px: number): RoomScroll => ({
   ...scroll,
-  target: clamp01(scroll.target + px / ROOM_TUNING.scrollLengthPx),
+  target: clamp01(scroll.target + (Number.isNaN(px) ? 0 : px) / ROOM_TUNING.scrollLengthPx),
 })
 
 /** Moves `progress` towards `target` for one frame of `seconds`, with time-based easing: it never overshoots. */
 export function stepScroll(scroll: RoomScroll, seconds: number): RoomScroll {
-  const dt = Math.min(Math.max(seconds, 0), ROOM_TUNING.maxFrameSeconds)
+  const dt = Math.min(seconds > 0 ? seconds : 0, ROOM_TUNING.maxFrameSeconds)
   const progress =
     scroll.progress +
     (scroll.target - scroll.progress) * (1 - Math.exp(-dt * ROOM_TUNING.followRate))

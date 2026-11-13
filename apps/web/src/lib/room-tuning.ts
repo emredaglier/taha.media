@@ -40,9 +40,10 @@ export const ROOM_TUNING = {
   ] as readonly Stop[],
   /**
    * The stop that shows each place (index into the stops above). The prototype has no such table:
-   * these are picked from where each stop looks, and the laptop is only partly in view from its
-   * stop. Check them by eye when tuning.
+   * these are picked from where each stop looks. The laptop (x 1.27, z -1.55) takes the stop with
+   * it nearest the look axis, the doorway aside (35 degrees off on desktop stop 5, 36 on phone
+   * stop 6). Check them by eye when tuning.
    */
-  desktopPlaceStops: [2, 1, 3, 3, 4, 4, 5, 5] as readonly number[],
-  phonePlaceStops: [3, 2, 4, 4, 5, 6, 7, 8] as readonly number[],
+  desktopPlaceStops: [2, 1, 3, 5, 4, 4, 5, 5] as readonly number[],
+  phonePlaceStops: [3, 2, 4, 6, 5, 6, 7, 8] as readonly number[],
 }

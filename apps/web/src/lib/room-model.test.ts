@@ -148,6 +148,83 @@ describe.each([
   })
 })
 
+// Poses between the stops, computed with Three.js 0.187 as the prototype builds its path:
+// `CatmullRomCurve3(points, false, 'centripetal')` read at `f`, where
+// `f = p - 0.55 sin(p (N - 1) 2 pi) / ((N - 1) 2 pi)` (the linger). A wrong tangent, a wrong
+// linger or a wrong end handling moves these.
+const BETWEEN: [string, boolean, number, number[], number[]][] = [
+  [
+    'desktop',
+    false,
+    0.1,
+    [0.1358468124, 1.5268285587, 1.1146931226],
+    [0.0093246707, 1.0960495131, -1.7729211491],
+  ],
+  [
+    'desktop',
+    false,
+    0.33,
+    [-0.5499884461, 1.2474906808, -0.5777297035],
+    [-0.3727800693, 1.0350425646, -1.7462383376],
+  ],
+  [
+    'desktop',
+    false,
+    0.5,
+    [0.022398005, 1.1557148955, -0.8246043691],
+    [-0.0168922306, 1.0625415152, -1.7794710854],
+  ],
+  [
+    'desktop',
+    false,
+    0.95,
+    [-0.1622856522, 1.5029205762, -0.1850665966],
+    [1.2344159684, 1.2802690961, -0.6915192105],
+  ],
+  ['phone', true, 0.1, [0, 1.3839315535, 0.3178994102], [0, 1.0556749414, -1.7493626146]],
+  [
+    'phone',
+    true,
+    0.8,
+    [0.5979482416, 1.2965144273, -1.0169002917],
+    [1.0135553472, 0.9796983921, -1.2624835832],
+  ],
+  [
+    'phone',
+    true,
+    0.95,
+    [0.3824166295, 1.5219792132, -0.4567740776],
+    [1.5278648198, 1.4728889592, -0.4362889406],
+  ],
+]
+
+describe('camera path between the stops', () => {
+  it.each(BETWEEN)(
+    'matches the prototype curve on %s at %s',
+    (_name, phone, progress, position, lookAt) => {
+      const pose = cameraPose(progress, phone)
+      pose.position.forEach((v, axis) => expect(v).toBeCloseTo(position[axis]!, 6))
+      pose.lookAt.forEach((v, axis) => expect(v).toBeCloseTo(lookAt[axis]!, 6))
+    },
+  )
+
+  it.each([false, true])(
+    'lingers at a stop: moves slower there than half way between stops (phone: %s)',
+    (phone) => {
+      const stops = phone ? 9 : 6
+      const travel = (from: number) => {
+        const a = cameraPose(from, phone).position
+        const b = cameraPose(from + 0.01, phone).position
+        return Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2])
+      }
+      // Two stops apart on the path, the second of them a stop and the first half way between stops.
+      const atStop = travel(2 / (stops - 1))
+      const between = travel(2.5 / (stops - 1))
+      expect(atStop).toBeLessThan(between)
+    },
+  )
+})
+
 describe('stopForPlace', () => {
   it('shows one print at a time on a phone', () => {
     expect(stopForPlace(6, true).index).not.toBe(stopForPlace(7, true).index)
@@ -210,5 +287,12 @@ describe('virtual scroll', () => {
     const stalled = stepScroll(scrollBy(createScroll(), ROOM_TUNING.scrollLengthPx), 60)
     expect(stalled.progress).toBeLessThanOrEqual(1)
     expect(Number.isFinite(stalled.progress)).toBe(true)
+  })
+
+  it('ignores a NaN input and does not stick at NaN', () => {
+    const moved = scrollBy(createScroll(), ROOM_TUNING.scrollLengthPx / 4)
+    expect(scrollBy(moved, NaN)).toEqual(moved)
+    expect(stepScroll(moved, NaN)).toEqual(moved)
+    expect(cameraPose(NaN, false)).toEqual(cameraPose(0, false))
   })
 })
