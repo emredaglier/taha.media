@@ -64,6 +64,8 @@ export type RoomScene = {
   setStatement(text: string, family: string): void
   /** Paints a Preview loop's current frame into Work `place`'s cell, cut as its still is: the screen and its desk mirror show it. */
   setFrame(place: number, video: HTMLVideoElement, focalPoint: { x: number; y: number }): void
+  /** Puts Work `place`'s placeholder grey back in its cell (a failed loop with no still). */
+  clearStill(place: number): void
   /** Where each place's screen is (its centre), for picking the screens that play. */
   screenCentres: readonly THREE.Vector3[]
   dispose(): void
@@ -209,12 +211,15 @@ export function createRoomScene({
     paint.drawImage(source, crop.x, crop.y, crop.width, crop.height, x, y, cellWidth, cellHeight)
     atlas.needsUpdate = true
   }
-  places.forEach((hasWork, place) => {
-    paint.fillStyle = hasWork ? hexColour(PLACEHOLDER) : '#000'
+  /** Fills `place`'s cell with the placeholder grey, or black where there is no Work. */
+  const blank = (place: number) => {
+    paint.fillStyle = places[place] ? hexColour(PLACEHOLDER) : '#000'
     paint.fillRect(cell(place).x, cell(place).y, cellWidth, cellHeight)
-  })
+  }
+  places.forEach((_, place) => blank(place))
   const atlas = new THREE.CanvasTexture(atlasCanvas)
   atlas.anisotropy = 4
+  // Mipmaps stay (their rebuild is on the GPU): from the doorway a 512 px cell shows at about 100 px, and a loop without them shimmers.
   textures.push(atlas)
 
   // ---- lights (data only; the shader does the rest) ----
@@ -773,6 +778,10 @@ export function createRoomScene({
       paintCell(place, image, image.width, image.height, focalPoint),
     setFrame: (place, video, focalPoint) =>
       paintCell(place, video, video.videoWidth, video.videoHeight, focalPoint),
+    clearStill(place) {
+      blank(place)
+      atlas.needsUpdate = true
+    },
     screenCentres: screenCentre,
     dispose() {
       geometries.forEach((g) => g.dispose())

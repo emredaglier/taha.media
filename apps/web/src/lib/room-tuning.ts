@@ -11,6 +11,8 @@ export const ROOM_TUNING = {
   places: 8,
   /** How many screens play their loop at once, the ones nearest the camera; the rest hold a frame or their still. */
   liveLoops: { desktop: 4, touch: 3 },
+  /** The most times a second the loops' frames are painted: the shared atlas is uploaded whole each time (a loop is about 30 fps). */
+  loopPaintFps: 30,
   /** Wheel or drag travel (CSS px) that carries the camera along the whole path. */
   scrollLengthPx: 3200,
   /** How fast the camera follows the virtual scroll, per second (time-based easing). */

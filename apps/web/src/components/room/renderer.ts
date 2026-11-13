@@ -132,6 +132,7 @@ export function createRoomRenderer(
     restore: (place) => {
       const still = stills[place]
       if (still) room.setStill(place, still, placed[place]!.poster.focalPoint)
+      else room.clearStill(place)
     },
   })
   const hasWork = Array.from({ length: ROOM_TUNING.places }, (_, place) => place < placed.length)
@@ -148,7 +149,8 @@ export function createRoomRenderer(
         const image = await loadStill(poster.src)
         if (!image || destroyed) return
         stills[place] = image
-        room.setStill(place, image, poster.focalPoint)
+        // A still that comes late (after the wait) never paints over a loop's frame.
+        if (!loops.showsFrame(place)) room.setStill(place, image, poster.focalPoint)
       }),
     ]).then(() => undefined),
     give,
@@ -172,7 +174,10 @@ export function createRoomRenderer(
       }
       room.update(seen)
       // Only the screens nearest the camera play; the others hold their last frame or their still.
-      loops.update(livePlaces(room.camera.position, room.screenCentres, hasWork, touch, live))
+      loops.update(
+        livePlaces(room.camera.position, room.screenCentres, hasWork, touch, live),
+        frame.seconds,
+      )
       glass.render(room.scene, room.camera)
     },
     resize() {
