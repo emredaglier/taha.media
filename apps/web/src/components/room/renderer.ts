@@ -8,7 +8,7 @@ import { ROOM_TUNING } from '../../lib/room-tuning'
 import type { HelixWork } from '../FeaturedWorks'
 import { createGlass } from './glass'
 import { createRoomLoops } from './loops'
-import { readyWithin } from './ready'
+import { readyWithin, waitBudgetMs } from './ready'
 import { createRoomScene, RoomUnavailable, type RoomFrame, type RoomPalette } from './scene'
 import { createShowreel } from './showreel'
 
@@ -176,7 +176,7 @@ export function createRoomRenderer(
         if (!loops.showsFrame(place)) room.setStill(place, image, poster.focalPoint)
       }),
     ],
-    ROOM_TUNING.stillsWaitMs,
+    waitBudgetMs(performance.now()),
   )
 
   // What a frame hands the scene: the pointer mapped back through the bend (one object, reused).

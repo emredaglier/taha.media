@@ -84,26 +84,51 @@ describe('the opening and WCAG 2.3.1 (flashes)', () => {
     }
   })
 
-  it('has no opposing changes at all, so never more than the 3 flashes a second WCAG allows', () => {
-    // A flash is a rise and a fall of the picture's brightness (10% or more) close together.
-    const luminance = (state: OpeningState) =>
-      (state.screens.reduce(
-        (sum, screen, place) => sum + screen * ROOM_TUNING.screens[place]!.base,
-        0,
-      ) /
-        ROOM_TUNING.places) *
-      (0.3 + 0.7 * state.room)
-    let direction = 0
-    let reversals = 0
-    let before = luminance(sample(0))
-    for (const seconds of frames) {
-      const now = luminance(sample(seconds))
-      const step = Math.sign(now - before)
-      if (step !== 0 && direction !== 0 && step !== direction) reversals++
-      if (step !== 0) direction = step
-      before = now
+  it('keeps the picture within the flash limit: steps under 10% a frame and at most 3 flashes a second', () => {
+    // A worst case over the opening's real values. The picture's brightness is the screens
+    // (woken by `screens`, at their rest `base`) weighted by how much of the view each fills: the
+    // middle monitor fills the view while the camera is on it (`fly` 1) and shrinks as it pulls
+    // back (at most as fast as `fly` squared falls), the others share what it leaves. What the
+    // middle monitor shows is the Showreel (`reel`) or its Work, taken at the extremes (one white,
+    // the other black), both ways round.
+    const { place: middle } = ROOM_TUNING.opening
+    const others = ROOM_TUNING.places - 1
+    const luminance = (state: OpeningState, reelIsWhite: boolean) => {
+      const mid = state.fly ** 2
+      const content = reelIsWhite ? state.reel : 1 - state.reel
+      let total = mid * state.screens[middle]! * ROOM_TUNING.screens[middle]!.base * content
+      for (let place = 0; place < ROOM_TUNING.places; place++) {
+        if (place !== middle)
+          total += ((1 - mid) / others) * state.screens[place]! * ROOM_TUNING.screens[place]!.base
+      }
+      return total
     }
-    expect(reversals).toBe(0)
+    for (const reelIsWhite of [true, false]) {
+      const series = frames.map((seconds) => luminance(sample(seconds), reelIsWhite))
+      // The largest step from one frame to the next.
+      const steps = series.slice(1).map((value, i) => Math.abs(value - series[i]!))
+      expect(Math.max(...steps)).toBeLessThan(0.1)
+      // Flashes: a swing of 10% or more that is followed at once by a swing back, counted per second.
+      const swings: { at: number; delta: number }[] = []
+      let start = 0
+      for (let i = 1; i < series.length; i++) {
+        const turning =
+          i === series.length - 1 ||
+          Math.sign(series[i + 1]! - series[i]!) * Math.sign(series[i]! - series[i - 1]!) < 0
+        if (turning && Math.abs(series[i]! - series[start]!) >= 0.1) {
+          swings.push({ at: i / FPS, delta: series[i]! - series[start]! })
+          start = i
+        }
+      }
+      const flashes = swings
+        .slice(1)
+        .filter((swing, i) => Math.sign(swing.delta) !== Math.sign(swings[i]!.delta))
+      for (const flash of flashes) {
+        expect(
+          flashes.filter((other) => Math.abs(other.at - flash.at) < 1).length,
+        ).toBeLessThanOrEqual(3)
+      }
+    }
   })
 
   it('a skip only brightens too: it is one step towards the finished room', () => {

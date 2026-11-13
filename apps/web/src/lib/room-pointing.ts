@@ -112,10 +112,13 @@ export function stepHeat(
   }
 }
 
+/** Quartic in-out easing: slow, quick, slow; 0 to 1 over `p` in 0 to 1. The push-in and the opening's pull-back use it. */
+export const quartInOut = (p: number): number => (p < 0.5 ? 8 * p ** 4 : 1 - 8 * (1 - p) ** 4)
+
 /** How far the camera is from the path pose to the screen (0 to 1) `seconds` into the push-in: slow, quick, slow (quartic in-out). It ends at 1 on time and stays. */
 export function pushBlend(seconds: number): number {
   const p = clamp(positive(seconds) / ROOM_TUNING.push.seconds, 0, 1)
-  return p < 0.5 ? 8 * p ** 4 : 1 - 8 * (1 - p) ** 4
+  return quartInOut(p)
 }
 
 /**
