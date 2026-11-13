@@ -186,6 +186,7 @@ export function createRoomRenderer(
     progress: 0,
     pointer: null,
     opening: createOpeningState(),
+    focus: -1,
   }
   const seenPointer = { nx: 0, ny: 0, dx: 0 }
   let aspect = 1
@@ -198,6 +199,7 @@ export function createRoomRenderer(
       seen.progress = frame.progress
       seen.pointer = frame.pointer && seenPointer
       seen.opening = frame.opening
+      seen.focus = frame.focus
       if (frame.pointer) {
         throughGlass(frame.pointer.nx, frame.pointer.ny, aspect, seenPointer)
         seenPointer.dx = frame.pointer.dx

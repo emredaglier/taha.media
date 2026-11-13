@@ -38,6 +38,7 @@ type Frame = {
   pointer: { nx: number; ny: number; dx: number } | null
   /** The opening as it was when drawn (the room reuses one object). */
   opening: { reel: number; fly: number; settled: boolean }
+  focus: number
 }
 let draws: Frame[]
 let loss: (() => void) | null
@@ -90,6 +91,7 @@ beforeEach(() => {
         progress: frame.progress,
         pointer: frame.pointer,
         opening: { reel, fly, settled },
+        focus: frame.focus,
       })
     },
     pick: scene.pick,
@@ -456,6 +458,69 @@ describe('the Edit Room on Home', () => {
       expect(pushes).toEqual([1])
       expect(router.push).toHaveBeenCalledTimes(1)
       expect(router.push).toHaveBeenCalledWith('/isler/b')
+    })
+  })
+
+  describe('the keyboard (#132)', () => {
+    let links: HTMLAnchorElement[]
+    // The static Home's links, which stay in the page under the room.
+    afterEach(() => links.forEach((link) => link.remove()))
+    beforeEach(async () => {
+      vi.spyOn(performance, 'getEntriesByType').mockReturnValue([
+        { type: 'navigate', name: 'https://taha.media/' },
+      ] as never) // a document loaded on Home: the opening plays
+      links = works.map(({ slug }) => {
+        const link = document.createElement('a')
+        link.href = `/isler/${slug}`
+        link.setAttribute('data-work-slug', slug)
+        document.body.append(link)
+        return link
+      })
+      await mount()
+      runFrame()
+    })
+
+    it('makes the Work of a focused link hot and brings its stop into view, until focus leaves', () => {
+      links[2]!.focus()
+      runFrames(240)
+      expect(draws.at(-1)!.focus).toBe(2)
+      expect(draws.at(-1)!.progress).toBeCloseTo(stopForPlace(2, false).progress, 2)
+      links[2]!.blur()
+      runFrame()
+      expect(draws.at(-1)!.focus).toBe(-1)
+    })
+
+    it('plays the push-in on Enter, without following the link, then opens the Work page', () => {
+      links[1]!.focus()
+      const enter = new MouseEvent('click', { bubbles: true, cancelable: true })
+      links[1]!.dispatchEvent(enter)
+      expect(enter.defaultPrevented).toBe(true)
+      expect(pushes).toEqual([1])
+      links[1]!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+      expect(pushes).toEqual([1])
+      scene.pushed = true
+      runFrames(3)
+      expect(router.push).toHaveBeenCalledTimes(1)
+      expect(router.push).toHaveBeenCalledWith('/isler/b')
+    })
+
+    it('leaves a modified click, which opens a new tab, to the browser', () => {
+      const click = new MouseEvent('click', { bubbles: true, cancelable: true, ctrlKey: true })
+      let prevented = true
+      links[0]!.addEventListener('click', (event) => {
+        prevented = event.defaultPrevented
+        event.preventDefault() // jsdom cannot navigate
+      })
+      links[0]!.dispatchEvent(click)
+      expect(prevented).toBe(false)
+      expect(pushes).toEqual([])
+    })
+
+    it('skips the opening, as a click would', () => {
+      expect(draws[0]!.opening.settled).toBe(false)
+      links[0]!.focus()
+      runFrame()
+      expect(draws.at(-1)!.opening.settled).toBe(true)
     })
   })
 })
