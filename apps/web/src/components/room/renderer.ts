@@ -101,25 +101,26 @@ export function createRoomRenderer(
     renderer.forceContextLoss()
   }
   let room: ReturnType<typeof createRoomScene>
+  let glass: ReturnType<typeof createGlass>
   try {
     room = createRoomScene({
       places: Array.from({ length: ROOM_TUNING.places }, (_, place) => works[place] !== undefined),
       palette: readPalette(canvas),
       touch,
     })
+    glass = createGlass(renderer)
   } catch (error) {
     canvas.removeEventListener('webglcontextlost', lost)
     freeGl()
     throw error
   }
-  const glass = createGlass(renderer)
   let destroyed = false
   // The Statement is the static hero's text, drawn on the sheet once its font is in (the page's text stays the heading).
   const statementElement = document.querySelector(STATEMENT_SELECTOR)
   const statement = statementElement?.textContent?.trim() ?? ''
   const family = statementElement ? getComputedStyle(statementElement).fontFamily : 'serif'
   room.setStatement(statement, family)
-  const statementReady = (document.fonts?.load(`100px ${family}`) ?? Promise.resolve())
+  const statementReady = (document.fonts?.load(`100px ${family}`, statement) ?? Promise.resolve())
     .catch(() => undefined) // no font: the sheet keeps the fallback face
     .then(() => {
       if (!destroyed) room.setStatement(statement, family)

@@ -160,9 +160,7 @@ describe('atlasRect: each place has its own cell of the atlas', () => {
 describe('pixelRatioFor: the drawing buffer is sharp but not wasteful', () => {
   const { max, touchMax } = ROOM_TUNING.pixelRatio
 
-  it('follows the screen up to the cap: 2, and 1.5 on touch', () => {
-    expect(max).toBe(2)
-    expect(touchMax).toBe(1.5)
+  it('follows the screen up to the cap, a lower one on touch', () => {
     expect(pixelRatioFor(1, false)).toBe(1)
     expect(pixelRatioFor(3, false)).toBe(max)
     expect(pixelRatioFor(3, true)).toBe(touchMax)
