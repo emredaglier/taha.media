@@ -105,7 +105,7 @@ export const HELIX_TUNING = {
    */
   meltStartScroll: 0.995,
   meltStartZoom: 0.95,
-  /** The hero's name, ©, Statement and "Sesli izle" have left by this much of the zoom (0 to 1). */
+  /** The hero's name, © and Statement have left by this much of the zoom (0 to 1). */
   heroLeavesBy: 0.35,
   /**
    * The cards appear during the zoom: the first (the Showreel's own) as it begins, the others from
@@ -137,4 +137,15 @@ export const HELIX_TUNING = {
    * already punch glyphs into the middle of the Showreel; `reachMargin` covers it at the end.
    */
   meltRing: { depth: 0.14, reachMargin: 0.1, headStart: 0.03 },
+  /**
+   * Chromatic aberration on the Helix: red and blue split radially, in device px at the screen's
+   * corners (0 in the middle, growing with the distance from it; 0 for none).
+   */
+  aberration: 3,
+  /**
+   * The CRT bend: the picture bulges like a curved TV screen (a barrel bend). How much more the
+   * middle is magnified than the corners, as a share (0 no bend). The corners stay on the screen's
+   * corners, so the picture always fills the screen, with no rim (`crtWarp`).
+   */
+  crtBend: 0.15,
 }

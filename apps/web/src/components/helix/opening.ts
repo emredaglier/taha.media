@@ -1,11 +1,6 @@
 import type { HelixPhase, Opening } from '../../lib/helix-motion'
 import { HELIX_TUNING } from '../../lib/helix-tuning'
-import {
-  HERO_GONE_ATTRIBUTE,
-  HERO_PHONE_ATTRIBUTE,
-  HERO_SELECTOR,
-  WORK_LINK_ATTRIBUTE,
-} from '../../lib/home-marks'
+import { HERO_PHONE_ATTRIBUTE, HERO_SELECTOR, WORK_LINK_ATTRIBUTE } from '../../lib/home-marks'
 import type { HelixWork } from '../FeaturedWorks'
 
 /**
@@ -23,8 +18,7 @@ export const SPACER_HEIGHT = `calc(100vh + ${HELIX_TUNING.zoomScrollVh}vh)`
 /**
  * Writes the marks the CSS keys to on `<html>`: `data-home="helix"` (the Helix runs),
  * `data-helix-phase` (the opening's phase: the page scrolls in `hero` and is locked after), and
- * how far the hero's overlays have left (and whether they all have: `HERO_GONE_ATTRIBUTE`). Writes
- * only what changed.
+ * how far the hero's overlays have left. Writes only what changed.
  */
 export function pageMarks(root: HTMLElement) {
   let phase = ''
@@ -45,7 +39,6 @@ export function pageMarks(root: HTMLElement) {
         gone = heroGone
         root.style.setProperty('--helix-hero-gone', String(heroGone))
         root.style.setProperty('--helix-hero-visibility', heroGone >= 1 ? 'hidden' : 'visible')
-        root.toggleAttribute(HERO_GONE_ATTRIBUTE, heroGone >= 1)
       }
     },
     clear() {
@@ -53,7 +46,6 @@ export function pageMarks(root: HTMLElement) {
       delete root.dataset.helixPhase
       root.style.removeProperty('--helix-hero-gone')
       root.style.removeProperty('--helix-hero-visibility')
-      root.removeAttribute(HERO_GONE_ATTRIBUTE)
       root.style.removeProperty('--helix-handover-fade')
     },
   }

@@ -71,7 +71,8 @@ export function SiteMenu({ copyright }: { copyright: string }) {
         ref={summaryRef}
         aria-controls={MENU_PANEL_ID}
         aria-expanded={open}
-        className="relative z-50 cursor-pointer list-none text-sm uppercase [&::-webkit-details-marker]:hidden"
+        data-cursor={open ? 'Kapat' : 'Menü'}
+        className="relative z-50 cursor-pointer list-none font-serif text-xl uppercase [&::-webkit-details-marker]:hidden"
         onClick={(event) => {
           // Pre-hydration this is the native toggle; after, state drives `details.open`.
           event.preventDefault()

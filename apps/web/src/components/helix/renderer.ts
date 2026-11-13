@@ -60,6 +60,10 @@ export type HelixFrame = {
   bend: number
   progress: number
   zoom: number
+  /** The CRT bend (`crtWarp`). */
+  crt: number
+  /** How far the hero's text has left with the zoom, 0 to 1 (`Opening.heroGone`). */
+  heroGone: number
   showreel: { slot: number; melt: number } | null
   playing: ReadonlySet<number>
   held: ReadonlySet<number>
@@ -73,7 +77,8 @@ export type HelixRenderer = {
   resize(): void
   /**
    * Resolves once the Showreel layer shows what the static hero shows (`shown`: its loop on
-   * screen, if one plays), so the Helix can take over under a matching picture.
+   * screen, if one plays) and the composite's fonts have loaded (the glyphs and the hero's text),
+   * so the Helix can take over under a matching picture.
    */
   handOver(shown: HTMLVideoElement | null): Promise<void>
   /**
@@ -236,7 +241,8 @@ export function createHelixRenderer(
   canvas.addEventListener('webglcontextlost', lost)
 
   return {
-    handOver: (shown) => showreel.handOver(shown),
+    handOver: (shown) =>
+      Promise.all([showreel.handOver(shown), composite.ready]).then(() => undefined),
 
     pause() {
       loops.pause()
@@ -256,7 +262,20 @@ export function createHelixRenderer(
       heat.resize(canvas.clientWidth / Math.max(1, canvas.clientHeight))
     },
 
-    draw({ cards, band, bend, progress, zoom, showreel: reel, playing, held, cursor, dt }) {
+    draw({
+      cards,
+      band,
+      bend,
+      progress,
+      zoom,
+      crt,
+      heroGone,
+      showreel: reel,
+      playing,
+      held,
+      cursor,
+      dt,
+    }) {
       if (gl.isContextLost()) return
       const { aspect, focal } = lensFor(canvas.clientWidth, canvas.clientHeight)
       // The opening's camera: from the front card covering the screen down to 1, at a constant rate.
@@ -321,9 +340,11 @@ export function createHelixRenderer(
         centre,
         reach: box ? Math.hypot(box.halfWidth * aspect, box.halfHeight) / 2 : 0,
         aspect,
+        crt,
         speed,
         shift: turnOnScreen(progress, focal),
         heat: heat.texture,
+        heroGone,
       })
     },
 

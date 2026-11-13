@@ -566,7 +566,7 @@ export type Opening = {
    * it has melted away.
    */
   showreelSlot: number | null
-  /** How far the hero's overlays (name, ©, Statement, "Sesli izle") have left: 0 to 1. */
+  /** How far the hero's overlays (name, ©, Statement) have left: 0 to 1. */
   heroGone: number
   /** Whether the front Work's overlay shows: once the Helix is in place. */
   frontShown: boolean

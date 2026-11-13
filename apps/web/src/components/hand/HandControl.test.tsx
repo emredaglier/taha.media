@@ -269,10 +269,17 @@ describe('the toggle', () => {
     expect(toggle()!.parentElement).toBe(slot())
     expect(placeholder()!.textContent).toBe(toggle()!.textContent)
     expect(placeholder()!.className.replace('invisible', '').trim().split(/\s+/)).toEqual(
-      expect.arrayContaining(['text-sm', 'uppercase', 'whitespace-nowrap']),
+      expect.arrayContaining(['font-serif', 'text-xl', 'uppercase', 'whitespace-nowrap']),
     )
     expect(toggle()!.className.split(/\s+/)).toEqual(
-      expect.arrayContaining(['absolute', 'inset-0', 'text-sm', 'uppercase', 'whitespace-nowrap']),
+      expect.arrayContaining([
+        'absolute',
+        'inset-0',
+        'font-serif',
+        'text-xl',
+        'uppercase',
+        'whitespace-nowrap',
+      ]),
     )
   })
 

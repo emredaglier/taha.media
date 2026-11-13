@@ -1,0 +1,290 @@
+<!doctype html>
+<!--
+  THROWAWAY prototype: six rival landing pages for taha.media, Three.js behind one curved-TV glass.
+  Contract: docs/design/home/CONTRACT.md. Keys 1-9, 0, -, =, q, w, e, t or the tabs pick an example; R replays its opening.
+  FAKE: the Work titles/kinds/years, the hero sentence, the loops and the Showreel (grey moving stand-ins).
+  MENU is shown but dead. Reduced motion: one still frame, no opening.
+-->
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Taha — home prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@100..900&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#000;--t:#ededed;--mu:#8f8f8f;--rs:#1a1a1a;--ph:#2a2a2a;
+  --serif:'Instrument Serif',Georgia,'Times New Roman',serif;--sans:'Geist',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --gut:16px;--hh:68px}
+@media (min-width:768px){:root{--gut:32px;--hh:84px}}
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden;background:var(--bg);color:var(--t);font-family:var(--sans);overscroll-behavior:none}
+a{color:inherit;text-decoration:none}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+:focus-visible{outline:2px solid currentColor;outline-offset:4px}
+.m{font:500 11px/1.3 var(--sans);letter-spacing:.14em;text-transform:uppercase}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+#gl{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+header{position:fixed;inset:0 0 auto 0;height:var(--hh);z-index:50;display:flex;align-items:center;justify-content:space-between;padding:0 var(--gut);mix-blend-mode:difference;color:#fff;pointer-events:none}
+.logo,.menu{font:400 20px/1 var(--serif);text-transform:uppercase;letter-spacing:.02em}
+.tabs{position:fixed;left:50%;top:10px;transform:translateX(-50%);z-index:110;display:flex;gap:4px;justify-content:center;width:max-content;max-width:70vw;flex-wrap:wrap;mix-blend-mode:difference;color:#fff}
+.tabs button{padding:6px 9px;border:1px solid rgba(255,255,255,.35);opacity:.55}
+.tabs button[aria-pressed=true]{opacity:1;background:#fff;color:#000}
+.fps{position:fixed;left:50%;bottom:10px;transform:translateX(-50%);z-index:110;mix-blend-mode:difference;color:#fff;opacity:.6;font-variant-numeric:tabular-nums;pointer-events:none}
+@media (max-width:767px){.tabs{top:calc(var(--hh) - 14px);max-width:92vw}}
+/* the fake Work page */
+#work{position:fixed;inset:0;z-index:60;background:var(--bg);display:flex;flex-direction:column;justify-content:center;gap:16px;padding:0 var(--gut);opacity:0;visibility:hidden;transition:opacity .25s,visibility 0s .25s}
+#work.on{opacity:1;visibility:visible;transition:opacity .25s}
+#work h1{font:400 clamp(3.5rem,13vw,12rem)/.9 var(--serif);margin:0;letter-spacing:-.02em}
+#work p{color:var(--mu);margin:0}
+#work button{align-self:flex-start;margin-top:24px;padding:10px 14px;border:1px solid currentColor}
+#drop{position:fixed;left:0;top:0;z-index:120;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;background:#fff;mix-blend-mode:difference;pointer-events:none;will-change:transform;opacity:0}
+@media (hover:hover) and (pointer:fine){html.has-drop,html.has-drop *{cursor:none!important}}
+</style>
+</head>
+<body>
+<canvas id="gl" aria-hidden="true"></canvas>
+<header><span class="logo">Taha Çiftçi</span><span class="menu" data-fake>Menu</span></header>
+<h1 class="sr" id="hero"></h1>
+<nav class="sr" id="links" aria-label="Öne çıkan işler"></nav>
+<section id="work" aria-hidden="true"><p class="m" id="work-meta"></p><h1 id="work-title"></h1><button class="m" id="work-back">← Geri</button></section>
+<div class="tabs m" id="tabs" role="group" aria-label="Example"></div>
+<div class="fps m" id="fps" aria-hidden="true"></div>
+<div id="drop" aria-hidden="true"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.13.0/gsap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s)
+  const canvas = $('#gl'), tabs = $('#tabs'), fpsEl = $('#fps'), workEl = $('#work'), linksEl = $('#links')
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
+  const touch = matchMedia('(hover: none)').matches
+  const works = [ // data-fake: every title, kind and year
+    ['Gece Vardiyası', 'Reklam', 2026], ['Kırmızı Oda', 'Klip', 2026], ['Tuz', 'Kısa film', 2025], ['Asfalt', 'Reklam', 2025],
+    ['Sessiz Film', 'Belgesel', 2025], ['Mavi Saat', 'Klip', 2024], ['Kumsal', 'Moda filmi', 2024], ['Yankı', 'Jenerik', 2024],
+  ].map(([title, kind, year], i) => ({ title, kind, year, href: '/isler/' + (i + 1) }))
+  const hero = 'Kurgu, hareket ve tasarım. Görüntüyü ritme çeviriyorum.' // data-fake
+  $('#hero').textContent = hero
+
+  // --- renderer + glass --------------------------------------------------------
+  THREE.ColorManagement.enabled = false
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' })
+  renderer.outputColorSpace = THREE.LinearSRGBColorSpace
+  renderer.setClearColor(0x000000, 1)
+  const size = { w: innerWidth, h: innerHeight, dpr: 1 }
+  const target = new THREE.WebGLRenderTarget(2, 2, { samples: 4, depthBuffer: true })
+  const BEND = 0.2
+  const glass = new THREE.ShaderMaterial({
+    depthTest: false, depthWrite: false,
+    uniforms: { tPic: { value: target.texture }, uAspect: { value: 1 }, uBend: { value: BEND }, uFringe: { value: 0.03 }, uTime: { value: 0 }, uDpr: { value: 1 } },
+    vertexShader: 'varying vec2 vUv;void main(){vUv=uv;gl_Position=vec4(position.xy,0.,1.);}',
+    fragmentShader: `
+      precision highp float; varying vec2 vUv; uniform sampler2D tPic; uniform float uAspect,uBend,uFringe,uTime,uDpr;
+      // same maths as apps/web/src/lib/helix-crt.ts crtWarp: screen point -> picture point
+      vec2 warp(vec2 n,float b){vec2 p=n*vec2(uAspect,1.);return n*(1.+b*dot(p,p)/(uAspect*uAspect+1.))/(1.+b);}
+      float h(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}
+      void main(){
+        vec2 n=vUv*2.-1.;
+        float r=texture2D(tPic,warp(n*(1.+uFringe*.25),uBend)*.5+.5).r;
+        float g=texture2D(tPic,warp(n,uBend)*.5+.5).g;
+        float b=texture2D(tPic,warp(n*(1.-uFringe*.25),uBend)*.5+.5).b;
+        vec3 c=vec3(r,g,b);
+        c*=mod(floor(gl_FragCoord.y/uDpr),3.)<1.?.84:1.;                 // scanlines
+        c+=(h(gl_FragCoord.xy+fract(uTime)*91.)-.5)*.07;                  // grain
+        vec2 q=n*vec2(.9,1.);c*=1.-smoothstep(.55,1.5,dot(q,q))*.75;      // vignette
+        gl_FragColor=vec4(c,1.);
+      }`,
+  })
+  const glassScene = new THREE.Scene(), glassCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1)
+  glassScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), glass))
+  const crt = { push: 0 }; let pushNow = 0
+
+  // --- stand-in loops: one atlas (4x2) + the Showreel ------------------------------
+  const CW = 320, CH = 180, GREYS = ['#1a1a1a', '#2a2a2a', '#8f8f8f', '#ededed']
+  function paintLoop(g, i, t, w, h, label) {
+    g.fillStyle = GREYS[i % 2]; g.fillRect(0, 0, w, h)
+    const kind = i % 4, u = w / 480
+    if (kind === 0) for (let k = 0; k < 7; k++) { g.fillStyle = GREYS[(k + i) % 4]; g.fillRect((((k * 90 + t * 120 * (1 + i * 0.1)) % 570) - 90) * u, 0, 44 * u, h) }
+    else if (kind === 1) for (let k = 6; k > 0; k--) { g.fillStyle = GREYS[(k + i) % 4]; g.beginPath(); g.arc(w / 2 + Math.sin(t + i) * 80 * u, h / 2, (k * 34 + Math.sin(t * 2 + k) * 14) * u, 0, 7); g.fill() }
+    else if (kind === 2) for (let k = 0; k < 5; k++) { g.save(); g.translate((60 + k * 90) * u, h / 2 + Math.sin(t * 1.5 + k) * 60 * u); g.rotate(t + k); g.fillStyle = GREYS[(k + i + 1) % 4]; g.fillRect(-36 * u, -36 * u, 72 * u, 72 * u); g.restore() }
+    else for (let k = 0; k < 9; k++) { g.fillStyle = GREYS[(k + i) % 4]; const y = ((k * 34 + t * 70) % 306 - 34) * u; g.fillRect(0, y, w * (0.3 + 0.7 * Math.abs(Math.sin(t * 0.8 + k))), 18 * u) }
+    g.fillStyle = '#ededed'; g.font = `500 ${Math.round(13 * u + 4)}px Geist, sans-serif`; g.fillText(label, 10 * u, h - 10 * u)
+  }
+  const atlasCanvas = Object.assign(document.createElement('canvas'), { width: CW * 4, height: CH * 2 })
+  const atlasG = atlasCanvas.getContext('2d')
+  const reelCanvas = Object.assign(document.createElement('canvas'), { width: 640, height: 360 })
+  const reelG = reelCanvas.getContext('2d')
+  const plainTexture = (c) => { const t = new THREE.CanvasTexture(c); t.generateMipmaps = false; t.minFilter = t.magFilter = THREE.LinearFilter; return t }
+  const atlas = plainTexture(atlasCanvas), showreel = { texture: plainTexture(reelCanvas) }
+  function paintLoops(t) {
+    for (let i = 0; i < 8; i++) {
+      atlasG.save(); atlasG.translate((i % 4) * CW, Math.floor(i / 4) * CH); atlasG.beginPath(); atlasG.rect(0, 0, CW, CH); atlasG.clip()
+      paintLoop(atlasG, i, t, CW, CH, works[i].title.toUpperCase()); atlasG.restore()
+    }
+    paintLoop(reelG, 5, t * 1.4, 640, 360, 'SHOWREEL'); reelG.fillStyle = '#ededed'; reelG.font = "400 120px 'Instrument Serif', serif"; reelG.fillText('Showreel', 28, 130)
+    atlas.needsUpdate = true; showreel.texture.needsUpdate = true
+  }
+  // canvas row 0 is the top; with flipY the top is v = 1
+  const loopRect = (i) => [(i % 4) / 4, 1 - (Math.floor(i / 4) + 1) / 2, 1 / 4, 1 / 2]
+  function loopGeometry(i, w, h, sw = 1, sh = 1) {
+    const geo = new THREE.PlaneGeometry(w, h, sw, sh), uv = geo.attributes.uv, [u0, v0, su, sv] = loopRect(i)
+    for (let k = 0; k < uv.count; k++) uv.setXY(k, u0 + uv.getX(k) * su, v0 + uv.getY(k) * sv)
+    return geo
+  }
+  function text(str, opts = {}) {
+    const px = opts.caps ? (opts.size || 28) : (opts.size || 160)
+    const font = opts.caps ? `500 ${px}px Geist, sans-serif` : `400 ${px}px ${opts.font === 'sans' ? 'Geist, sans-serif' : "'Instrument Serif', Georgia, serif"}`
+    const s = opts.caps ? str.toUpperCase() : str
+    const c = document.createElement('canvas'), g = c.getContext('2d')
+    g.font = font; if (opts.caps) g.letterSpacing = px * 0.14 + 'px'
+    const pad = Math.ceil(px * 0.18), wpx = Math.ceil(g.measureText(s).width) + pad * 2, hpx = Math.ceil(px * 1.3) + pad * 2
+    c.width = wpx; c.height = hpx
+    g.font = font; if (opts.caps) g.letterSpacing = px * 0.14 + 'px'
+    g.fillStyle = opts.color || '#ededed'; g.textBaseline = 'alphabetic'; g.fillText(s, pad, pad + px)
+    const t = new THREE.CanvasTexture(c); t.anisotropy = 4
+    return { texture: t, aspect: wpx / hpx, canvas: c }
+  }
+
+  // --- input -------------------------------------------------------------------
+  const pointer = { x: innerWidth / 2, y: innerHeight / 2, nx: 0, ny: 0, dx: 0, dy: 0, down: false, inside: false }
+  const scroll = { y: 0, v: 0 }; let scrollTo = 0, lastX = pointer.x, lastY = pointer.y, downAt = null
+  const place = (e) => { pointer.x = e.clientX; pointer.y = e.clientY; pointer.inside = true }
+  canvas.addEventListener('pointerdown', (e) => { place(e); lastX = e.clientX; lastY = e.clientY; pointer.down = true; downAt = { x: e.clientX, y: e.clientY, t: performance.now(), far: 0 }; canvas.setPointerCapture(e.pointerId) })
+  canvas.addEventListener('pointermove', (e) => {
+    if (pointer.down && e.pointerType !== 'mouse') scrollTo -= (e.clientY - pointer.y) * 2.5 // a finger drags the virtual scroll
+    if (downAt) downAt.far = Math.max(downAt.far, Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y))
+    place(e)
+  })
+  const up = (e) => {
+    pointer.down = false
+    const tapped = downAt && downAt.far < 8 && performance.now() - downAt.t < 500 && e.type === 'pointerup'
+    downAt = null
+    if (tapped && instance && !workOpen) { syncPointer(); call('tap') }
+  }
+  canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up)
+  canvas.addEventListener('pointerleave', () => { pointer.inside = false })
+  addEventListener('wheel', (e) => { if (!workOpen) scrollTo += e.deltaY * (e.deltaMode === 1 ? 32 : 1) }, { passive: true })
+  function syncPointer() { // screen point -> picture point, through the bend the glass uses now
+    const a = size.w / size.h, b = glass.uniforms.uBend.value
+    const x = (pointer.x / size.w) * 2 - 1, y = -((pointer.y / size.h) * 2 - 1)
+    const k = (1 + (b * (x * x * a * a + y * y)) / (a * a + 1)) / (1 + b)
+    pointer.nx = x * k; pointer.ny = y * k
+  }
+
+  // --- Drop cursor ----------------------------------------------------------------
+  let soak = false, forced = false
+  if (!touch && !reduced) {
+    const drop = $('#drop'); document.documentElement.classList.add('has-drop')
+    let x = pointer.x, y = pointer.y, s = 1, seen = false
+    addEventListener('pointermove', (e) => { if (!seen) { seen = true; x = e.clientX; y = e.clientY; drop.style.opacity = 1 } drop._x = e.clientX; drop._y = e.clientY }, { passive: true })
+    addEventListener('pointerover', (e) => { soak = !!(e.target.closest && e.target.closest('a,button')) }, { passive: true })
+    const tick = () => {
+      const dx = (drop._x ?? x) - x, dy = (drop._y ?? y) - y
+      x += dx * 0.28; y += dy * 0.28
+      const v = Math.min(Math.hypot(dx, dy) / 60, 1)
+      s += (((soak || forced) ? 5 : 1) - s) * 0.16
+      drop.style.transform = `translate(${x}px,${y}px) rotate(${Math.atan2(dy, dx)}rad) scale(${s * (1 + v * 0.9)},${s * (1 - v * 0.35)})`
+      requestAnimationFrame(tick)
+    }
+    tick()
+  }
+  const cursor = { hover(on) { forced = !!on } }
+
+  // --- registry, lifecycle, the fake Work page ----------------------------------------
+  const defs = []; let active = -1, instance = null, workOpen = false, openWork = -1, still = true
+  window.HOME = { register(def) { defs.push(def) } }
+  const call = (name, ...args) => { try { return instance && instance[name] && instance[name](...args) } catch (err) { console.error(defs[active] && defs[active].name, name, err) } }
+  function enter(i) {
+    workOpen = true; openWork = i
+    $('#work-title').textContent = works[i].title; $('#work-meta').textContent = `${works[i].kind} · ${works[i].year}`
+    workEl.classList.add('on'); workEl.setAttribute('aria-hidden', 'false'); $('#work-back').focus({ preventScroll: true }); cursor.hover(false)
+  }
+  function leaveWork() {
+    if (!workOpen) return
+    workOpen = false; workEl.classList.remove('on'); workEl.setAttribute('aria-hidden', 'true')
+    call('back', openWork); still = true
+    const link = linksEl.children[openWork]; if (link && document.activeElement === $('#work-back')) link.focus({ preventScroll: true }) // focus goes back to the Work's link
+  }
+  $('#work-back').addEventListener('click', leaveWork)
+  const ctx = { renderer, works, hero, atlas, loopRect, loopGeometry, showreel, text, pointer, scroll, crt, cursor, enter, touch, reduced, size }
+
+  works.forEach((w, i) => {
+    const a = document.createElement('a'); a.href = w.href; a.textContent = `${w.title}, ${w.kind}, ${w.year}`
+    a.addEventListener('focus', () => call('focus', i)); a.addEventListener('blur', () => call('focus', -1))
+    a.addEventListener('click', (e) => { e.preventDefault(); if (!workOpen) call('activate', i) })
+    linksEl.append(a)
+  })
+
+  function resize() {
+    size.w = innerWidth; size.h = innerHeight; size.dpr = Math.min(devicePixelRatio || 1, touch ? 1.5 : 2)
+    renderer.setPixelRatio(size.dpr); renderer.setSize(size.w, size.h, false)
+    target.setSize(Math.round(size.w * size.dpr), Math.round(size.h * size.dpr))
+    glass.uniforms.uAspect.value = size.w / size.h; glass.uniforms.uDpr.value = size.dpr
+    call('resize', size.w, size.h); still = true
+  }
+  addEventListener('resize', resize)
+
+  function select(i) {
+    if (workOpen) { workOpen = false; workEl.classList.remove('on') }
+    call('dispose'); instance = null; cursor.hover(false); crt.push = 0; scroll.y = scrollTo = 0; scroll.v = 0
+    active = i; [...tabs.children].forEach((b, k) => b.setAttribute('aria-pressed', String(k === i)))
+    if (!defs[i]) return
+    try { instance = defs[i].create(ctx); call('resize', size.w, size.h) } catch (err) { console.error(defs[i].name, err); instance = null }
+    still = true
+  }
+  addEventListener('keydown', (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return
+    if (e.key === 'Escape') return leaveWork()
+    if (e.key === 'r' || e.key === 'R') return select(active)
+    const n = '1234567890-=qwetyu'.indexOf(e.key); if (n >= 0 && n < defs.length) select(n) // 1-9, then 0 - = q w e t for 10-16
+  })
+
+  // --- the one loop ------------------------------------------------------------------
+  let prev = performance.now(), frames = 0, mark = prev
+  function frame(now) {
+    requestAnimationFrame(frame)
+    const dt = Math.min((now - prev) / 1000, 0.05), t = now / 1000; prev = now
+    frames++; if (now - mark >= 500) { fpsEl.textContent = reduced ? 'reduced motion: still frame' : Math.round((frames * 1000) / (now - mark)) + ' fps'; frames = 0; mark = now }
+    if (reduced && !still) return
+    const y0 = scroll.y; scroll.y += (scrollTo - scroll.y) * Math.min(1, dt * 9); scroll.v += ((scroll.y - y0) / Math.max(dt, 0.001) - scroll.v) * Math.min(1, dt * 12)
+    pointer.dx = pointer.x - lastX; pointer.dy = pointer.y - lastY; lastX = pointer.x; lastY = pointer.y
+    pushNow += (Math.min(Math.max(crt.push, 0), 1) - pushNow) * Math.min(1, dt * 8)
+    glass.uniforms.uBend.value = BEND + pushNow * 0.35; glass.uniforms.uFringe.value = 0.03 + pushNow * 0.09; glass.uniforms.uTime.value = t
+    syncPointer(); paintLoops(reduced ? 3 : t)
+    if (instance) {
+      call('update', t, dt)
+      renderer.setRenderTarget(target); renderer.clear()
+      try { renderer.render(instance.scene, instance.camera) } catch (err) { console.error(err); instance = null }
+    } else { renderer.setRenderTarget(target); renderer.clear() }
+    renderer.setRenderTarget(null); renderer.render(glassScene, glassCam)
+    still = false
+  }
+
+  addEventListener('load', async () => {
+    try { await Promise.all([document.fonts.load("400 100px 'Instrument Serif'", 'İşler Çğ'), document.fonts.load('500 11px Geist'), document.fonts.ready]) } catch {}
+    defs.forEach((d, i) => { const b = document.createElement('button'); b.textContent = `${'1234567890-=qwetyu'[i] || ''} ${d.name}`; b.addEventListener('click', () => { select(i); b.blur() }); tabs.append(b) })
+    resize(); select(Math.min(Math.max(Number(location.hash.slice(1)) - 1 || 0, 0), Math.max(defs.length - 1, 0)))
+    requestAnimationFrame(frame)
+  })
+})()
+</script>
+<script src="home/tunnel.js"></script>
+<script src="home/sea.js"></script>
+<script src="home/globe.js"></script>
+<script src="home/ribbon.js"></script>
+<script src="home/mercury.js"></script>
+<script src="home/shards.js"></script>
+<script src="home/cloth.js"></script>
+<script src="home/flipbook.js"></script>
+<script src="home/pinscreen.js"></script>
+<script src="home/singularity.js"></script>
+<script src="home/strings.js"></script>
+<script src="home/mirror.js"></script>
+<script src="home/droste.js"></script>
+<script src="home/projector.js"></script>
+<script src="home/mobile.js"></script>
+<script src="home/pillows.js"></script>
+</body>
+</html>

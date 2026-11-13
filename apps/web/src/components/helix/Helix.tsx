@@ -23,6 +23,7 @@ import {
   type HelixState,
 } from '../../lib/helix-motion'
 import { HELIX_TUNING } from '../../lib/helix-tuning'
+import { loaded } from '../../lib/home-loader'
 import { isMenuOpen } from '../../lib/menu-a11y'
 import type { HelixWork } from '../FeaturedWorks'
 import type { HelixShowreel } from '../Hero'
@@ -126,6 +127,7 @@ export function Helix({
       renderer = createHelixRenderer(canvas, works, showreel, () => fail())
     } catch (error) {
       if (!(error instanceof HelixUnavailable)) throw error
+      loaded()
       fail()
       return
     }
@@ -144,6 +146,7 @@ export function Helix({
       speak(before, state)
     }
     const locked = () => openingOf(state).locked
+    const crt = HELIX_TUNING.crtBend
 
     // The hand-over: the static hero stays on screen until the Showreel layer matches it. Coming
     // back to a remembered Work there is nothing to match.
@@ -188,6 +191,8 @@ export function Helix({
       speak(before, state)
       if (!handedOver && state.phase.kind === 'hero' && !ready) return
       const opening = openingOf(state)
+      // The marks first: the hero's text is measured from the page as they lay it out.
+      marks.show(state.phase.kind, opening)
       // Fast turning bends the cards; the bend follows the speed with time-based easing.
       const target = clamp(state.speed / 60, -bendMax, bendMax)
       bend += (target - bend) * (1 - (1 - bendEase) ** (dt * 60))
@@ -195,7 +200,7 @@ export function Helix({
       // The hovered card changes only while the pointer rests, and there is none during a press or
       // a hand's grab (cleared when it starts), while the zoom runs, or without a pointer over it.
       const { aspect, focal } = lensOf(canvas)
-      const sample = pointer.sample(dt)
+      const sample = pointer.sample(dt, crt)
       if (state.phase.kind === 'hero' || !sample.point) hovered = null
       else if (sample.resting && !press && !handGrab.holding) {
         const card = cardAt(sample.point, shownCards(state), focal, aspect)
@@ -218,6 +223,8 @@ export function Helix({
         bend,
         progress: state.progress,
         zoom: opening.zoom,
+        heroGone: opening.heroGone,
+        crt,
         showreel:
           opening.showreelSlot === null ? null : { slot: opening.showreelSlot, melt: opening.melt },
         playing: loops.playing,
@@ -225,12 +232,13 @@ export function Helix({
         cursor: sample.cursor,
         dt,
       })
-      // The first frame drawn takes over from the static Home, in the same paint.
+      // The first frame drawn takes over from the static Home, in the same paint, and the loader
+      // (if it is still up) goes.
       if (!handedOver) {
         handedOver = true
         window.scrollTo(0, 0)
+        loaded()
       }
-      marks.show(state.phase.kind, opening)
       if (frontWork(state) !== shown) {
         shown = frontWork(state)
         setFront(frontOf(state))
@@ -311,7 +319,7 @@ export function Helix({
       apply({ kind: 'dragEnd' })
       if (!click) return
       const { aspect, focal } = lensOf(canvas)
-      const point = devicePoint(canvas, event.clientX, event.clientY)
+      const point = devicePoint(canvas, event.clientX, event.clientY, crt)
       const card = cardAt(point, shownCards(state), focal, aspect)
       if (card >= 0) apply({ kind: 'card', card })
     }
@@ -365,6 +373,7 @@ export function Helix({
       document.removeEventListener('visibilitychange', onVisibility)
       renderer.destroy()
       marks.clear()
+      loaded()
       window.history.scrollRestoration = restoration
     }
   }, [works, showreel])

@@ -1,3 +1,6 @@
+import '@fontsource/instrument-serif'
+import '@fontsource/instrument-serif/400-italic.css'
+import '@fontsource-variable/geist'
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 
@@ -11,6 +14,7 @@ import {
   sentryDsn,
   sentryOptions,
 } from '../lib/observability'
+import { loaderScript } from '../lib/home-loader'
 import { isPreviewInstance } from '../lib/preview'
 import { SITE_NAME, SITE_ORIGIN } from '../lib/site'
 import './globals.css'
@@ -40,7 +44,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     preview: isPreviewInstance(),
   })
   return (
-    <html lang="tr">
+    // The loader's script marks `<html>` before React hydrates it (ADR-0104).
+    <html lang="tr" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: loaderScript() }} />
+      </head>
       <body className="flex min-h-dvh flex-col bg-background font-sans text-text">
         <a
           href="#main"
@@ -53,6 +61,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <HandControl />
         {sentry ? <Observability options={sentry} /> : null}
         {beacon ? <script defer {...beacon} /> : null}
+        <div aria-hidden="true" className="crt" />
       </body>
     </html>
   )

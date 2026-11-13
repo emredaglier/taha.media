@@ -16,18 +16,18 @@ export const GLYPH_ATLAS = {
 export const atlasFont = (family: string) => `700 50px ${family}`
 
 /**
- * Calls `draw` once `font` has loaded, so the atlas never settles on a fallback serif. If the
- * browser refuses the font, it draws with what the page itself shows. The returned function
- * cancels a draw that hasn't happened yet (the Helix went away while the font loaded).
+ * Calls `draw` once `font` (or every one of several) has loaded, so the atlas never settles on a
+ * fallback serif. If the browser refuses a font, it draws with what the page itself shows. The
+ * returned function cancels a draw that hasn't happened yet (the Helix went away while the font
+ * loaded).
  */
 export function drawWhenFontLoads(
   fonts: Pick<FontFaceSet, 'load'>,
-  font: string,
+  font: string | readonly string[],
   draw: () => void,
 ): () => void {
   let cancelled = false
-  void fonts
-    .load(font)
+  void Promise.all([font].flat().map((each) => fonts.load(each)))
     .catch(() => undefined)
     .then(() => {
       if (!cancelled) draw()
@@ -40,6 +40,8 @@ export function drawWhenFontLoads(
 export type GlyphAtlas = {
   /** The glyphs (red), mipmapped; all black until the serif has loaded. */
   readonly texture: WebGLTexture
+  /** Resolves once the glyphs are drawn (or can't be). */
+  readonly ready: Promise<void>
   destroy(): void
 }
 
@@ -52,8 +54,11 @@ export type GlyphAtlas = {
 export function createGlyphAtlas(gl: WebGL2RenderingContext): GlyphAtlas {
   const texture = colourTexture(gl, new Uint8Array([0, 0, 0, 255]))
   let destroyed = false
+  let drawn = () => {}
+  const ready = new Promise<void>((resolve) => (drawn = resolve))
 
   const draw = () => {
+    drawn()
     if (destroyed || gl.isContextLost()) return
     const { glyphs, cell, middleY } = GLYPH_ATLAS
     const canvas = document.createElement('canvas')
@@ -83,6 +88,7 @@ export function createGlyphAtlas(gl: WebGL2RenderingContext): GlyphAtlas {
 
   return {
     texture,
+    ready,
     destroy() {
       destroyed = true
       cancel()

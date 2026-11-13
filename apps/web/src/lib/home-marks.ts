@@ -17,7 +17,10 @@ export const HERO_PHONE_ATTRIBUTE = 'data-home-hero-phone'
 export const WORK_LINK_ATTRIBUTE = 'data-work-slug'
 
 /**
- * Set on `<html>` while the hero's overlays have left (the zoom has taken them away, the melt has
- * started): a click-to-load player opened in the hero closes then.
+ * The attribute on the hero's name, © line and Statement: the text the Helix draws into its own
+ * picture, while the page's text stays for screen readers.
  */
-export const HERO_GONE_ATTRIBUTE = 'data-helix-hero-gone'
+export const HERO_TEXT_ATTRIBUTE = 'data-home-hero-text'
+
+/** Selects the hero's text the Helix draws. */
+export const HERO_TEXT_SELECTOR = `[${HERO_TEXT_ATTRIBUTE}]`

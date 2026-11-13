@@ -73,6 +73,8 @@ async function run(): Promise<Report> {
     bend: 0.2,
     progress: 0,
     zoom: 1,
+    heroGone: 1,
+    crt: 0.1,
     showreel: null,
     playing: new Set(),
     held: new Set(),
@@ -107,7 +109,9 @@ async function run(): Promise<Report> {
     )
   }
   for (let step = 0; step <= 20; step++)
-    renderer.draw(frame({ zoom: 0.9 + step * 0.005, showreel: { slot: 0, melt: step / 20 } }))
+    renderer.draw(
+      frame({ zoom: 0.9 + step * 0.005, showreel: { slot: 0, melt: step / 20 }, heroGone: 0 }),
+    )
   const framesError = gl.getError()
 
   renderer.draw(frame({}))

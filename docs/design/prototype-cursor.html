@@ -1,0 +1,715 @@
+<!doctype html>
+<!--
+  THROWAWAY prototype: eight cursors that bend the page itself, for taha.media (the site's black TV look).
+  Keys 1-8 or the bar bottom-left switch. Move over the links; click and hold.
+  1 Magnet   a magnet on the TV glass: the picture bulges and its colours split; a click wobbles it.
+  2 Glass    a clean glass bead: sharp magnified centre, squeezed rim.
+  3 Tear     a VHS tracking band at the mouse height drags the picture sideways.
+  4 Field    no filter: letters lean away from the mouse (a link's own letters lift toward it).
+  5 Vortex   the page twists around the mouse like water down a drain; a click spins it back.
+  6 Mosaic   inside a circle the page breaks into blocks, like the Helix's glyph mosaic.
+  7 Shatter  cracked glass: each shard shows the picture a little off, with colour edges.
+  8 Melt     the picture under the mouse drips down in columns.
+  The cursor itself, over whichever bend is on (Melt to start): keys a s d f or the upper bar.
+  a Dot      a small dot; the label is big serif type inside the page, so it melts too.
+  s Drop     a liquid drop that stretches with speed; on a link it swells into a pill holding the label.
+  d Thread   the label hangs from the point on a thread and swings like a pendulum as you move.
+  f Callout  a drafting callout: a hairline draws out from the point and underlines a small caps label.
+  What the Drop does on a VIDEO (a work card), keys v b n m j k or the top bar; they switch the cursor to Drop.
+  Every other link always gets the Soak blot, whatever is picked here.
+  v Tail     the letters trail behind the drop along the path the mouse took.
+  b Soak     a liquid blot at the mouse, clipped to the card, with the label cut out of it.
+  n Ink      the drop is an eyedropper: it takes the colour under it, keeps it a while and carries it to links;
+             the label and the colour's code show beside it; a click leaves a blot of it.
+  m Drips    no shape: the label itself melts into the picture at the mouse, with the same drip as Melt.
+  j Wipe     the whole card inverts, sweeping in from the side the mouse came in, with a wavy liquid edge; big label.
+  k Band     a TV band across the card at the mouse's height; the label rides in it.
+  Ink's extras (keys q w e r t y u i o p or the fourth bar; each is on or off, they stack, "all" flips every one):
+  q Bucket      a click on a link floods it with the carried colour.
+  w Grade       a click on empty page tints the whole screen with it (a click with no colour clears it).
+  e Duotone     the carried colour tints the next picture for a moment before the drop takes that one's colour.
+  r Stain       letters the drop passes stay dyed.
+  t Mix         a second picture's colour blends with the carried one.
+  y Names       the readout names the colour in Turkish, not as a code.
+  u Scope       a tiny waveform of the pixels around the mouse.
+  i Live        the stills move (a FAKE loop), so the drop keeps re-picking and shimmers.
+  o Palette     each picture touched adds a bead that trails the drop; back on its picture the bead goes home.
+  p Complement  links, and the readout on a picture, take the opposite colour.
+  FAKE placeholders: works, years, the statement. Pictures are line patterns so the bend shows.
+  1-3 and 5-8 bend the pictures only, never text, with an SVG displacement filter on each picture: built for Chrome; Safari is not checked.
+  Reduced motion: nothing here respects it yet (prototype only).
+-->
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Taha — cursor prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@100..900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#000;--t:#ededed;--mu:#8f8f8f;--rs:#1a1a1a;--ph:#2a2a2a;
+  --serif:'Instrument Serif',Georgia,'Times New Roman',serif;
+  --sans:'Geist',system-ui,-apple-system,'Segoe UI',sans-serif;
+}
+*{box-sizing:border-box;margin:0}
+html{background:var(--bg);color:var(--t);font-family:var(--sans)}
+html,html *{cursor:none!important}
+a{color:inherit;text-decoration:none}
+#page{position:relative;min-height:100vh;padding:0 48px 160px;background:var(--bg);
+  text-shadow:-.5px 0 rgb(255 40 40/.35),.5px 0 rgb(40 220 255/.35)}
+header{display:flex;justify-content:space-between;align-items:baseline;padding:28px 0}
+header b{font-size:18px;letter-spacing:-.02em}
+header i,header a{font-family:var(--serif);font-size:20px;font-style:normal;text-transform:uppercase}
+h1{font-family:var(--serif);font-weight:400;font-size:clamp(3rem,9vw,9rem);line-height:.86;margin:9vh 0 7vh;max-width:11em}
+nav{display:flex;gap:40px;margin-bottom:9vh}
+nav a{font-family:var(--serif);font-size:clamp(2rem,4vw,3.5rem)}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.card .pic{display:block;width:100%;aspect-ratio:16/10;background:var(--ph)}
+.card:nth-child(1) .pic{background:repeating-linear-gradient(90deg,#ededed 0 2px,#111 2px 14px)}
+.card:nth-child(2) .pic{background:repeating-radial-gradient(circle at 50% 50%,#ededed 0 2px,#111 2px 16px)}
+.card:nth-child(3) .pic{background:
+  repeating-linear-gradient(0deg,#ededed 0 2px,transparent 2px 22px),
+  repeating-linear-gradient(90deg,#ededed 0 2px,#111 2px 22px)}
+.card h2{font-family:var(--serif);font-weight:400;font-size:22px;margin-top:12px;display:flex;justify-content:space-between}
+.card h2 span{font-family:var(--sans);font-size:14px;color:var(--mu)}
+p.body{max-width:34em;margin-top:9vh;color:var(--mu);font-size:18px;line-height:1.5}
+p.body a{color:var(--t);text-decoration:underline}
+
+/* The label rides inside the page, so the bend bends it too. */
+#label{position:absolute;left:0;top:0;pointer-events:none;white-space:nowrap;
+  font-family:var(--serif);font-size:44px;line-height:1;
+  opacity:0;transition:opacity .18s,letter-spacing .35s cubic-bezier(.2,.8,.2,1);letter-spacing:.3em}
+#label.on{opacity:1;letter-spacing:0}
+/* The exact point: outside the filter, never bent, never late. */
+#dot{position:fixed;left:0;top:0;width:7px;height:7px;margin:-3.5px;border-radius:50%;background:#fff;
+  mix-blend-mode:difference;pointer-events:none;z-index:50}
+#rim{position:fixed;left:0;top:0;border-radius:50%;pointer-events:none;z-index:49;display:none;
+  box-shadow:inset 0 0 0 1px rgb(255 255 255/.35),inset 0 0 18px rgb(255 255 255/.12),0 6px 30px rgb(0 0 0/.6)}
+.crt{position:fixed;inset:0;z-index:100;pointer-events:none;box-shadow:inset 0 0 6rem 1rem rgb(0 0 0/.55);
+  background:radial-gradient(ellipse at center,transparent 60%,rgb(0 0 0/.25) 100%),
+  repeating-linear-gradient(to bottom,rgb(0 0 0/.14) 0 1px,transparent 1px 3px)}
+#bar{position:fixed;left:16px;bottom:16px;z-index:200;display:flex;gap:6px;font:12px var(--sans)}
+#bar button{font:inherit;color:var(--mu);background:var(--rs);border:1px solid var(--ph);padding:6px 10px}
+#bar button[aria-pressed=true]{color:#000;background:var(--t)}
+#bar2{position:fixed;left:16px;bottom:52px;z-index:200;display:flex;gap:6px;font:12px var(--sans)}
+#bar2 button{font:inherit;color:var(--mu);background:var(--rs);border:1px solid var(--ph);padding:6px 10px}
+#bar2 button[aria-pressed=true]{color:#000;background:var(--t)}
+#drop{position:fixed;left:0;top:0;width:14px;height:14px;border-radius:99px;background:#fff;mix-blend-mode:difference;
+  pointer-events:none;z-index:50;display:none;overflow:hidden;
+  transition:width .4s cubic-bezier(.2,1.2,.3,1),height .4s cubic-bezier(.2,1.2,.3,1)}
+#drop span{display:inline-block;padding:0 18px;font:500 14px/34px var(--sans);color:#000;white-space:nowrap;text-shadow:none;opacity:0;transition:opacity .2s}
+#drop.on span{opacity:1}
+#wire{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:49;mix-blend-mode:difference}
+#wp{fill:none;stroke:#fff;stroke-width:1;stroke-dasharray:1}
+#tag{position:fixed;left:0;top:0;pointer-events:none;z-index:49;white-space:nowrap;transform-origin:0 0;opacity:0;transition:opacity .15s}
+#tag.hang{font:400 32px/1 var(--serif)}
+#tag.note{font:500 12px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase}
+#bar3{position:fixed;left:16px;bottom:88px;z-index:200;display:flex;gap:6px;font:12px var(--sans)}
+#bar3 button{font:inherit;color:var(--mu);background:var(--rs);border:1px solid var(--ph);padding:6px 10px}
+#bar3 button[aria-pressed=true]{color:#000;background:var(--t)}
+#chain{position:fixed;left:0;top:0;pointer-events:none;z-index:50;mix-blend-mode:difference;transition:opacity .25s}
+#chain span{position:absolute;left:0;top:0;font:400 32px/1 var(--serif);color:#fff;transform-origin:0 0;will-change:transform}
+#box{position:fixed;overflow:hidden;pointer-events:none;z-index:50;mix-blend-mode:difference}
+#blot{position:absolute;left:0;top:0;width:220px;height:220px;background:#fff;display:grid;place-items:center;
+  border-radius:46% 54% 57% 43%/52% 44% 56% 48%;animation:wob 5s linear infinite}
+@keyframes wob{0%,100%{border-radius:46% 54% 57% 43%/52% 44% 56% 48%}33%{border-radius:56% 44% 45% 55%/44% 56% 46% 54%}66%{border-radius:44% 56% 52% 48%/57% 45% 55% 43%}}
+#blot span{font:400 52px/1 var(--serif);color:#000}
+#wipe{position:absolute;inset:0;background:#fff;display:grid;place-items:center;clip-path:polygon(0 0)}
+#wipe span{font-family:var(--serif);line-height:1;color:#000}
+#band{position:absolute;left:0;right:0;top:0;height:64px;background:#fff;display:flex;align-items:center;transform:scaleY(0)}
+#band span{font:600 14px var(--sans);letter-spacing:.16em;text-transform:uppercase;color:#000;white-space:nowrap}
+#dripword{position:absolute;left:0;top:0;font:400 96px/1 var(--serif);color:#fff;padding:40px 24px 90px;white-space:nowrap;opacity:0;filter:url(#bendLabel)}
+#read{position:fixed;left:0;top:0;display:grid;pointer-events:none;z-index:50;white-space:nowrap;opacity:0;transition:opacity .15s;
+  font:500 12px/1.4 var(--sans);letter-spacing:.14em;text-transform:uppercase;text-shadow:0 0 6px #000,0 0 2px #000}
+#read i{font-style:normal;opacity:.7;font-variant-numeric:tabular-nums}
+#bar4{position:fixed;left:16px;bottom:124px;z-index:200;display:flex;flex-wrap:wrap;gap:6px;max-width:92vw;font:12px var(--sans)}
+#bar4 button{font:inherit;color:var(--mu);background:var(--rs);border:1px solid var(--ph);padding:6px 10px}
+#bar4 button[aria-pressed=true]{color:#000;background:var(--t)}
+#grade{position:fixed;inset:0;pointer-events:none;z-index:90;mix-blend-mode:color;opacity:0;transition:opacity 1s,background 1s}
+#duo{position:fixed;pointer-events:none;z-index:40;mix-blend-mode:color;opacity:0;transition:opacity .4s}
+#swatches{position:fixed;left:0;top:0;pointer-events:none;z-index:50}
+.bead{position:absolute;left:0;top:0;width:8px;height:8px;border-radius:50%;box-shadow:0 0 0 1px rgb(0 0 0/.5)}
+.flood{position:absolute;pointer-events:none;mix-blend-mode:color;animation:flood 4s forwards}
+@keyframes flood{0%{clip-path:circle(0 at var(--x) var(--y))}18%{clip-path:circle(150% at var(--x) var(--y))}80%{opacity:1}100%{clip-path:circle(150% at var(--x) var(--y));opacity:0}}
+html.ink #page a{transition:color .2s}
+html.ink #page a:hover{color:var(--ink)}
+.splat{position:absolute;width:90px;height:90px;margin:-45px;border-radius:46% 54% 57% 43%/52% 44% 56% 48%;pointer-events:none;
+  mix-blend-mode:screen;animation:splat 2.4s cubic-bezier(.2,.9,.2,1) forwards}
+@keyframes splat{0%{transform:scale(0)}15%{transform:scale(1)}70%{opacity:1}100%{transform:scale(1.15);opacity:0}}
+
+.ch{display:inline-block;will-change:transform}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <filter id="bend" x="0" y="0" width="100%" height="100%" primitiveUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+    <feImage id="map" result="map" preserveAspectRatio="none"/>
+    <feDisplacementMap class="d" in="SourceGraphic" in2="map" xChannelSelector="R" yChannelSelector="G" result="r0"/>
+    <feColorMatrix in="r0" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="r"/>
+    <feDisplacementMap class="d" in="SourceGraphic" in2="map" xChannelSelector="R" yChannelSelector="G" result="g0"/>
+    <feColorMatrix in="g0" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" result="g"/>
+    <feDisplacementMap class="d" in="SourceGraphic" in2="map" xChannelSelector="R" yChannelSelector="G" result="b0"/>
+    <feColorMatrix in="b0" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" result="b"/>
+    <feBlend mode="screen" in="r" in2="g" result="rg"/>
+    <feBlend mode="screen" in="rg" in2="b" result="rgb"/>
+    <feMerge><feMergeNode in="SourceGraphic"/><feMergeNode in="rgb"/></feMerge>
+  </filter>
+</svg>
+
+<div id="page">
+  <header><a href="#" data-cursor="Ana sayfa"><b>TAHA</b> <i>video · motion · design</i></a><a href="#" data-cursor="Menü">Menu</a></header>
+  <h1 data-split>Hareket eden her şey bir hikâye anlatır.</h1>
+  <nav>
+    <a href="#" data-cursor="Aç" data-split>İşler</a>
+    <a href="#" data-cursor="Aç" data-split>Galeri</a>
+    <a href="#" data-cursor="Tanış" data-split>Hakkımda</a>
+  </nav>
+  <div class="grid">
+    <a class="card" href="#" data-cursor="İzle"><canvas class="pic" width="640" height="400"></canvas><h2>Showreel <span>2026</span></h2></a>
+    <a class="card" href="#" data-cursor="İzle"><canvas class="pic" width="640" height="400"></canvas><h2>Gece Vardiyası <span>2025</span></h2></a>
+    <a class="card" href="#" data-cursor="İzle"><canvas class="pic" width="640" height="400"></canvas><h2>Kırmızı Oda <span>2024</span></h2></a>
+  </div>
+  <p class="body" data-split>Kurgu, hareketli grafik ve tasarım. Bir fikri kareye, kareyi ritme çeviririm. Birlikte çalışmak için <a href="#" data-cursor="Yaz">bana yaz</a>.</p>
+  <div id="label" aria-hidden="true"></div>
+</div>
+<div id="rim"></div><div id="dot"></div>
+<div id="drop"><span></span></div>
+<svg id="wire" aria-hidden="true"><path id="wp" pathLength="1"/></svg>
+<div id="tag" aria-hidden="true"></div>
+<div id="chain" aria-hidden="true"></div>
+<div id="box" aria-hidden="true"><div id="blot"><span></span></div><div id="wipe"><span></span></div><div id="band"><span></span></div><div id="dripword"></div></div>
+<div id="read" aria-hidden="true"><b></b><canvas id="scope" width="64" height="24"></canvas><i></i></div>
+<div id="grade" aria-hidden="true"></div><div id="duo" aria-hidden="true"></div><div id="swatches" aria-hidden="true"></div>
+<div class="crt" aria-hidden="true"></div>
+<div id="bar4"></div>
+<div id="bar3"></div>
+<div id="bar2"></div>
+<div id="bar"></div>
+
+<script>
+const $ = (s) => document.querySelector(s)
+const page = $('#page'), map = $('#map'), label = $('#label'), dot = $('#dot'), rim = $('#rim')
+// FAKE stills: colour pictures, so the eyedropper has ink to take; the lines show a bend.
+const STILLS = [['#ff5a36', '#ffd166', '#2b1055'], ['#00c2a8', '#f72585', '#10002b'], ['#3a86ff', '#ffbe0b', '#03071e']]
+const drawStills = (t) => document.querySelectorAll('canvas.pic').forEach((c, i) => {
+  const x = c.getContext('2d', { willReadFrequently: true }), [a, b, d] = STILLS[i]
+  const g = x.createLinearGradient(0, 0, 640, 400)
+  g.addColorStop(0, d); g.addColorStop(.55 + Math.sin(t * .9 + i) * .2, a); g.addColorStop(1, b)
+  x.fillStyle = g; x.fillRect(0, 0, 640, 400)
+  x.fillStyle = b; x.beginPath(); x.arc(200 + i * 120 + Math.sin(t * 1.3 + i) * 130, 170, 90, 0, 7); x.fill()
+  x.fillStyle = d; for (let k = 0; k < 640; k += 28) x.fillRect(k, 300, 3, 100)
+  x.fillStyle = '#ededed'; x.fillRect(60, 60, 180, 3)
+})
+drawStills(0)
+// The bends touch pictures only, never text: each picture gets its own copy of the filter, since
+// a filter's coordinates start at the corner of the element it is on.
+const pics = [...document.querySelectorAll('.pic')].map((el, i) => {
+  const filter = $('#bend').cloneNode(true)
+  filter.id = 'bend' + i
+  $('#bend').after(filter)
+  return { el, id: filter.id, map: filter.querySelector('feImage'), disp: [...filter.querySelectorAll('.d')] }
+})
+const uri = (svg) => 'data:image/svg+xml,' + encodeURIComponent(svg)
+
+// Displacement maps. Red = sideways shift, green = up/down shift, 128 = none.
+// A bulge: red ramps left to right, green top to bottom, and a radial mask fades both to "none"
+// at the rim. `flat` is how much of the middle stays a plain magnifier.
+const bulge = (flat) => uri(`<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><defs>
+<linearGradient id="r"><stop stop-color="#000"/><stop offset="1" stop-color="#f00"/></linearGradient>
+<linearGradient id="g" x2="0" y2="1"><stop stop-color="#000"/><stop offset="1" stop-color="#0f0"/></linearGradient>
+<radialGradient id="m"><stop offset="${flat}" stop-color="#808000" stop-opacity="0"/><stop offset="1" stop-color="#808000"/></radialGradient>
+</defs><rect width="256" height="256" fill="url(#r)"/><rect width="256" height="256" fill="url(#g)" style="mix-blend-mode:screen"/>
+<rect width="256" height="256" fill="url(#m)"/></svg>`)
+// A band: only a sideways shift, strongest on the mouse's line.
+const band = uri(`<svg xmlns="http://www.w3.org/2000/svg" width="8" height="64"><defs>
+<linearGradient id="v" x2="0" y2="1"><stop stop-color="#808000"/><stop offset=".42" stop-color="#b08000"/>
+<stop offset=".5" stop-color="#ff8000"/><stop offset=".58" stop-color="#508000"/><stop offset="1" stop-color="#808000"/></linearGradient>
+</defs><rect width="8" height="64" fill="url(#v)"/></svg>`)
+
+// Maps too odd for gradients are painted pixel by pixel: `fn(u, v, r)` gets a point in -1..1 (r its
+// distance from the middle) and says how far the picture shifts there, each way, in -1..1.
+const paint = (fn) => {
+  const n = 256, c = document.createElement('canvas')
+  c.width = c.height = n
+  const x = c.getContext('2d'), im = x.createImageData(n, n)
+  const byte = (d) => 128 + 127 * Math.max(-1, Math.min(1, d))
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+    const u = ((i + .5) / n) * 2 - 1, v = ((j + .5) / n) * 2 - 1, k = (j * n + i) * 4
+    const [dx, dy] = fn(u, v, Math.hypot(u, v))
+    im.data[k] = byte(dx); im.data[k + 1] = byte(dy); im.data[k + 3] = 255
+  }
+  x.putImageData(im, 0, 0)
+  return c.toDataURL()
+}
+const vortex = paint((u, v, r) => {
+  if (r >= 1) return [0, 0]
+  const a = 2.2 * (1 - r) ** 2, c = Math.cos(a), s = Math.sin(a)
+  return [u * c - v * s - u, u * s + v * c - v]
+})
+const CELLS = 6 // blocks from the middle to the rim
+const mosaic = paint((u, v, r) => {
+  if (r >= 1) return [0, 0]
+  const mid = (t) => (Math.floor(t * CELLS) + .5) / CELLS
+  return [(mid(u) - u) * 2 * CELLS, (mid(v) - v) * 2 * CELLS]
+})
+const shards = Array.from({ length: 18 }, () => [Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1])
+const shatter = paint((u, v, r) => {
+  if (r >= 1) return [0, 0]
+  let best = shards[0], near = Infinity
+  for (const s of shards) { const d = (s[0] - u) ** 2 + (s[1] - v) ** 2; if (d < near) { near = d; best = s } }
+  return [best[2] * (1 - r ** 6), best[3] * (1 - r ** 6)]
+})
+const drips = Array.from({ length: 24 }, () => .2 + Math.random() * .8)
+const melt = paint((u, v, r) => (r >= 1 ? [0, 0] : [0, -drips[Math.floor(((u + 1) / 2) * 24)] * (1 - u * u) * (1 - r * r)]))
+
+// size: the bent area (px). rest/link: bend strength off and on a link (negative magnifies).
+// split: how far apart red, green and blue bend. kick: what a click adds. loose: how long it wobbles.
+const MODES = [
+  { name: 'Magnet', map: bulge(0), size: 380, rest: -70, link: -115, split: .14, kick: 260, loose: .35 },
+  { name: 'Glass', map: bulge(.45), size: 150, rest: -60, link: -110, split: .03, kick: 90, loose: .7, rim: true, grow: 1.7 },
+  { name: 'Tear', map: band, size: 90, rest: 60, link: 14, split: .5, kick: 320, loose: .3, wide: true },
+  { name: 'Field', field: true },
+  { name: 'Vortex', map: vortex, size: 340, rest: 150, link: 300, split: .08, kick: -700, loose: .3 },
+  { name: 'Mosaic', map: mosaic, size: 240, rest: 240 / (2 * CELLS), link: 384 / (2 * CELLS), split: 0, kick: 60, loose: .4, grow: 1.6 },
+  { name: 'Shatter', map: shatter, size: 300, rest: 30, link: 44, split: .2, kick: 200, loose: .3 },
+  { name: 'Melt', map: melt, size: 300, rest: 70, link: 150, split: .1, kick: 250, loose: .25 },
+]
+let mode = MODES[0]
+const mouse = { x: -999, y: -999, cx: -999, cy: -999 }
+let over = null, power = 0, speed = 0, size = 0, sizeTo = 0, pressed = false, seen = false
+
+// --- 4 Field: every letter is its own piece.
+const letters = []
+for (const root of document.querySelectorAll('[data-split]')) {
+  const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+  const texts = []
+  while (walk.nextNode()) texts.push(walk.currentNode)
+  for (const text of texts) {
+    const frag = document.createDocumentFragment()
+    for (const word of text.data.split(/(\s+)/)) {
+      if (!word.trim()) { frag.append(word); continue }
+      const w = document.createElement('span')
+      w.style.whiteSpace = 'nowrap'
+      for (const ch of word) {
+        const s = document.createElement('span')
+        s.className = 'ch'
+        s.textContent = ch
+        w.append(s)
+        letters.push({ el: s, x: 0, y: 0, live: false })
+      }
+      frag.append(w)
+    }
+    text.replaceWith(frag)
+  }
+}
+const measure = () => {
+  for (const l of letters) {
+    l.el.style.transform = ''
+    const r = l.el.getBoundingClientRect()
+    l.x = r.left + r.width / 2 + scrollX
+    l.y = r.top + r.height / 2 + scrollY
+  }
+}
+const field = () => {
+  const R = 190
+  for (const l of letters) {
+    const dx = l.x - mouse.x, dy = l.y - mouse.y, d = Math.hypot(dx, dy)
+    if (d > R || !mode.field) {
+      if (l.live) { l.el.style.transform = ''; l.live = false }
+      continue
+    }
+    const f = (1 - d / R) ** 2, pull = over && over.contains(l.el) ? -0.5 : 1
+    const push = f * 26 * pull * (pressed ? 2.2 : 1)
+    l.el.style.transform = `translate(${(dx / (d || 1)) * push}px,${(dy / (d || 1)) * push}px) rotate(${(dx / R) * f * 22 * pull}deg) scale(${1 + f * (pull < 0 ? .45 : .2)})`
+    l.live = true
+  }
+}
+
+const pick = (index) => {
+  mode = MODES[index]
+  for (const pic of pics) {
+    pic.el.style.filter = mode.field ? 'none' : `url(#${pic.id})`
+    if (!mode.field) pic.map.setAttribute('href', mode.map)
+  }
+  rim.style.display = mode.rim ? 'block' : 'none'
+  size = sizeTo = mode.size || 0
+  power = speed = 0
+  for (const [i, b] of [...$('#bar').children].entries()) b.setAttribute('aria-pressed', i === index)
+  if (mode.field) measure()
+}
+MODES.forEach((m, i) => {
+  const b = document.createElement('button')
+  b.textContent = `${i + 1} ${m.name}`
+  b.onclick = () => pick(i)
+  $('#bar').append(b)
+})
+addEventListener('keydown', (e) => {
+  if (MODES[e.key - 1]) pick(e.key - 1)
+  if ('asdf'.includes(e.key)) pickCursor('asdf'.indexOf(e.key))
+  if ('vbnmjk'.includes(e.key)) pickHover('vbnmjk'.indexOf(e.key))
+  if ('qwertyuiop'.includes(e.key)) { if (cur !== 1 || !is('Ink')) pickHover(2); setExtra(EXTRAS['qwertyuiop'.indexOf(e.key)]) }
+})
+addEventListener('resize', () => mode.field && measure())
+document.fonts.ready.then(() => mode.field && measure())
+
+const place = (e) => {
+  seen = true
+  mouse.cx = e.clientX; mouse.cy = e.clientY
+  mouse.x = e.clientX + scrollX; mouse.y = e.clientY + scrollY
+  const hit = e.target.closest ? e.target.closest('[data-cursor]') : null
+  if (hit !== over) {
+    over = hit
+    if (hit) label.textContent = tag.textContent = dropText.textContent = hit.dataset.cursor
+    label.classList.toggle('on', !!hit)
+  }
+}
+addEventListener('pointermove', place)
+addEventListener('scroll', () => { mouse.x = mouse.cx + scrollX; mouse.y = mouse.cy + scrollY })
+addEventListener('pointerdown', () => { pressed = true; speed += mode.kick || 0 })
+addEventListener('pointerup', () => { pressed = false })
+
+// --- The cursor itself (keys a s d f), over whichever bend is on.
+const drop = $('#drop'), dropText = drop.firstElementChild, wire = $('#wp'), tag = $('#tag')
+let cur = 0, vx = 0, vy = 0, lastX = 0, lastY = 0, len = 14, drawn = 0
+const bob = { x: 0, y: 0, px: 0, py: 0 }
+const pickCursor = (i) => {
+  cur = i
+  label.style.display = i === 0 ? '' : 'none'
+  dot.style.display = i === 1 ? 'none' : ''
+  drop.style.display = i === 1 ? 'block' : 'none'
+  $('#wire').style.display = tag.style.display = i > 1 ? '' : 'none'
+  tag.className = i === 2 ? 'hang' : 'note'
+  for (const [n, b] of [...$('#bar2').children].entries()) b.setAttribute('aria-pressed', n === i)
+  hoverShow()
+}
+;['a Dot', 's Drop', 'd Thread', 'f Callout'].forEach((name, i) => {
+  const b = document.createElement('button')
+  b.textContent = name
+  b.onclick = () => pickCursor(i)
+  $('#bar2').append(b)
+})
+const cursor = (dt) => {
+  const mx = mouse.cx, my = mouse.cy
+  vx += ((mx - lastX) / dt - vx) * .25; vy += ((my - lastY) / dt - vy) * .25
+  lastX = mx; lastY = my
+  if (cur === 1) {
+    // Drop: stretches along its path with speed; on a link it swells into a pill with the label.
+    drop.style.width = drop.style.height = '14px'
+    const long = 1 + Math.min(Math.hypot(vx, vy) / 1400, 1.4), press = pressed ? .8 : 1
+    drop.style.transformOrigin = '7px 50%'
+    drop.style.transform = `translate(${mx - 7}px,${my - 7}px) rotate(${Math.atan2(vy, vx)}rad) scale(${long * press},${press / Math.sqrt(long)})`
+    hover(dt, mx, my)
+  } else if (cur === 2) {
+    // Thread: a weight on a thread from the point; the thread pays out on a link.
+    len += ((over ? 84 : 14) - len) * Math.min(1, dt * 8)
+    const nx = bob.x + (bob.x - bob.px) * .985, ny = bob.y + (bob.y - bob.py) * .985 + 2600 * dt * dt
+    bob.px = bob.x; bob.py = bob.y
+    const d = Math.hypot(nx - mx, ny - my) || 1
+    bob.x = mx + ((nx - mx) / d) * len; bob.y = my + ((ny - my) / d) * len
+    wire.setAttribute('d', `M${mx} ${my}L${bob.x} ${bob.y}`)
+    wire.style.strokeDashoffset = 0
+    tag.style.opacity = over ? 1 : 0
+    tag.style.transform = `translate(${bob.x}px,${bob.y}px) rotate(${-Math.atan2(bob.x - mx, bob.y - my)}rad) translate(-50%,2px)`
+  } else if (cur === 3) {
+    // Callout: the line draws out, then the label shows over it.
+    drawn += ((over ? 1 : 0) - drawn) * Math.min(1, dt * 9)
+    wire.setAttribute('d', `M${mx + 7} ${my + 7}l26 26h${tag.offsetWidth + 10}`)
+    wire.style.strokeDashoffset = 1 - drawn
+    tag.style.opacity = drawn > .55 ? 1 : 0
+    tag.style.transform = `translate(${mx + 38}px,${my + 28 - tag.offsetHeight}px)`
+  }
+}
+
+// --- What the Drop does on a video (keys v b n m j k); every other link gets the Soak blot.
+const HOVERS = ['Tail', 'Soak', 'Ink', 'Drips', 'Wipe', 'Band']
+const chain = $('#chain'), box = $('#box'), blot = $('#blot'), blotText = blot.firstElementChild
+const read = $('#read'), readName = read.firstElementChild, readMore = read.lastElementChild
+const wipe = $('#wipe'), wipeText = wipe.firstElementChild, strip = $('#band'), stripText = strip.firstElementChild, dripWord = $('#dripword')
+// The melting label has its own copy of the bend filter, always set to Melt.
+const dripFilter = $('#bend').cloneNode(true)
+dripFilter.id = 'bendLabel'
+$('#bend').after(dripFilter)
+dripFilter.querySelector('feImage').setAttribute('href', melt)
+const springs = { soak: { x: 0, v: 0 }, wipe: { x: 0, v: 0 }, band: { x: 0, v: 0 }, drip: { x: 0, v: 0 } }
+const ease = (s, to, dt, k, loose) => { s.v += ((to - s.x) * k - s.v * 2 * Math.sqrt(k) * loose) * dt; s.x += s.v * dt; return Math.max(0, s.x) }
+let side = 0
+let hv = 0, soakS = 0, soakV = 0, at = null, was = null, chainFor = null, beads = [], trail = []
+let tint = [237, 237, 237], want = [237, 237, 237], tookAt = -1e9
+const is = (name) => HOVERS[hv] === name
+const inkCss = () => `rgb(${tint.map(Math.round)})`
+const hoverShow = () => {
+  const d = cur === 1
+  chain.style.display = d && is('Tail') ? '' : 'none'
+  box.style.display = d ? '' : 'none'
+  read.style.display = d && is('Ink') ? '' : 'none'
+  document.documentElement.classList.toggle('ink', d && is('Ink'))
+  drop.style.mixBlendMode = d && is('Ink') ? 'normal' : ''
+  drop.style.boxShadow = d && is('Ink') ? '0 0 0 1.5px #ededed, 0 0 0 2.5px rgb(0 0 0 / .5)' : ''
+  drop.style.background = ''
+  drop.style.opacity = 1
+  was = null
+  const inkOn = d && is('Ink')
+  $('#bar4').style.display = swatchBox.style.display = inkOn ? '' : 'none'
+  if (!inkOn) grade.style.opacity = duo.style.opacity = 0
+}
+const pickHover = (i) => {
+  hv = i
+  pickCursor(1)
+  for (const [n, b] of [...$('#bar3').children].entries()) b.setAttribute('aria-pressed', n === i)
+}
+HOVERS.forEach((name, i) => {
+  const b = document.createElement('button')
+  b.textContent = 'vbnmjk'[i] + ' ' + name
+  b.onclick = () => pickHover(i)
+  $('#bar3').append(b)
+})
+// --- Ink's extras (keys q w e r t y u i o p): each is on or off, and they stack.
+const EXTRAS = ['Bucket', 'Grade', 'Duotone', 'Stain', 'Mix', 'Names', 'Scope', 'Live', 'Palette', 'Complement']
+const extra = {}
+const grade = $('#grade'), duo = $('#duo'), swatchBox = $('#swatches'), scope = $('#scope'), scopeInk = scope.getContext('2d')
+let onPic = null, fromPic = null, base = null, holdUntil = 0, swatches = []
+const carried = () => want.some((c) => c !== 237)
+const setExtra = (name, value = !extra[name]) => {
+  extra[name] = value
+  if (name === 'Grade' && !value) grade.style.opacity = 0
+  if (name === 'Duotone' && !value) duo.style.opacity = 0
+  if (name === 'Stain') { if (value) measure(); else for (const l of letters) l.el.style.color = '' }
+  if (name === 'Live' && !value) drawStills(0)
+  if (name === 'Palette' && !value) { swatchBox.textContent = ''; swatches = [] }
+  for (const [n, b] of [...$('#bar4').children].entries()) if (EXTRAS[n]) b.setAttribute('aria-pressed', !!extra[EXTRAS[n]])
+}
+EXTRAS.forEach((name, i) => {
+  const b = document.createElement('button')
+  b.textContent = 'qwertyuiop'[i] + ' ' + name
+  b.onclick = () => setExtra(name)
+  $('#bar4').append(b)
+})
+const all = document.createElement('button')
+all.textContent = 'all'
+all.onclick = () => { const to = !EXTRAS.every((name) => extra[name]); for (const name of EXTRAS) setExtra(name, to) }
+$('#bar4').append(all)
+// Turkish colour names (y Names): the nearest one wins.
+const NAMES = { kiremit: 'b5523b', mercan: 'ff6f61', turuncu: 'ff8c1a', hardal: 'd4a017', 'limon sarısı': 'ffe14d', bal: 'e0a82e',
+  'fıstık yeşili': 'a5c663', 'zeytin yeşili': '6b7a3a', 'çimen yeşili': '3fa34d', turkuaz: '1fc8b5', camgöbeği: '00b7c3', nane: '9fe2bf',
+  petrol: '1f5f6b', 'gök mavisi': '5aa9e6', mavi: '3a86ff', lacivert: '1b2a5b', 'gece mavisi': '14143c', mor: '7b3fa0', leylak: 'b69ad8',
+  'patlıcan moru': '3d1f47', fuşya: 'f0228a', 'gül kurusu': 'c08081', şarap: '6e1a2e', kırmızı: 'd7263d', 'nar çiçeği': 'e8452c',
+  şeftali: 'ffcba4', krem: 'f2e8cf', kum: 'd8c39a', kahve: '6b4423', toprak: '8a5a3c', kömür: '2b2b2b', füme: '5a5a5a', kül: 'a8a8a8',
+  'kar beyazı': 'ededed', siyah: '050505' }
+const nameOf = (rgb) => {
+  let best = '', near = Infinity
+  for (const [name, hex] of Object.entries(NAMES)) {
+    const d = [0, 2, 4].reduce((sum, at, i) => sum + (parseInt(hex.slice(at, at + 2), 16) - rgb[i]) ** 2, 0)
+    if (d < near) { near = d; best = name }
+  }
+  return best
+}
+// A click with ink: floods a link (Bucket), tints the screen (Grade), or else leaves a blot that fades.
+addEventListener('pointerdown', (e) => {
+  if (cur !== 1 || !is('Ink') || e.target.closest('#bar,#bar2,#bar3,#bar4')) return
+  const mark = document.createElement('div')
+  if (over && extra.Bucket) {
+    const r = over.getBoundingClientRect()
+    mark.className = 'flood'
+    mark.style.cssText = `left:${r.left + scrollX}px;top:${r.top + scrollY}px;width:${r.width}px;height:${r.height}px;background:${inkCss()};--x:${e.clientX - r.left}px;--y:${e.clientY - r.top}px`
+  } else if (!over && extra.Grade) {
+    grade.style.background = inkCss()
+    grade.style.opacity = carried() ? .5 : 0
+    return
+  } else {
+    mark.className = 'splat'
+    mark.style.cssText = `left:${e.clientX + scrollX}px;top:${e.clientY + scrollY}px;background:${inkCss()}`
+  }
+  page.append(mark)
+  mark.addEventListener('animationend', () => mark.remove())
+})
+const hover = (dt, mx, my) => {
+  // `on`: over a video, where the picked variant plays. Any other link gets the blot.
+  const link = !!over, on = link && over.classList.contains('card'), text = over ? over.dataset.cursor : chainFor
+  const soaking = link && (!on || is('Soak'))
+  const entered = link && over !== was
+  was = over
+  if (link) {
+    at = over.getBoundingClientRect()
+    Object.assign(box.style, { left: at.left + 'px', top: at.top + 'px', width: at.width + 'px', height: at.height + 'px' })
+  }
+  if (entered) {
+    // The edge the mouse came in by: 0 left, 1 right, 2 top, 3 bottom.
+    const gaps = [mx - at.left, at.right - mx, my - at.top, at.bottom - my]
+    side = gaps.indexOf(Math.min(...gaps))
+  }
+  drop.style.opacity = soaking || (on && (is('Wipe') || is('Band'))) ? 0 : 1
+  if (at) {
+    const lx = mx - at.left, ly = my - at.top, W = at.width, H = at.height, t = performance.now() / 1000
+    // Soak: a blot at the mouse, clipped to the link's own box; on a tall link the label is cut out of it.
+    if (soaking) blotText.textContent = H > 90 ? text : ''
+    blot.style.transform = `translate(${lx - 110}px,${ly - 110}px) scale(${ease(springs.soak, soaking ? 1 : 0, dt, 160, .45)})`
+    // Wipe: a wavy edge sweeps the inverted card in from the side the mouse came in by.
+    const swept = ease(springs.wipe, on && is('Wipe') ? 1 : 0, dt, 60, .9)
+    if (swept > .002) {
+      const across = side < 2 ? H : W, along = side < 2 ? W : H, edge = []
+      for (let b = 0; b <= across + 20; b += 20) edge.push([swept * (along + 60) - 30 + Math.sin(b / 45 + t * 3) * 14, b])
+      wipe.style.clipPath = `polygon(${[[0, 0], ...edge, [0, across]].map(([a, b]) => {
+        const [x, y] = side === 0 ? [a, b] : side === 1 ? [W - a, b] : side === 2 ? [b, a] : [b, H - a]
+        return `${x}px ${y}px`
+      }).join(',')})`
+    } else wipe.style.clipPath = 'polygon(0 0)'
+    if (on && is('Wipe')) { wipeText.textContent = text; wipeText.style.fontSize = Math.min(H * .4, 120) + 'px' }
+    // Band: a strip across the card at the mouse's height.
+    strip.style.transform = `translateY(${ly - 32}px) scaleY(${ease(springs.band, on && is('Band') ? 1 : 0, dt, 220, .5)})`
+    if (on && is('Band')) stripText.textContent = text
+    stripText.style.transform = `translateX(${lx + 22}px)`
+    // Drips: the label itself, bent by the Melt map, which breathes a little.
+    const melted = ease(springs.drip, on && is('Drips') ? 1 : 0, dt, 90, .5)
+    if (on && is('Drips')) dripWord.textContent = text
+    const dw = dripWord.offsetWidth, dh = dripWord.offsetHeight
+    dripWord.style.opacity = Math.min(1, melted * 1.5)
+    dripWord.style.transform = `translate(${lx - dw / 2}px,${ly - 80}px)`
+    const parts = [...dripFilter.querySelectorAll('feImage,.d')]
+    for (const el of parts) { el.setAttribute('x', 0); el.setAttribute('y', 0); el.setAttribute('width', dw); el.setAttribute('height', dh) }
+    parts.slice(1).forEach((el, i) => el.setAttribute('scale', (40 + melted * 110 + Math.sin(t * 2) * 15) * (1 + (i - 1) * .12)))
+  }
+  if (is('Tail')) {
+    if (text !== chainFor) {
+      chainFor = text
+      chain.textContent = ''
+      beads = [...(text || '')].map((ch) => {
+        const el = document.createElement('span')
+        el.textContent = ch === ' ' ? '\u00a0' : ch
+        chain.append(el)
+        return { el, w: 0 }
+      })
+      for (const b of beads) b.w = b.el.offsetWidth
+    }
+    chain.style.opacity = on ? 1 : 0
+    // The letters sit along the path the mouse took, turned to follow it.
+    const head = trail[0]
+    if (!head || Math.hypot(mx - head.x, my - head.y) > 2) { trail.unshift({ x: mx, y: my }); if (trail.length > 400) trail.pop() }
+    const back = (dist) => {
+      let a = { x: mx, y: my }
+      for (const p of trail) {
+        const d = Math.hypot(p.x - a.x, p.y - a.y)
+        if (d > 0 && d >= dist) return { x: a.x + ((p.x - a.x) * dist) / d, y: a.y + ((p.y - a.y) * dist) / d }
+        dist -= d; a = p
+      }
+      return { x: a.x - dist, y: a.y } // the path ran out: carry on to the left
+    }
+    const total = beads.reduce((sum, b) => sum + b.w, 0)
+    const flip = back(18 + total).x > mx // the tail lies to the right: turn the word so it still reads
+    let run = 18
+    for (const b of flip ? beads : [...beads].reverse()) {
+      const mid = run + b.w / 2, p = back(mid), behind = back(mid + 4), ahead = back(Math.max(0, mid - 4))
+      const angle = Math.atan2(ahead.y - behind.y, ahead.x - behind.x) + (flip ? Math.PI : 0)
+      b.el.style.transform = `translate(${p.x}px,${p.y}px) rotate(${angle}rad) translate(${-b.w / 2}px,-18px)`
+      run += b.w
+    }
+  }
+  if (is('Ink')) {
+    const now = performance.now(), under = document.elementFromPoint(mx, my)
+    const pic = under && under.matches('canvas.pic') ? under : null
+    let px = null, sx = 0, sy = 0
+    if (pic) {
+      const r = pic.getBoundingClientRect()
+      sx = Math.floor(((mx - r.left) / r.width) * pic.width); sy = Math.floor(((my - r.top) / r.height) * pic.height)
+      px = pic.getContext('2d').getImageData(sx, sy, 1, 1).data
+    }
+    if (pic !== onPic) {
+      // Onto a picture while carrying another one's colour: Mix blends the two, Duotone holds the old one a moment.
+      const foreign = pic && carried() && fromPic && pic !== fromPic
+      base = foreign && extra.Mix ? [...tint] : null
+      holdUntil = foreign && extra.Duotone ? now + 1500 : 0
+      if (pic && extra.Palette && !swatches.some((sw) => sw.pic === pic)) {
+        const el = Object.assign(document.createElement('div'), { className: 'bead' })
+        swatchBox.append(el)
+        swatches.push({ pic, el, x: mx, y: my })
+      }
+      onPic = pic
+    }
+    const held = pic && now < holdUntil
+    if (pic && !held) {
+      // The drop takes the colour of the very pixel under it, and keeps it a while.
+      want = base ? base.map((c, i) => (c + px[i]) / 2) : [px[0], px[1], px[2]]
+      tookAt = now
+      fromPic = pic
+    } else if (!pic && now - tookAt > 6000) { want = [237, 237, 237]; fromPic = null }
+    if (extra.Duotone && held) {
+      const r = pic.getBoundingClientRect()
+      Object.assign(duo.style, { left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px', background: inkCss(), opacity: 1 })
+    } else duo.style.opacity = 0
+    tint = tint.map((c, i) => c + (want[i] - c) * Math.min(1, dt * 10))
+    const ink = inkCss(), lo = Math.min(...tint), hi = Math.max(...tint)
+    const forLinks = extra.Complement ? `rgb(${tint.map((c) => Math.round(hi + lo - c))})` : ink
+    drop.style.background = ink
+    document.documentElement.style.setProperty('--ink', forLinks)
+    // On the picture the ink is the colour under it, so the text stays light there (or opposite) to be read.
+    read.style.color = pic ? (extra.Complement ? forLinks : '') : forLinks
+    if (text) readName.textContent = text
+    readMore.textContent = extra.Names ? nameOf(tint) : '#' + tint.map((c) => Math.round(c).toString(16).padStart(2, '0')).join('')
+    read.style.opacity = on ? 1 : 0
+    read.style.transform = `translate(${mx + 16}px,${my + 12}px)`
+    scope.style.display = extra.Scope && pic ? '' : 'none'
+    if (extra.Scope && pic) {
+      // One row of 64 pixels around the mouse: each drawn at the height of its brightness, in its own colour.
+      const row = pic.getContext('2d').getImageData(Math.max(0, Math.min(pic.width - 64, sx - 32)), sy, 64, 1).data
+      scopeInk.clearRect(0, 0, 64, 24)
+      for (let k = 0; k < 64; k++) {
+        const [r, g, b] = [row[k * 4], row[k * 4 + 1], row[k * 4 + 2]]
+        scopeInk.fillStyle = `rgb(${r},${g},${b})`
+        scopeInk.fillRect(k, 22 - ((.2126 * r + .7152 * g + .0722 * b) / 255) * 21, 1, 2)
+      }
+    }
+    if (extra.Stain && carried()) for (const l of letters) if (Math.hypot(l.x - mouse.x, l.y - mouse.y) < 34) l.el.style.color = ink
+    let lead = { x: mx, y: my }
+    for (const sw of swatches) {
+      const home = sw.pic === onPic, r = home ? sw.pic.getBoundingClientRect() : null
+      if (home && !held) sw.el.style.background = ink
+      const d = Math.hypot(sw.x - lead.x, sw.y - lead.y) || 1
+      const tx = home ? r.left + 14 : lead.x + ((sw.x - lead.x) / d) * 14, ty = home ? r.top + 14 : lead.y + ((sw.y - lead.y) / d) * 14
+      sw.x += (tx - sw.x) * Math.min(1, dt * 14); sw.y += (ty - sw.y) * Math.min(1, dt * 14)
+      sw.el.style.transform = `translate(${sw.x - 4}px,${sw.y - 4}px)`
+      if (!home) lead = sw
+    }
+    if (extra.Live) drawStills(now / 1000)
+  }
+}
+
+let last = performance.now()
+const frame = (now) => {
+  const dt = Math.min((now - last) / 1000, 1 / 30)
+  last = now
+  dot.style.transform = `translate(${mouse.cx}px,${mouse.cy}px) scale(${pressed ? .6 : 1})`
+  if (dt > 0) cursor(dt)
+  if (mode.field) field()
+  else if (seen) {
+    // A loose spring: the bend overshoots and wobbles into place.
+    const to = over ? mode.link : mode.rest
+    speed += ((to - power) * 180 - speed * 2 * Math.sqrt(180) * mode.loose) * dt
+    power += speed * dt
+    sizeTo = mode.size * (over && mode.grow ? mode.grow : 1)
+    size += (sizeTo - size) * Math.min(1, dt * 10)
+    for (const pic of pics) {
+      const box = pic.el.getBoundingClientRect(), w = mode.wide ? box.width : size, h = size
+      const x = mode.wide ? 0 : mouse.cx - box.left - w / 2, y = mouse.cy - box.top - h / 2
+      for (const el of [pic.map, ...pic.disp]) {
+        el.setAttribute('x', x); el.setAttribute('y', y); el.setAttribute('width', w); el.setAttribute('height', h)
+      }
+      pic.disp.forEach((el, i) => el.setAttribute('scale', power * (1 + (i - 1) * mode.split)))
+    }
+    if (mode.rim) {
+      rim.style.width = rim.style.height = size + 'px'
+      rim.style.transform = `translate(${mouse.cx - size / 2}px,${mouse.cy - size / 2}px)`
+    }
+  }
+  // The label: below right of the point, inside the page so it bends with it.
+  const lw = label.offsetWidth
+  const lx = mouse.x + 22 + lw > page.offsetWidth - 16 ? mouse.x - 22 - lw : mouse.x + 22
+  label.style.transform = `translate(${lx}px,${mouse.y + 14}px)`
+  requestAnimationFrame(frame)
+}
+pick(7)
+pickCursor(0)
+requestAnimationFrame(frame)
+</script>
+</body>
+</html>

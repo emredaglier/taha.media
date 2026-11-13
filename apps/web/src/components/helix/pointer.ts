@@ -1,15 +1,30 @@
+import { crtWarp } from '../../lib/helix-crt'
 import type { PointerPath } from '../../lib/helix-heat'
 import { HELIX_TUNING } from '../../lib/helix-tuning'
 
 const { restSpeed, speedFade, inRate, outRate } = HELIX_TUNING.pointer
 
-/** Where a point in the page (client px) is on the canvas, in normalized device coordinates (y up). */
-export function devicePoint(canvas: HTMLCanvasElement, clientX: number, clientY: number) {
+/**
+ * Where a point in the page (client px) is on the canvas, in normalized device coordinates (y up),
+ * as the picture drawn there sees it: through the CRT bend (`crt`, as the composite has it), so a
+ * click lands on the card shown under it. Every screen point the Helix reads comes through here,
+ * once.
+ */
+export function devicePoint(
+  canvas: HTMLCanvasElement,
+  clientX: number,
+  clientY: number,
+  crt: number,
+) {
   const box = canvas.getBoundingClientRect()
-  return {
-    x: ((clientX - box.left) / Math.max(1, box.width)) * 2 - 1,
-    y: 1 - ((clientY - box.top) / Math.max(1, box.height)) * 2,
-  }
+  const width = Math.max(1, box.width)
+  const height = Math.max(1, box.height)
+  return crtWarp(
+    ((clientX - box.left) / width) * 2 - 1,
+    1 - ((clientY - box.top) / height) * 2,
+    width / height,
+    crt,
+  )
 }
 
 /**
@@ -57,13 +72,13 @@ export function watchPointer(canvas: HTMLCanvasElement) {
   canvas.addEventListener('pointerleave', leave)
 
   /** A point in client px on the screen, 0 to 1 across and up. */
-  const onScreen = (p: { x: number; y: number }) => {
-    const { x, y } = devicePoint(canvas, p.x, p.y)
+  const onScreen = (p: { x: number; y: number }, crt: number) => {
+    const { x, y } = devicePoint(canvas, p.x, p.y, crt)
     return { x: x / 2 + 0.5, y: y / 2 + 0.5 }
   }
 
   return {
-    sample(dt: number): PointerSample {
+    sample(dt: number, crt: number): PointerSample {
       if (!at) return { point: null, resting: false, cursor: null }
       const from = last ?? at
       const moved = Math.hypot(at.x - from.x, at.y - from.y) / Math.max(dt, 1e-3)
@@ -71,9 +86,9 @@ export function watchPointer(canvas: HTMLCanvasElement) {
       speed = Math.max(moved, speed * Math.exp(-dt * speedFade))
       last = at
       return {
-        point: devicePoint(canvas, at.x, at.y),
+        point: devicePoint(canvas, at.x, at.y, crt),
         resting: speed < restSpeed,
-        cursor: { from: onScreen(from), to: onScreen(at), speed: moved },
+        cursor: { from: onScreen(from, crt), to: onScreen(at, crt), speed: moved },
       }
     },
 

@@ -10,7 +10,7 @@ import { dispatchHand, useHandControl } from './store'
 
 /** The toggle's label and type: the reserved slot is sized by the same text in the same type. */
 const LABEL = 'Elinle gez'
-const TYPE = 'text-sm uppercase'
+const TYPE = 'font-serif text-xl uppercase'
 
 /**
  * "Elinle gez" next to MENU (#56): a toggle button (`aria-pressed`) with the status line in a
@@ -61,6 +61,7 @@ export function HandToggle() {
             ref={button}
             type="button"
             aria-pressed={running}
+            data-cursor={LABEL}
             className={`absolute inset-0 cursor-pointer whitespace-nowrap motion-safe:animate-hand-in ${TYPE}`}
             onClick={() => dispatchHand({ kind: 'toggle' })}
           >

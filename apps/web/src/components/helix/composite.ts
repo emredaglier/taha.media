@@ -1,7 +1,9 @@
+import { CRT_WARP_GLSL } from '../../lib/helix-crt'
 import { CELL_SCREEN_PX, cellLadder, RING_COARSER, ringRadius } from '../../lib/helix-glyphs'
 import { HELIX_TUNING } from '../../lib/helix-tuning'
 import { createTarget, float, link, QUAD_VERTEX, screenQuad, uniforms, type Target } from './gl'
 import { createGlyphAtlas, GLYPH_ATLAS } from './glyph-atlas'
+import { createHeroText, HERO_SLIDE_PX } from './hero-text'
 
 /**
  * The composite (#45 "pass 4"): the cards (`scene`) and the Showreel layer (`showreel`), each
@@ -21,15 +23,22 @@ import { createGlyphAtlas, GLYPH_ATLAS } from './glyph-atlas'
  *   without changing the cell size. Turning slides the rows of cells sideways, smoothly.
  * - The Showreel dissolves through a ring of coarse glyphs that grows from its centre.
  * The card pass writes what the measure needs for each pixel as the scene's melt inputs
- * (`MELT_INPUTS_GLSL`).
+ * (`MELT_INPUTS_GLSL`). Over it all goes the hero's text (`HeroText`).
+ * Last, a small pass (`ABERRATION`) puts the result on the canvas with the red and blue channels
+ * split radially (chromatic aberration), so the heavy mosaic shader runs once, not three times.
  */
 export type Composite = {
   /** What the card pass draws into (with depth, and the melt inputs as a second output). */
   readonly scene: Target
   /** What the Showreel pass draws into. */
   readonly showreel: Target
+  /** Resolves once the glyph atlas and the hero's text can be drawn (their fonts have loaded). */
+  readonly ready: Promise<void>
   resize(width: number, height: number): void
-  /** Puts the targets together on the canvas (the default framebuffer, already bound and sized). */
+  /**
+   * Puts the targets together on the canvas (the default framebuffer, already bound and sized),
+   * through the aberration pass.
+   */
   draw(frame: CompositeFrame): void
   destroy(): void
 }
@@ -62,12 +71,16 @@ export type CompositeFrame = {
   reach: number
   /** The screen's shape (width / height). */
   aspect: number
+  /** The CRT bend (`crtWarp`), 0 for none. */
+  crt: number
   /** How fast the Helix turns, 0 to 1: it slides the rows of cells sideways. */
   speed: number
   /** How far the Helix has turned, in screen heights (`turnOnScreen`): the grid follows it. */
   shift: number
   /** The cursor's heat trail (`HeatTrail`; red). */
   heat: WebGLTexture
+  /** How far the hero's text has left with the zoom, 0 to 1 (`Opening.heroGone`). */
+  heroGone: number
 }
 
 // A hash, as the prototype has it: one steady random number per cell.
@@ -102,9 +115,9 @@ const floats = (values: readonly number[]) =>
 const FRAGMENT = `#version 300 es
 precision highp float;
 in vec2 vUv;
-uniform sampler2D uScene, uMeltInputs, uShowreel, uHeat, uGlyphs;
+uniform sampler2D uScene, uMeltInputs, uShowreel, uHeat, uGlyphs, uHeroText;
 uniform vec2 uRes, uCentre;
-uniform float uShowreelOn, uMelt, uRingRadius, uAspect, uSpeed, uShift;
+uniform float uShowreelOn, uMelt, uRingRadius, uAspect, uSpeed, uShift, uHeroGone, uHeroSlide, uCrt;
 out vec4 outColor;
 const float SHARP_BAND = ${float(HELIX_TUNING.sharpBand)};
 const float FAR_CARDS = ${float(HELIX_TUNING.farCards)};
@@ -122,6 +135,7 @@ const float CARD_CELLS[${CARD_CELLS.length}] = ${floats(CARD_CELLS)};
 const float RING_CELLS[${RING_CELLS.length}] = ${floats(RING_CELLS)};
 ${HASH}
 ${MELT_INPUTS_GLSL}
+${CRT_WARP_GLSL}
 // How much of a card covers uv, 0 to 1: the scene's alpha, which the card pass writes unfaded
 // (the picture's own alpha times the coverage; the pictures are opaque).
 float coverAt(vec2 uv) { return textureLod(uScene, clamp(uv, 0.001, 0.999), 0.0).a; }
@@ -246,7 +260,9 @@ vec4 mosaicAt(vec2 uv, float grow, bool reel, float hovered) {
   return mix(a, glyphCell(uv, coarse, reel, hovered), t - float(lower));
 }
 void main() {
-  vec2 uv = vUv;
+  // The CRT bend: every read below is at the source point this pixel shows, so the glyph cells and
+  // the hero text bend with the picture.
+  vec2 uv = crtWarp(vUv * 2.0 - 1.0, uAspect, uCrt) * 0.5 + 0.5;
   float heat = texture(uHeat, uv).r;
   MeltInputs mi = inputsAt(uv);
   float m = meltOf(mi, uv);
@@ -283,11 +299,37 @@ void main() {
     }
     c = r + c * (1.0 - r.a);
   }
+  // The hero's text: it leaves with the zoom as the page's text did
+  // (fading, sliding down uHeroSlide), and inverts what is beneath it, as the page's
+  // mix-blend-difference did (where the canvas is clear, over black, a shade off the page's).
+  if (uHeroGone < 1.0) {
+    vec4 t = texture(uHeroText, vec2(uv.x, 1.0 - uv.y - uHeroSlide * uHeroGone)) * (1.0 - uHeroGone);
+    if (t.a > 0.0) c = mix(c, vec4(abs(c.rgb - t.rgb / t.a), 1.0), t.a);
+  }
   outColor = vec4(min(c.rgb, vec3(c.a)), c.a);
 }`
 
+// The last pass: the composite's picture (premultiplied) with red and blue read from either side of
+// the pixel, along the line from the screen's centre. The offset is 0 in the middle and
+// HELIX_TUNING.aberration device px at the corners (|p| is the square root of 2 there). Alpha is the
+// largest of the three, so no channel exceeds it.
+const ABERRATION = `#version 300 es
+precision highp float;
+in vec2 vUv;
+uniform sampler2D uFrame;
+uniform vec2 uRes;
+out vec4 outColor;
+const float ABERRATION_PX = ${float(HELIX_TUNING.aberration)};
+void main() {
+  vec2 off = (vUv - 0.5) * 2.0 * ABERRATION_PX / (1.4142 * uRes);
+  vec4 r = texture(uFrame, vUv - off);
+  vec4 g = texture(uFrame, vUv);
+  vec4 b = texture(uFrame, vUv + off);
+  outColor = vec4(r.r, g.g, b.b, max(r.a, max(g.a, b.a)));
+}`
+
 /** The texture units the composite reads from. */
-const UNITS = { scene: 0, meltInputs: 1, showreel: 2, heat: 3, glyphs: 4 }
+const UNITS = { scene: 0, meltInputs: 1, showreel: 2, heat: 3, glyphs: 4, heroText: 5, frame: 6 }
 
 /** The composite for `gl`, with its own glyph atlas, so a new context builds a new one. */
 export function createComposite(gl: WebGL2RenderingContext): Composite {
@@ -298,6 +340,7 @@ export function createComposite(gl: WebGL2RenderingContext): Composite {
     'uShowreel',
     'uHeat',
     'uGlyphs',
+    'uHeroText',
     'uRes',
     'uShowreelOn',
     'uMelt',
@@ -306,12 +349,20 @@ export function createComposite(gl: WebGL2RenderingContext): Composite {
     'uSpeed',
     'uShift',
     'uCentre',
+    'uHeroGone',
+    'uHeroSlide',
+    'uCrt',
   ])
+  const aberration = link(gl, 'aberration', QUAD_VERTEX, ABERRATION)
+  const aberrationAt = uniforms(gl, aberration, ['uFrame', 'uRes'])
   const quad = screenQuad(gl)
   // Both are read blurred where the picture melts, so they keep mipmaps.
   const scene = createTarget(gl, { depth: true, meltInputs: true, mipmaps: true })
   const showreel = createTarget(gl, { depth: false, mipmaps: true })
   const glyphs = createGlyphAtlas(gl)
+  const heroText = createHeroText(gl)
+  // What the mosaic shader draws into, for the aberration pass to read.
+  const frame = createTarget(gl, { depth: false })
   // The drawing buffer's size in pixels: how blurred a cell's colour and its glyph are read.
   let size = { width: 1, height: 1 }
 
@@ -323,14 +374,19 @@ export function createComposite(gl: WebGL2RenderingContext): Composite {
   return {
     scene,
     showreel,
+    ready: Promise.all([glyphs.ready, heroText.ready]).then(() => undefined),
 
     resize(width, height) {
       scene.resize(width, height)
       showreel.resize(width, height)
+      heroText.resize(width, height)
+      frame.resize(width, height)
       size = { width: Math.max(1, width), height: Math.max(1, height) }
     },
 
-    draw({ showreelOn, melt, centre, reach, aspect, speed, shift, heat }) {
+    draw({ showreelOn, melt, centre, reach, aspect, crt, speed, shift, heat, heroGone }) {
+      heroText.update(heroGone)
+      frame.bind()
       gl.disable(gl.DEPTH_TEST)
       gl.disable(gl.BLEND)
       gl.useProgram(program)
@@ -340,31 +396,49 @@ export function createComposite(gl: WebGL2RenderingContext): Composite {
       bind(UNITS.showreel, showreel.texture)
       bind(UNITS.heat, heat)
       bind(UNITS.glyphs, glyphs.texture)
+      bind(UNITS.heroText, heroText.texture)
       gl.uniform1i(at.uScene, UNITS.scene)
       gl.uniform1i(at.uMeltInputs, UNITS.meltInputs)
       gl.uniform1i(at.uShowreel, UNITS.showreel)
       gl.uniform1i(at.uHeat, UNITS.heat)
       gl.uniform1i(at.uGlyphs, UNITS.glyphs)
+      gl.uniform1i(at.uHeroText, UNITS.heroText)
       gl.uniform2f(at.uRes, size.width, size.height)
       gl.uniform1f(at.uShowreelOn, showreelOn ? 1 : 0)
       gl.uniform1f(at.uMelt, melt)
       gl.uniform1f(at.uRingRadius, ringRadius(melt, reach))
       gl.uniform1f(at.uAspect, aspect)
+      gl.uniform1f(at.uCrt, crt)
       gl.uniform1f(at.uSpeed, speed)
       gl.uniform1f(at.uShift, shift)
       gl.uniform2f(at.uCentre, centre.x, centre.y)
+      gl.uniform1f(at.uHeroGone, heroGone)
+      // The slide, in screen heights (the canvas fills the screen).
+      const height = (gl.canvas as HTMLCanvasElement).clientHeight
+      gl.uniform1f(at.uHeroSlide, HERO_SLIDE_PX / Math.max(1, height))
+      gl.drawArrays(gl.TRIANGLES, 0, quad.count)
+      frame.resolve()
+
+      // The aberration pass, onto the canvas.
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+      gl.useProgram(aberration)
+      bind(UNITS.frame, frame.texture)
+      gl.uniform1i(aberrationAt.uFrame, UNITS.frame)
+      gl.uniform2f(aberrationAt.uRes, size.width, size.height)
       gl.drawArrays(gl.TRIANGLES, 0, quad.count)
       // Unbound again, so no later pass draws into a texture it is also reading.
-      for (const unit of [UNITS.glyphs, UNITS.heat, UNITS.showreel, UNITS.meltInputs, UNITS.scene])
-        bind(unit, null)
+      for (const unit of Object.values(UNITS)) bind(unit, null)
     },
 
     destroy() {
       scene.destroy()
       showreel.destroy()
       glyphs.destroy()
+      heroText.destroy()
+      frame.destroy()
       quad.destroy()
       gl.deleteProgram(program)
+      gl.deleteProgram(aberration)
     },
   }
 }

@@ -6,15 +6,16 @@
  * `font-serif`, ...), never a hard-coded colour or font. One dark theme, no toggle.
  */
 @theme {
-  --color-background: #101010;
+  --color-background: #000;
   --color-background-raised: #1a1a1a;
   --color-text: #ededed;
   --color-text-muted: #8f8f8f;
   --color-placeholder: #2a2a2a;
 
-  /* Stand-ins until the Figma fonts exist. System stacks cover ı İ ğ ş ç ö ü. */
-  --font-serif: ui-serif, Georgia, 'Times New Roman', serif;
-  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* Self-hosted from @fontsource (imported in layout.tsx); latin-ext covers ı İ ğ ş ç ö ü. */
+  --font-serif: 'Instrument Serif', ui-serif, Georgia, 'Times New Roman', serif;
+  --font-sans:
+    'Geist Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 
   /* Hand control's toggle fades into its reserved slot (only with motion allowed). */
   --animate-hand-in: hand-in 200ms ease-out;
@@ -72,10 +73,158 @@
  */
 @custom-variant fine-hover (@media (hover: hover) and (pointer: fine));
 
+/*
+ * TV screen over every page (`<div class="crt">` in layout.tsx): grain, scanlines and a vignette.
+ * The CRT bend itself is in the Helix's composite shader. Light on purpose, so text stays
+ * readable. Above everything, never clickable; the grain holds still with reduced motion.
+ */
+.crt {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  pointer-events: none;
+  overflow: hidden;
+  box-shadow: inset 0 0 6rem 1rem rgb(0 0 0 / 0.55);
+  background:
+    radial-gradient(ellipse at center, transparent 60%, rgb(0 0 0 / 0.25) 100%),
+    repeating-linear-gradient(to bottom, rgb(0 0 0 / 0.14) 0 1px, transparent 1px 3px);
+}
+
+.crt::before {
+  content: '';
+  position: absolute;
+  inset: -50%;
+  opacity: 0.09;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .crt::before {
+    animation: crt-grain 0.6s steps(6) infinite;
+  }
+}
+
+@keyframes crt-grain {
+  0% {
+    transform: translate(0, 0);
+  }
+  20% {
+    transform: translate(-7%, 4%);
+  }
+  40% {
+    transform: translate(5%, -6%);
+  }
+  60% {
+    transform: translate(-3%, 8%);
+  }
+  80% {
+    transform: translate(8%, 2%);
+  }
+  100% {
+    transform: translate(-5%, -3%);
+  }
+}
+
+/*
+ * The Home loader (`HomeLoader`, ADR-0104): up only while `html.is-loading`, which the root
+ * layout's script sets on Home before the first paint, on a device that will get the Helix; it
+ * fades out when the class goes. The mark turns on like an old TV: a bright line across the screen
+ * that opens out into it, then a few flickers. Under the TV overlay, never clickable.
+ */
+.home-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 99;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  pointer-events: none;
+  background: var(--color-background);
+  color: var(--color-text);
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 500ms ease-out,
+    visibility 0s 500ms;
+}
+
+.home-loader::before {
+  content: '';
+  position: absolute;
+  inset: 50% 0 auto;
+  height: 2px;
+  background: currentColor;
+  opacity: 0;
+}
+
+html.is-loading .home-loader {
+  opacity: 1;
+  visibility: visible;
+  transition: none;
+}
+
+html.is-loading .home-loader::before {
+  animation: tv-line 900ms ease-out both;
+}
+
+html.is-loading .home-loader-mark {
+  animation: tv-on 900ms ease-out both;
+}
+
+@keyframes tv-line {
+  0% {
+    opacity: 1;
+    transform: scaleX(0);
+  }
+  25% {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+  45% {
+    opacity: 0;
+    transform: scale(1, 40);
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes tv-on {
+  0%,
+  25% {
+    opacity: 0;
+    transform: scaleY(0.02);
+  }
+  45% {
+    opacity: 1;
+    transform: none;
+  }
+  55% {
+    opacity: 0.3;
+  }
+  62% {
+    opacity: 1;
+  }
+  72% {
+    opacity: 0.5;
+  }
+  80%,
+  100% {
+    opacity: 1;
+  }
+}
+
 @layer base {
   html {
     color-scheme: dark;
     background-color: var(--color-background);
+  }
+
+  /* VHS colour fringe on all text: a half-pixel red/cyan split, faint enough to stay sharp. */
+  body {
+    text-shadow:
+      -0.5px 0 rgb(255 40 40 / 0.35),
+      0.5px 0 rgb(40 220 255 / 0.35);
   }
 
   /* From the melt on, Home holds the screen: no page scroll (ADR-0103). */
