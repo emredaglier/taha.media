@@ -1,9 +1,12 @@
 import { assertLocalEnvironment } from '@taha/cms-config/seed'
 
+import { makeSeedLoops } from '../../../scripts/qa/seed-loops.ts'
+
 /**
  * `pnpm seed`: fills the local database with demo content. Run with `payload run` from apps/cms
  * against a migrated database. The environment is checked before the config is even loaded, so a
- * production environment is refused before anything is opened or written.
+ * production environment is refused before anything is opened or written. Afterwards the flat
+ * Preview loops and Showreel videos become moving test-pattern clips when ffmpeg is installed.
  */
 try {
   assertLocalEnvironment()
@@ -22,4 +25,4 @@ try {
 } finally {
   await payload.destroy()
 }
-process.exit(0)
+process.exit(makeSeedLoops(process.env.DATABASE_PATH as string))

@@ -14,8 +14,8 @@ pnpm dev     # web on http://localhost:3000
 pnpm dev:full   # web on :3000 and the admin on http://localhost:3001/admin; media plays
 ```
 
-`pnpm dev:full` needs `apps/web/.env` (gitignored) with two lines: `DATABASE_PATH=../cms/data/taha.db`
-and `PAYLOAD_SECRET=<the same value as in apps/cms/.env>`.
+`pnpm dev:full` needs `apps/web/.env` (gitignored): copy `apps/web/.env.example` to `apps/web/.env` and
+set `PAYLOAD_SECRET` to the value in `apps/cms/.env`.
 
 Admin: copy `apps/cms/.env.example` to `apps/cms/.env`, run `pnpm --filter @taha/cms dev` and open
 http://localhost:3001/admin (the first visit creates the first Editor). After a schema change in
