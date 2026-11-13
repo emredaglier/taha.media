@@ -18,7 +18,7 @@ import {
 } from '../../lib/room-opening'
 import { markRoomOpened, readRoomStart, rememberWork } from '../../lib/room-start'
 import { ROOM_TUNING } from '../../lib/room-tuning'
-import type { HelixWork } from '../FeaturedWorks'
+import type { RoomWork } from '../FeaturedWorks'
 import { createRoomRenderer, RoomUnavailable, type RoomRenderer } from './renderer'
 import type { RoomFrame } from './scene'
 
@@ -44,7 +44,7 @@ export function Room({
   light,
   onFail,
 }: {
-  works: HelixWork[]
+  works: RoomWork[]
   /** The Showreel's 16:9 loop, for the opening; none: the opening starts on the middle monitor's own Work. */
   showreel: { src: string } | null
   /** The light variant (a capable device with no hover, #133): tap for hover, the phone stops, fewer objects and loops. */
@@ -128,10 +128,8 @@ export function Room({
       if (!shown) {
         shown = true
         // The room takes over from the static Home in this paint, and the loader goes. The CSS
-        // locks Home to the screen (no page scroll) on `html[data-home='room']` with any
-        // `data-helix-phase` but `hero` (globals.css, "Home holds the screen"), so 'rest' does that.
+        // locks Home to the screen (no page scroll) on `html[data-home='room']` (globals.css).
         root.dataset.home = 'room'
-        root.dataset.helixPhase = 'rest'
         window.scrollTo(0, 0)
         markRoomOpened()
         loaded()
@@ -284,7 +282,6 @@ export function Room({
       document.removeEventListener('focusout', onFocusOut)
       renderer.destroy()
       delete root.dataset.home
-      delete root.dataset.helixPhase
       loaded()
     }
   }, [works, showreel, light])
@@ -292,7 +289,7 @@ export function Room({
   return (
     // Hidden until the first frame sets the marks. No landmark of its own: the static section of
     // Work links is "Öne çıkan işler".
-    <div className="invisible fixed inset-0 z-0 helix:visible">
+    <div className="invisible fixed inset-0 z-0 room:visible">
       <canvas
         ref={canvasRef}
         aria-hidden="true"

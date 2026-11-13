@@ -7,7 +7,7 @@ import { LOADING_CLASS } from '../../lib/home-loader'
 import { stopForPlace } from '../../lib/room-model'
 import { OPENING_SECONDS } from '../../lib/room-opening'
 import { rememberWork } from '../../lib/room-start'
-import type { HelixWork } from '../FeaturedWorks'
+import type { RoomWork } from '../FeaturedWorks'
 import { Room } from './Room'
 import { RoomUnavailable, type RoomRenderer } from './renderer'
 
@@ -26,7 +26,7 @@ vi.mock('./renderer', async (importOriginal) => ({
 const router = vi.hoisted(() => ({ push: vi.fn() }))
 vi.mock('next/navigation', () => ({ useRouter: () => router }))
 
-const works = [{ slug: 'a' }, { slug: 'b' }, { slug: 'c' }] as HelixWork[]
+const works = [{ slug: 'a' }, { slug: 'b' }, { slug: 'c' }] as RoomWork[]
 const showreel = { src: 'https://cdn.example/reel.mp4' }
 
 // What the stand-in renderer answers: the place under the pointer, the hot one, and the push-in's arrival.
@@ -252,7 +252,6 @@ describe('the Edit Room on Home', () => {
     act(() => root.unmount())
     expect(destroy).toHaveBeenCalledTimes(1)
     expect(document.documentElement.dataset.home).toBeUndefined()
-    expect(document.documentElement.dataset.helixPhase).toBeUndefined()
     root = createRoot(container) // for the afterEach
   })
 

@@ -1,9 +1,9 @@
-// The shader check's screenshots on disk. It only ever touches the two files it writes, because
+// The shader check's screenshot on disk. It only ever touches the file it writes, because
 // the directory can come from CHECK_SHADERS_OUTPUT_DIR and may hold anything.
 import fs from 'node:fs'
 import path from 'node:path'
 
-const SHOTS = ['cards', 'empty', 'room'] as const
+const SHOTS = ['room'] as const
 
 /** Removes the screenshots of an earlier run from `outputDir`, and nothing else in it. */
 export function clearOutput(outputDir: string): void {

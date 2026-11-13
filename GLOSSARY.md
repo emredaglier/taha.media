@@ -44,4 +44,4 @@ _Avoid_: Teaser, hover video, thumbnail video
 
 **Edit Room** (Kurgu odası):
 The home page: Taha's desk at night in 3D, with the first eight Featured Works playing their Preview loops on its screens (three monitors, a laptop, a tablet, a phone and two framed prints). The Showreel wakes the middle monitor, and a click on a screen opens that Work.
-_Avoid_: Helix, carousel, 3D scene, studio
+_Avoid_: carousel, 3D scene, studio

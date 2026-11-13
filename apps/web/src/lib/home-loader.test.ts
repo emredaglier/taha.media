@@ -46,7 +46,7 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-describe('the Home loader: shown only to a device that will get the Helix', () => {
+describe('the Home loader: shown only to a device that will get the Edit Room', () => {
   it('shows on a capable device', () => {
     expect(run(capable).loading()).toBe(true)
   })
@@ -63,19 +63,19 @@ describe('the Home loader: shown only to a device that will get the Helix', () =
     expect(run({ ...capable, deviceMemory: minMemoryGb / 2 }).loading()).toBe(false)
   })
 
-  it('decides as the Helix does, for every device', () => {
+  it('decides as the Edit Room does, for every device', () => {
     for (const reducedMotion of [false, true])
       for (const saveData of [false, true])
         for (const webgl2 of [false, true])
           for (const deviceMemory of [undefined, minMemoryGb / 2, minMemoryGb])
             for (const cores of [undefined, minCores - 1, minCores]) {
               const device = { reducedMotion, saveData, webgl2, hover: true, deviceMemory, cores }
-              const helix = chooseHomeMode({ ...device, featuredCount: 1 }) !== 'static'
-              expect(run(device).loading(), JSON.stringify(device)).toBe(helix)
+              const room = chooseHomeMode({ ...device, featuredCount: 1 }) !== 'static'
+              expect(run(device).loading(), JSON.stringify(device)).toBe(room)
             }
   })
 
-  it('never traps the visitor: the page shows after the timeout whatever the Helix does', () => {
+  it('never traps the visitor: the page shows after the timeout whatever the Edit Room does', () => {
     vi.useFakeTimers()
     const page = run(capable)
     vi.advanceTimersByTime(LOADER_TIMEOUT_MS - 1)

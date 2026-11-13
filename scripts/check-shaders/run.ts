@@ -1,14 +1,14 @@
-// `pnpm check:shaders`: does the Helix's and the Edit Room's WebGL2 work? Bundles entry.ts (the
-// real renderers, apps/web/src/components/helix and room) with esbuild, runs it in headless Chromium on SwiftShader (a
+// `pnpm check:shaders`: does the Edit Room's WebGL2 work? Bundles entry.ts (the real renderer,
+// apps/web/src/components/room) with esbuild, runs it in headless Chromium on SwiftShader (a
 // software GL, so no GPU is needed) and judges what it saw (pixels.ts). Exit code 0/1, one line on
 // a pass, the reasons (and a failing shader's GL info log) on a fail.
 //
-// A shader that doesn't compile makes the Helix or the room fall back to the static Home, which neither the
+// A shader that doesn't compile makes the room fall back to the static Home, which neither the
 // unit tests (jsdom has no WebGL) nor the smoke (it accepts the fallback) would notice.
 //
 // Needs Chromium for Playwright once: `pnpm exec playwright install chromium`. It starts a
 // browser, so run it once, not in parallel with other heavy work (CLAUDE.md, "Memory-heavy
-// commands"). Screenshots of the two judged frames go to scripts/check-shaders/.output/.
+// commands"). The screenshot of the judged frame goes to scripts/check-shaders/.output/.
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -23,8 +23,7 @@ const outputDir = process.env.CHECK_SHADERS_OUTPUT_DIR ?? path.join(here, '.outp
 const TIMEOUT_MS = 120_000
 
 const PAGE = `<!doctype html><meta charset="utf-8">
-<style>html,body{margin:0;background:#000}#host,#room-host{position:relative;width:1280px;height:800px}canvas{width:100%;height:100%;display:block}</style>
-<div id="host"><canvas id="helix"></canvas></div>
+<style>html,body{margin:0;background:#000}#room-host{position:relative;width:1280px;height:800px}canvas{width:100%;height:100%;display:block}</style>
 <div id="room-host"><canvas id="room"></canvas></div>
 <p data-home-statement style="font-family:serif">Kurgu, hareket ve tasarım. Görüntüyü ritme çeviriyorum.</p>`
 
@@ -73,7 +72,7 @@ async function main(): Promise<number> {
   const failures = judge(report.observation)
   if (failures.length > 0) {
     console.error(
-      `check:shaders FAILED (screenshots in ${path.relative(process.cwd(), outputDir)}):\n${failures.map((reason) => `  - ${reason}`).join('\n')}`,
+      `check:shaders FAILED (screenshot in ${path.relative(process.cwd(), outputDir)}):\n${failures.map((reason) => `  - ${reason}`).join('\n')}`,
     )
     return 1
   }

@@ -5,7 +5,7 @@ import { deviceReport, isWeakDevice, type DeviceReport } from './weak-device'
 
 /**
  * Which Home a visitor gets (ADR-0103, ADR-0101: motion is an enhancement):
- * - `room`: the Edit Room, built on top of the static Home (for now the Helix of Featured Works).
+ * - `room`: the Edit Room, built on top of the static Home.
  * - `light`: the room's light variant, for a capable device with no hover (a phone, #133).
  * - `static`: the static Home alone (the hero, then the Featured Works as plain cards).
  */

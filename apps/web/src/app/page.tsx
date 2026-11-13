@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 
-import { FeaturedWorks, toHelixWork, withPreviewLoop } from '../components/FeaturedWorks'
-import { Hero, toHelixShowreel } from '../components/Hero'
+import { FeaturedWorks, toRoomWork, withPreviewLoop } from '../components/FeaturedWorks'
+import { Hero } from '../components/Hero'
 import { HomeLoader } from '../components/HomeLoader'
 import { HomeRoom } from '../components/HomeRoom'
 import { PageMain } from '../components/PageFrame'
@@ -32,14 +32,14 @@ export default async function HomePage() {
     <PageMain className="flex flex-col">
       <div className="flex flex-1 flex-col">
         <Hero site={site} />
-        <div className="helix:sr-only">
+        <div className="room:sr-only">
           <FeaturedWorks works={works} />
         </div>
       </div>
       {works.length > 0 ? (
         <>
           <HomeLoader />
-          <HomeRoom works={works.map(toHelixWork)} showreel={toHelixShowreel(site).video} />
+          <HomeRoom works={works.map(toRoomWork)} showreel={site?.showreel ?? null} />
         </>
       ) : null}
     </PageMain>

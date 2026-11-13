@@ -239,10 +239,10 @@ describe('the Featured Works', () => {
     expect(html).toContain(`src="${site.showreelPhone!.poster.src}"`)
   })
 
-  it('add no Helix to the server HTML: it mounts only in the browser, after the capability check', async () => {
+  it('add no Edit Room to the server HTML: it mounts only in the browser, after the capability check', async () => {
     const html = await home()
     expect(html).not.toContain('<canvas')
-    // The mark that hides the static Home is set by JavaScript alone, once the Helix runs.
+    // The mark that hides the static Home is set by JavaScript alone, once the Edit Room runs.
     expect(html).not.toMatch(/data-home=/)
   })
 })

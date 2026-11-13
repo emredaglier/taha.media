@@ -19,18 +19,14 @@
 }
 
 /*
- * `helix:` applies while the Helix runs on Home. JavaScript sets the mark only once the Helix has
- * started, so nothing is hidden waiting for it (ADR-0101). Within it, the opening (#54) marks its
- * phase: `helix-hero:` while the scroll zooms the Showreel out (the page still scrolls), and
- * `helix-locked:` from the melt on, when Home holds the screen.
+ * `room:` applies while the Edit Room runs on Home. JavaScript sets the mark only once the room has
+ * started, so nothing is hidden waiting for it (ADR-0101).
  */
-@custom-variant helix (html[data-home='room'] &);
-@custom-variant helix-hero (html[data-home='room'][data-helix-phase='hero'] &);
-@custom-variant helix-locked (html[data-home='room']:not([data-helix-phase='hero']) &);
+@custom-variant room (html[data-home='room'] &);
 
 /*
  * `over-hero:` applies on the static Home: its hero is full-bleed, so the header sits over it
- * rather than above it, as it sits over the Helix's Showreel (`helix:`), and the two match.
+ * rather than above it, as it sits over the room (`room:`), and the two match.
  * `[data-home-hero]` is `HERO_SELECTOR` in `lib/home-marks.ts`: CSS can't import it, so keep the
  * two spellings in step.
  */
@@ -38,7 +34,7 @@
 
 /*
  * TV screen over every page (`<div class="crt">` in layout.tsx): grain, scanlines and a vignette.
- * The CRT bend itself is in the Helix's composite shader. Light on purpose, so text stays
+ * The CRT bend itself is in the Edit Room's glass pass. Light on purpose, so text stays
  * readable. Above everything, never clickable; the grain holds still with reduced motion.
  */
 .crt {
@@ -90,7 +86,7 @@
 
 /*
  * The Home loader (`HomeLoader`, ADR-0104): up only while `html.is-loading`, which the root
- * layout's script sets on Home before the first paint, on a device that will get the Helix; it
+ * layout's script sets on Home before the first paint, on a device that will get the Edit Room; it
  * fades out when the class goes. The mark turns on like an old TV: a bright line across the screen
  * that opens out into it, then a few flickers. Under the TV overlay, never clickable.
  */
@@ -190,8 +186,8 @@ html.is-loading .home-loader-mark {
       0.5px 0 rgb(40 220 255 / 0.35);
   }
 
-  /* From the melt on, Home holds the screen: no page scroll (ADR-0103). The Edit Room (room/Room.tsx) sets data-helix-phase='rest' at its first frame to match this rule. */
-  html[data-home='room']:not([data-helix-phase='hero']) {
+  /* Home holds the screen: no page scroll (ADR-0103). The Edit Room (room/Room.tsx) sets data-home at its first frame. */
+  html[data-home='room'] {
     overflow: hidden;
     overscroll-behavior: none;
   }

@@ -6,7 +6,7 @@ import { createOpeningState } from '../../lib/room-opening'
 import { pickMargin } from '../../lib/room-pointing'
 import { pixelRatioFor, throughGlass } from '../../lib/room-motion'
 import { ROOM_TUNING } from '../../lib/room-tuning'
-import type { HelixWork } from '../FeaturedWorks'
+import type { RoomWork } from '../FeaturedWorks'
 import { createGlass } from './glass'
 import { createRoomLoops } from './loops'
 import { readyWithin, waitBudgetMs } from './ready'
@@ -16,7 +16,7 @@ import { createShowreel } from './showreel'
 export { RoomUnavailable }
 
 /** What the room needs of a Featured Work: its Preview loop and its still (the loop's poster), and what its tag says. */
-export type RoomMedia = Pick<HelixWork, 'poster' | 'previewLoop' | 'title' | 'disciplines' | 'year'>
+export type RoomMedia = Pick<RoomWork, 'poster' | 'previewLoop' | 'title' | 'disciplines' | 'year'>
 
 export type RoomRenderer = {
   /**

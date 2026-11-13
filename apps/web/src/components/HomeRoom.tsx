@@ -4,7 +4,7 @@ import dynamic from 'next/dynamic'
 import { useState } from 'react'
 
 import { useHomeMode } from '../lib/home-mode'
-import type { HelixWork } from './FeaturedWorks'
+import type { RoomWork } from './FeaturedWorks'
 
 // Its own chunk, with Three.js: fetched only once a device has passed the capability check, and
 // by no other page.
@@ -19,7 +19,7 @@ export function HomeRoom({
   works,
   showreel,
 }: {
-  works: HelixWork[]
+  works: RoomWork[]
   showreel: { src: string } | null
 }) {
   const mode = useHomeMode(works.length)

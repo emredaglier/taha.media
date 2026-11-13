@@ -5,8 +5,8 @@ import { WEAK_DEVICE } from './weak-device'
 const REDUCED_MOTION = '(prefers-reduced-motion: reduce)'
 
 /**
- * The Home loader (ADR-0104): a black screen with the TAHA mark, over Home while the Helix gets
- * its first frame ready. `LOADING_CLASS` on `<html>` shows it; the Helix takes it off once
+ * The Home loader (ADR-0104): a black screen with the TAHA mark, over Home while the Edit Room gets
+ * its first frame ready. `LOADING_CLASS` on `<html>` shows it; the room takes it off once
  * that frame is drawn, or when it gives up, and the inline script itself after
  * `LOADER_TIMEOUT_MS` whatever happens, so the page is never held back for longer.
  */
@@ -17,7 +17,7 @@ export const LOADER_TIMEOUT_MS = 4000
 
 /**
  * The inline script that puts the loader up before the first paint, on Home, on a device that will
- * get the Helix: the same test as `chooseHomeMode` (reduced motion, Save-Data, WebGL2, a weak
+ * get the Edit Room: the same test as `chooseHomeMode` (reduced motion, Save-Data, WebGL2, a weak
  * device), which the tests hold it to. It is in the root layout's head, so it runs once per
  * document load, never on a client-side navigation; Home renders the loader itself only with
  * Featured Works, so without them the class shows nothing. It runs as a string, so it reads only
@@ -37,5 +37,5 @@ export function loaderScript(): string {
 })(window);`
 }
 
-/** Takes the loader off: the Helix's first frame is drawn, or the Helix gave up. */
+/** Takes the loader off: the room's first frame is drawn, or the room gave up. */
 export const loaded = (): void => document.documentElement.classList.remove(LOADING_CLASS)
