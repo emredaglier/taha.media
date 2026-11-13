@@ -47,9 +47,9 @@
  * phase: `helix-hero:` while the scroll zooms the Showreel out (the page still scrolls), and
  * `helix-locked:` from the melt on, when Home holds the screen.
  */
-@custom-variant helix (html[data-home='helix'] &);
-@custom-variant helix-hero (html[data-home='helix'][data-helix-phase='hero'] &);
-@custom-variant helix-locked (html[data-home='helix']:not([data-helix-phase='hero']) &);
+@custom-variant helix (html[data-home='room'] &);
+@custom-variant helix-hero (html[data-home='room'][data-helix-phase='hero'] &);
+@custom-variant helix-locked (html[data-home='room']:not([data-helix-phase='hero']) &);
 
 /*
  * `over-hero:` applies on the static Home: its hero is full-bleed, so the header sits over it
@@ -57,7 +57,7 @@
  * `[data-home-hero]` is `HERO_SELECTOR` in `lib/home-marks.ts`: CSS can't import it, so keep the
  * two spellings in step.
  */
-@custom-variant over-hero (html:not([data-home='helix']) body:has([data-home-hero]) &);
+@custom-variant over-hero (html:not([data-home='room']) body:has([data-home-hero]) &);
 
 /*
  * `hand-hover:` matches what Hand control's cursor is over, as `hover:` matches the mouse's
@@ -228,7 +228,7 @@ html.is-loading .home-loader-mark {
   }
 
   /* From the melt on, Home holds the screen: no page scroll (ADR-0103). */
-  html[data-home='helix']:not([data-helix-phase='hero']) {
+  html[data-home='room']:not([data-helix-phase='hero']) {
     overflow: hidden;
     overscroll-behavior: none;
   }

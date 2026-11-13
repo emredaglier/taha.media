@@ -1,4 +1,4 @@
-import { CRT_WARP_GLSL } from '../../lib/helix-crt'
+import { CRT_WARP_GLSL } from '../../lib/crt'
 import { CELL_SCREEN_PX, cellLadder, RING_COARSER, ringRadius } from '../../lib/helix-glyphs'
 import { HELIX_TUNING } from '../../lib/helix-tuning'
 import { createTarget, float, link, QUAD_VERTEX, screenQuad, uniforms, type Target } from './gl'

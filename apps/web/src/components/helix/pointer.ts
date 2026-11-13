@@ -1,4 +1,4 @@
-import { crtWarp } from '../../lib/helix-crt'
+import { crtWarp } from '../../lib/crt'
 import type { PointerPath } from '../../lib/helix-heat'
 import { HELIX_TUNING } from '../../lib/helix-tuning'
 

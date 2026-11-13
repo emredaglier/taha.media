@@ -16,7 +16,7 @@ export const zoomScroll = (): number =>
 export const SPACER_HEIGHT = `calc(100vh + ${HELIX_TUNING.zoomScrollVh}vh)`
 
 /**
- * Writes the marks the CSS keys to on `<html>`: `data-home="helix"` (the Helix runs),
+ * Writes the marks the CSS keys to on `<html>`: `data-home="room"` (the room runs),
  * `data-helix-phase` (the opening's phase: the page scrolls in `hero` and is locked after), and
  * how far the hero's overlays have left. Writes only what changed.
  */
@@ -32,7 +32,7 @@ export function pageMarks(root: HTMLElement) {
       if (next !== phase) {
         phase = next
         root.dataset.helixPhase = next
-        root.dataset.home = 'helix'
+        root.dataset.home = 'room'
       }
       const heroGone = Math.round(opening.heroGone * 1000) / 1000
       if (heroGone !== gone) {

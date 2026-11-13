@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { crtWarp } from './helix-crt'
+import { crtWarp } from './crt'
 
 describe('the CRT bend', () => {
   it('leaves the centre where it is', () => {

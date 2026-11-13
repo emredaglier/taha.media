@@ -20,6 +20,6 @@ const Helix = dynamic(() => import('./helix/Helix').then((module) => module.Heli
 export function HomeHelix({ works, showreel }: { works: HelixWork[]; showreel: HelixShowreel }) {
   const mode = useHomeMode(works.length)
   const [failed, setFailed] = useState(false)
-  if (mode !== 'helix' || failed) return null
+  if (mode !== 'room' || failed) return null
   return <Helix works={works} showreel={showreel} onFail={() => setFailed(true)} />
 }

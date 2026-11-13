@@ -12,8 +12,8 @@ vi.mock('./tracker', () => ({ createHandTracker: tracker.createHandTracker }))
 
 import { CHIN_GAP, hold, pose } from '../../lib/hand-fixtures'
 import type { HandFrame } from '../../lib/hand-gesture'
-import { HELIX_TUNING } from '../../lib/helix-tuning'
 import { HAND_TUNING } from '../../lib/hand-tuning'
+import { WEAK_DEVICE } from '../../lib/weak-device'
 import { lockScroll } from '../../lib/menu-a11y'
 import { HINT_TEXT } from '../../lib/hand-hints'
 import { HAND_ON_KEY, markCoachSeen } from '../../lib/hand-session'
@@ -52,7 +52,7 @@ let pageTime: number
 /** The points the hand's hit test asked about. */
 let hits: [number, number][]
 
-const { minCores } = HELIX_TUNING.weakDevice
+const { minCores } = WEAK_DEVICE
 
 /** How the browser says this page was loaded (`PerformanceNavigationTiming.type`). */
 let navigationType: string

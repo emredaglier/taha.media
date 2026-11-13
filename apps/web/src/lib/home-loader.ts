@@ -1,4 +1,4 @@
-import { HELIX_TUNING } from './helix-tuning'
+import { WEAK_DEVICE } from './weak-device'
 
 // `REDUCED_MOTION` in `loop-mode.ts`, spelled out: that module uses a client-only hook, and the root
 // layout (a Server Component) imports this one. The tests hold the two to the same result.
@@ -24,7 +24,7 @@ export const LOADER_TIMEOUT_MS = 4000
  * `window`.
  */
 export function loaderScript(): string {
-  const { minMemoryGb, minCores } = HELIX_TUNING.weakDevice
+  const { minMemoryGb, minCores } = WEAK_DEVICE
   return `(function (w) {
   if (w.location.pathname !== '/') return;
   var n = w.navigator, c = n.connection, m = n.deviceMemory, k = n.hardwareConcurrency;

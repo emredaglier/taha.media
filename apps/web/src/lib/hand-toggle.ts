@@ -1,6 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 
-import { deviceReport, isWeakDevice } from './home-mode'
+import { deviceReport, isWeakDevice } from './weak-device'
 import { CAN_HOVER, POINTER_FINE, saveDataOn, subscribeToQueries } from './loop-mode'
 
 /** What decides whether the Elinle gez toggle is offered. */
@@ -12,7 +12,7 @@ export type HandToggleInputs = {
   /** The browser lists a video input device (no permission needed to see one exists). */
   hasCamera: boolean
   saveData: boolean
-  /** The Helix's weak-device test (`isWeakDevice`). */
+  /** The weak-device test (`isWeakDevice`). */
   weakDevice: boolean
 }
 

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
-import { HELIX_TUNING } from './helix-tuning'
 import { chooseHomeMode } from './home-mode'
+import { WEAK_DEVICE } from './weak-device'
 
-const { minMemoryGb, minCores } = HELIX_TUNING.weakDevice
+const { minMemoryGb, minCores } = WEAK_DEVICE
 
 /** A capable device with Featured Works: every input clear. */
 const capable = {
@@ -16,8 +16,8 @@ const capable = {
 }
 
 describe('chooseHomeMode', () => {
-  it('gives the Helix when every check is clear', () => {
-    expect(chooseHomeMode(capable)).toBe('helix')
+  it('gives the room when every check is clear', () => {
+    expect(chooseHomeMode(capable)).toBe('room')
   })
 
   it.each([
@@ -32,14 +32,14 @@ describe('chooseHomeMode', () => {
   })
 
   it('passes a device that reports neither memory nor cores', () => {
-    expect(chooseHomeMode({ ...capable, deviceMemory: undefined, cores: undefined })).toBe('helix')
+    expect(chooseHomeMode({ ...capable, deviceMemory: undefined, cores: undefined })).toBe('room')
   })
 
   it('passes a device at exactly the memory and core thresholds', () => {
-    expect(chooseHomeMode({ ...capable, deviceMemory: minMemoryGb, cores: minCores })).toBe('helix')
+    expect(chooseHomeMode({ ...capable, deviceMemory: minMemoryGb, cores: minCores })).toBe('room')
   })
 
-  it('gives the Helix with a single Featured Work', () => {
-    expect(chooseHomeMode({ ...capable, featuredCount: 1 })).toBe('helix')
+  it('gives the room with a single Featured Work', () => {
+    expect(chooseHomeMode({ ...capable, featuredCount: 1 })).toBe('room')
   })
 })

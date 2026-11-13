@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useSyncExternalStore } from 'react'
 
-import { deviceReport, isWeakDevice } from '../lib/home-mode'
+import { deviceReport, isWeakDevice } from '../lib/weak-device'
 import { CAN_HOVER, POINTER_FINE, REDUCED_MOTION, subscribeToPreferences } from '../lib/loop-mode'
 import { MELT, settled, springStep, visibleRect, type Rect, type Spring } from '../lib/melt'
 
@@ -266,9 +266,9 @@ export function MeltLayer() {
       if (!present) return clear()
       const dt = Math.min((now - last) / 1000, 1 / 30)
       last = now
-      // The Helix has its own pointer effect.
+      // The room has its own pointer effect.
       const { parts, playing } =
-        root.dataset.home === 'helix' ? { parts: [], playing: false } : gather()
+        root.dataset.home === 'room' ? { parts: [], playing: false } : gather()
       clear()
       reach = parts.length > 0
       if (!reach) {

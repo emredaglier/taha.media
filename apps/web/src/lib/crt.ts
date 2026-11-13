@@ -1,5 +1,5 @@
 /**
- * The CRT bend of the Helix: the picture bulges like a curved TV screen. `crtWarp` is the one
+ * The CRT bend: the picture bulges like a curved TV screen. `crtWarp` is the one
  * mapping, from a point on the screen to the point of the picture it shows (normalized device
  * coordinates), in TS for the pointer and in GLSL (`CRT_WARP_GLSL`, the same maths) for the
  * composite. `aspect` is width / height, so the bend is round; `bend` 0 changes nothing. The

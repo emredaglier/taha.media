@@ -2,7 +2,7 @@
  * Every number the owner may retune in Hand control (#45, "Tuning object"), at the values tested
  * in the prototype (`docs/design/prototype-home-helix.html`, "Camera finger steering"). Code reads
  * them from here and tests derive their inputs from them, so a retune changes only this file. The
- * weak-device test is the Helix's (`HELIX_TUNING.weakDevice`, through `isWeakDevice`).
+ * weak-device test is shared (`WEAK_DEVICE`, through `isWeakDevice`).
  */
 export const HAND_TUNING = {
   /**

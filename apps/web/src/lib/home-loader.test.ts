@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { HELIX_TUNING } from './helix-tuning'
 import { LOADER_TIMEOUT_MS, LOADING_CLASS, loaderScript } from './home-loader'
 import { chooseHomeMode } from './home-mode'
+import { WEAK_DEVICE } from './weak-device'
 
 type Device = {
   reducedMotion: boolean
@@ -39,7 +39,7 @@ function run(device: Device) {
   return { loading: () => classes.has(LOADING_CLASS) }
 }
 
-const { minMemoryGb, minCores } = HELIX_TUNING.weakDevice
+const { minMemoryGb, minCores } = WEAK_DEVICE
 const capable: Device = { reducedMotion: false, saveData: false, webgl2: true, cores: minCores }
 
 afterEach(() => {
@@ -70,7 +70,7 @@ describe('the Home loader: shown only to a device that will get the Helix', () =
           for (const deviceMemory of [undefined, minMemoryGb / 2, minMemoryGb])
             for (const cores of [undefined, minCores - 1, minCores]) {
               const device = { reducedMotion, saveData, webgl2, deviceMemory, cores }
-              const helix = chooseHomeMode({ ...device, featuredCount: 1 }) === 'helix'
+              const helix = chooseHomeMode({ ...device, featuredCount: 1 }) === 'room'
               expect(run(device).loading(), JSON.stringify(device)).toBe(helix)
             }
   })

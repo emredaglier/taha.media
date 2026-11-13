@@ -1,9 +1,9 @@
-import { HELIX_TUNING } from '../lib/helix-tuning'
+import { WEAK_DEVICE } from '../lib/weak-device'
 
 /** What a test may set: a key left out keeps the pinned value; `memory: undefined` means "not reported". */
 export type DeviceOverride = { cores?: number; memory?: number }
 
-const { minCores, minMemoryGb } = HELIX_TUNING.weakDevice
+const { minCores, minMemoryGb } = WEAK_DEVICE
 
 /** The device every test sees unless it overrides it: comfortably above the weak-device line. */
 export const PINNED_DEVICE = { cores: minCores * 2, memory: minMemoryGb * 2 }

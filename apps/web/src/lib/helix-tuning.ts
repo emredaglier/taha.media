@@ -27,8 +27,6 @@ export const HELIX_TUNING = {
   clickSlopPx: 6,
   /** The Helix repeats the Featured Works in order until it holds at least this many cards. */
   minCards: 10,
-  /** Below either value the device is weak and gets the static Home (a value not reported passes). */
-  weakDevice: { minMemoryGb: 4, minCores: 4 },
   /**
    * The sharp middle band (#55): within this distance of the middle of the screen (0 to 1 of the
    * half-height) nothing melts. Beyond it the top and bottom melt away, and only the cards that
