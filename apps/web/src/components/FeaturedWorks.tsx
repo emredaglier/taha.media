@@ -23,6 +23,7 @@ const disciplineLine = (work: Work) =>
 export type HelixWork = {
   slug: string
   title: string
+  year: number
   /** The Disciplines as one line. */
   disciplines: string
   client: string | null
@@ -37,6 +38,7 @@ export const toHelixWork = (work: FeaturedWork): HelixWork => {
   return {
     slug: work.slug,
     title: work.title,
+    year: work.year,
     disciplines: disciplineLine(work),
     client: work.client,
     previewLoop: {

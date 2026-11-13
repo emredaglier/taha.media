@@ -165,9 +165,19 @@ async function checkRoom(
   works: Works,
 ): Promise<{ glError: number; stats: RoomStats; shot: string }> {
   const canvas = document.getElementById('room') as HTMLCanvasElement
-  const room = createRoomRenderer(canvas, works, false, (error) => {
-    throw error
-  })
+  const room = createRoomRenderer(
+    canvas,
+    works.map((work, index) => ({
+      ...work,
+      title: `Work ${index + 1}`,
+      disciplines: 'Montaj',
+      year: 2026,
+    })),
+    false,
+    (error) => {
+      throw error
+    },
+  )
   const gl = canvas.getContext('webgl2')
   if (!gl) throw new Error('The room canvas has no WebGL2 context')
   room.resize()

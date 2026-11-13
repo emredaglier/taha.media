@@ -22,8 +22,16 @@ vi.mock('./renderer', async (importOriginal) => ({
   createRoomRenderer: renderer.create,
 }))
 
+// The router is a stand-in too: the room only asks it to open a Work's page.
+const router = vi.hoisted(() => ({ push: vi.fn() }))
+vi.mock('next/navigation', () => ({ useRouter: () => router }))
+
 const works = [{ slug: 'a' }, { slug: 'b' }, { slug: 'c' }] as HelixWork[]
 const showreel = { src: 'https://cdn.example/reel.mp4' }
+
+// What the stand-in renderer answers: the place under the pointer, the hot one, and the push-in's arrival.
+const scene = { pick: vi.fn<(nx: number, ny: number) => number>(), hot: -1, pushed: false }
+let pushes: number[]
 
 type Frame = {
   progress: number
@@ -63,6 +71,11 @@ const canvas = () => container.querySelector('canvas')!
 
 beforeEach(() => {
   draws = []
+  pushes = []
+  scene.pick.mockReset().mockReturnValue(-1)
+  scene.hot = -1
+  scene.pushed = false
+  router.push.mockReset()
   loss = null
   destroy = vi.fn()
   failed = vi.fn()
@@ -78,6 +91,14 @@ beforeEach(() => {
         pointer: frame.pointer,
         opening: { reel, fly, settled },
       })
+    },
+    pick: scene.pick,
+    push: (place) => pushes.push(place),
+    get hot() {
+      return scene.hot
+    },
+    get pushed() {
+      return scene.pushed
     },
     resize: vi.fn(),
     destroy,
@@ -257,6 +278,45 @@ describe('the Edit Room on Home', () => {
       expect(draws.at(-1)!.opening).toMatchObject({ reel: 0, fly: 0, settled: true })
     })
 
+    it('lets a Work be chosen right after a skip, and a click during the opening chooses nothing', async () => {
+      loadedOnHome()
+      scene.pick.mockReturnValue(1)
+      await mount()
+      runFrames(5)
+      pointerDown()
+      canvas().dispatchEvent(
+        Object.assign(new MouseEvent('pointerup', { button: 0 }), {
+          pointerId: 1,
+          isPrimary: true,
+        }),
+      )
+      expect(pushes).toEqual([]) // that click only skipped
+      runFrame()
+      pointerDown()
+      canvas().dispatchEvent(
+        Object.assign(new MouseEvent('pointerup', { button: 0 }), {
+          pointerId: 1,
+          isPrimary: true,
+        }),
+      )
+      expect(pushes).toEqual([1]) // the next one chooses
+    })
+
+    it('remembers the Work it opens, so the way back rests at its stop', async () => {
+      await mount()
+      runFrame()
+      scene.pick.mockReturnValue(1)
+      canvas().setPointerCapture = vi.fn()
+      for (const type of ['pointerdown', 'pointerup'])
+        canvas().dispatchEvent(
+          Object.assign(new MouseEvent(type, { button: 0 }), { pointerId: 1, isPrimary: true }),
+        )
+      scene.pushed = true
+      runFrames(2)
+      expect(router.push).toHaveBeenCalledWith('/isler/b')
+      expect(window.history.state).toMatchObject({ roomWork: 'b' })
+    })
+
     it('does not play on client navigation to Home: rest from the first frame, no Showreel loaded', async () => {
       await mount() // no document load on Home: the page was reached by a client navigation
       runFrame()
@@ -301,21 +361,88 @@ describe('the Edit Room on Home', () => {
 
     it('keeps the loader until the room has what it waits for', async () => {
       let ready!: () => void
-      renderer.create.mockImplementation((_canvas, _works, _touch, onFail: () => void) => {
-        loss = onFail
-        return {
-          ready: new Promise<void>((resolve) => (ready = resolve)),
-          draw: () => {},
-          resize: vi.fn(),
-          destroy,
-        } satisfies RoomRenderer
-      })
+      const waiting = new Promise<void>((resolve) => (ready = resolve))
+      const base = renderer.create.getMockImplementation()!
+      renderer.create.mockImplementation((...args: unknown[]) => ({
+        ...base(...args),
+        ready: waiting,
+      }))
       await mount()
       expect(runFrame()).toBe(false)
       expect(document.documentElement.classList.contains(LOADING_CLASS)).toBe(true)
       await act(async () => ready())
       runFrame()
       expect(document.documentElement.classList.contains(LOADING_CLASS)).toBe(false)
+    })
+  })
+
+  describe('pointing', () => {
+    // jsdom has no PointerEvent: a mouse event with the fields the room reads stands in.
+    const asPointer = (event: Event) => Object.assign(event, { pointerId: 1, isPrimary: true })
+    const press = (type: string, x: number, y: number) =>
+      canvas().dispatchEvent(asPointer(new MouseEvent(type, { clientX: x, clientY: y, button: 0 })))
+    const click = (x: number, y: number) => {
+      press('pointerdown', x, y)
+      press('pointerup', x, y)
+    }
+
+    beforeEach(async () => {
+      await mount()
+      canvas().setPointerCapture = vi.fn()
+      runFrame()
+    })
+
+    it('swells the Drop cursor over a Work and lets go when the pointer leaves it', () => {
+      scene.hot = 1
+      runFrame()
+      expect(canvas().dataset.cursor).toBe('Aç')
+      scene.hot = -1
+      runFrame()
+      expect(canvas().dataset.cursor).toBeUndefined()
+    })
+
+    it('pushes into the Work under a click, and opens its page once the camera has arrived', () => {
+      scene.pick.mockReturnValue(1)
+      click(300, 200)
+      expect(pushes).toEqual([1])
+      runFrames(3)
+      expect(router.push).not.toHaveBeenCalled()
+      scene.pushed = true
+      runFrames(3)
+      expect(router.push).toHaveBeenCalledTimes(1)
+      expect(router.push).toHaveBeenCalledWith('/isler/b')
+    })
+
+    it('does nothing for a click on no screen', () => {
+      click(300, 200)
+      expect(pushes).toEqual([])
+    })
+
+    it('takes a drag for no click, and a slip of the hand for a click', () => {
+      scene.pick.mockReturnValue(0)
+      press('pointerdown', 300, 600)
+      press('pointermove', 300, 200)
+      press('pointerup', 300, 200)
+      expect(pushes).toEqual([])
+      press('pointerdown', 300, 200)
+      press('pointermove', 302, 203)
+      press('pointerup', 302, 203)
+      expect(pushes).toEqual([0])
+    })
+
+    it('holds the camera and the cursor still once pushing: no wheel, no second push', () => {
+      scene.pick.mockReturnValue(0)
+      click(300, 200)
+      scene.hot = 0
+      runFrame()
+      expect(canvas().dataset.cursor).toBeUndefined()
+      const wheel = new WheelEvent('wheel', { deltaY: 400, cancelable: true })
+      window.dispatchEvent(wheel)
+      expect(wheel.defaultPrevented).toBe(true)
+      runFrames(30)
+      expect(draws.at(-1)!.progress).toBe(0)
+      click(300, 200)
+      expect(pushes).toEqual([0])
     })
   })
 })

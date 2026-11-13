@@ -1,5 +1,6 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
 import { useEffect, useEffectEvent, useRef } from 'react'
 
 import { loaded } from '../../lib/home-loader'
@@ -16,6 +17,7 @@ import {
   stepOpening,
 } from '../../lib/room-opening'
 import { markRoomOpened, readRoomStart, rememberWork } from '../../lib/room-start'
+import { ROOM_TUNING } from '../../lib/room-tuning'
 import type { HelixWork } from '../FeaturedWorks'
 import { createRoomRenderer, RoomUnavailable, type RoomRenderer } from './renderer'
 import type { RoomFrame } from './scene'
@@ -27,7 +29,9 @@ import type { RoomFrame } from './scene'
  * tap skips it. Client navigation to Home, and coming back from a Work page, start at rest, the
  * latter at the stop that shows that Work (`room-start`). The wheel and a
  * vertical drag move the camera along the path and the page never scrolls (ADR-0103); the pointer
- * turns the view a little. The static Home stays in the page underneath, visually hidden, so
+ * turns the view a little. Pointing at a screen makes its Work hot (brighter, with its tag, and
+ * the site's Drop cursor swells); a click pushes the camera into it and then opens the Work's
+ * page, a drag is no click (#130). The static Home stays in the page underneath, visually hidden, so
  * screen readers and keyboards still reach every Work.
  *
  * The first frame drawn takes over from the static Home in the same paint and takes the loader
@@ -46,6 +50,11 @@ export function Room({
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const fail = useEffectEvent(onFail)
+  const router = useRouter()
+  const open = useEffectEvent((slug: string) => {
+    rememberWork(slug) // coming back from the Work page rests at its stop (#131)
+    router.push(`/isler/${slug}`)
+  })
 
   useEffect(() => {
     const canvas = canvasRef.current!
@@ -79,7 +88,9 @@ export function Room({
     const opening = createOpeningState() // the rest state, until the opening's first frame says otherwise
     const pointer = { nx: 0, ny: 0, dx: 0, inside: false }
     const input: RoomFrame = { seconds: 0, dt: 0, progress: 0, pointer: null, opening }
-    let drag: { id: number; lastY: number } | null = null
+    let drag: { id: number; lastY: number; startX: number; startY: number; moved: boolean } | null =
+      null
+    let pushing = -1 // the Work being pushed into, once a click has picked it
 
     let frameId = 0
     let last = 0
@@ -98,6 +109,14 @@ export function Room({
       input.pointer = pointer.inside ? pointer : null
       renderer.draw(input)
       pointer.dx = 0
+      // The Drop cursor swells over a Work (site cursor: the nearest `data-cursor` names it).
+      if (renderer.hot >= 0 && pushing < 0 && !touch) canvas.dataset.cursor = 'Aç'
+      else delete canvas.dataset.cursor
+      if (pushing >= 0 && renderer.pushed) {
+        const slug = works[pushing]!.slug
+        pushing = -1 // opens once
+        open(slug)
+      }
       if (!shown) {
         shown = true
         // The room takes over from the static Home in this paint, and the loader goes. The CSS
@@ -125,11 +144,12 @@ export function Room({
     const onWheel = (event: WheelEvent) => {
       // Before the first frame the static Home shows and the page scrolls: the wheel is the browser's.
       if (!shown || event.ctrlKey || isMenuOpen(document)) return // ctrl + wheel is the browser's zoom
+      if (pushing >= 0) return event.preventDefault() // the camera is on its way in
       event.preventDefault()
       scrollBy(scroll, wheelPixels(event.deltaY, event.deltaMode, window.innerHeight))
     }
     const onPointerDown = (event: PointerEvent) => {
-      if (!event.isPrimary || event.button !== 0 || isMenuOpen(document)) return
+      if (!event.isPrimary || event.button !== 0 || isMenuOpen(document) || pushing >= 0) return
       // A click or tap during the opening skips it, and only that: no Work can be chosen yet.
       if (isOpening(clock)) return skipOpening(clock)
       try {
@@ -137,7 +157,13 @@ export function Room({
       } catch {
         // Not an active pointer: nothing to capture, and nothing to drag past the canvas.
       }
-      drag = { id: event.pointerId, lastY: event.clientY }
+      drag = {
+        id: event.pointerId,
+        lastY: event.clientY,
+        startX: event.clientX,
+        startY: event.clientY,
+        moved: false,
+      }
     }
     const onPointerMove = (event: PointerEvent) => {
       const box = canvas.getBoundingClientRect()
@@ -146,11 +172,30 @@ export function Room({
       pointer.ny = 1 - ((event.clientY - box.top) / Math.max(1, box.height)) * 2
       pointer.dx += event.movementX
       if (drag?.id !== event.pointerId) return
+      if (
+        Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) >
+        ROOM_TUNING.clickSlopPx
+      )
+        drag.moved = true
       scrollBy(scroll, drag.lastY - event.clientY) // dragging up goes further in
       drag.lastY = event.clientY
     }
     const onPointerEnd = (event: PointerEvent) => {
       if (drag?.id === event.pointerId) drag = null
+    }
+    // A press that ends without having moved is a click: on a screen it pushes in.
+    const onPointerUp = (event: PointerEvent) => {
+      const click = drag?.id === event.pointerId && !drag.moved
+      onPointerEnd(event)
+      if (!click || !shown || pushing >= 0 || isMenuOpen(document)) return
+      const box = canvas.getBoundingClientRect()
+      const place = renderer.pick(
+        ((event.clientX - box.left) / Math.max(1, box.width)) * 2 - 1,
+        1 - ((event.clientY - box.top) / Math.max(1, box.height)) * 2,
+      )
+      if (place < 0 || place >= works.length) return
+      pushing = place
+      renderer.push(place)
     }
     const onPointerLeave = () => (pointer.inside = false)
     // A Work opened from the room is remembered on this history entry, so coming back rests at its stop.
@@ -168,7 +213,7 @@ export function Room({
     window.addEventListener('wheel', onWheel, { passive: false })
     canvas.addEventListener('pointerdown', onPointerDown)
     canvas.addEventListener('pointermove', onPointerMove)
-    canvas.addEventListener('pointerup', onPointerEnd)
+    canvas.addEventListener('pointerup', onPointerUp)
     canvas.addEventListener('pointercancel', onPointerEnd)
     canvas.addEventListener('pointerleave', onPointerLeave)
     document.addEventListener('visibilitychange', onVisibility)
@@ -188,7 +233,7 @@ export function Room({
       window.removeEventListener('wheel', onWheel)
       canvas.removeEventListener('pointerdown', onPointerDown)
       canvas.removeEventListener('pointermove', onPointerMove)
-      canvas.removeEventListener('pointerup', onPointerEnd)
+      canvas.removeEventListener('pointerup', onPointerUp)
       canvas.removeEventListener('pointercancel', onPointerEnd)
       canvas.removeEventListener('pointerleave', onPointerLeave)
       document.removeEventListener('visibilitychange', onVisibility)
