@@ -63,8 +63,10 @@ let container: HTMLElement
 let root: Root
 let failed: Mock<() => void>
 
-const mount = async () => {
-  await act(async () => root.render(<Room works={works} showreel={showreel} onFail={failed} />))
+const mount = async (light = false) => {
+  await act(async () =>
+    root.render(<Room works={works} showreel={showreel} light={light} onFail={failed} />),
+  )
   await act(async () => {}) // the stills' promise
 }
 const canvas = () => container.querySelector('canvas')!
@@ -151,6 +153,16 @@ describe('the Edit Room on Home', () => {
     expect(draws).toHaveLength(1)
     expect(document.documentElement.classList.contains(LOADING_CLASS)).toBe(false)
     expect(document.documentElement.dataset.home).toBe('room')
+  })
+
+  it('is the light variant (touch) only when told so', async () => {
+    await mount(true)
+    expect(renderer.create.mock.calls[0]![2]).toBe(true)
+    act(() => root.unmount())
+    renderer.create.mockClear()
+    root = createRoot(container)
+    await mount()
+    expect(renderer.create.mock.calls[0]![2]).toBe(false)
   })
 
   it('gives the static Home back, and the loader off, when WebGL2 cannot start', async () => {

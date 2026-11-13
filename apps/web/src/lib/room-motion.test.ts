@@ -8,6 +8,7 @@ import {
   stepChair,
   stepLook,
   stillCrop,
+  usesPhoneStops,
   throughGlass,
   wheelPixels,
 } from './room-motion'
@@ -101,6 +102,13 @@ describe('fovFor and isPortrait: the lens follows the screen', () => {
   it('calls an upright phone portrait and a laptop not', () => {
     expect(isPortrait(390 / 844)).toBe(true)
     expect(isPortrait(1440 / 900)).toBe(false)
+  })
+
+  it('takes the phone stops on a no-hover device whatever its shape, and on a tall screen', () => {
+    expect(usesPhoneStops(true, 844 / 390)).toBe(true) // a phone held sideways
+    expect(usesPhoneStops(true, 390 / 844)).toBe(true)
+    expect(usesPhoneStops(false, 390 / 844)).toBe(true) // a narrow desktop window
+    expect(usesPhoneStops(false, 1440 / 900)).toBe(false)
   })
 })
 

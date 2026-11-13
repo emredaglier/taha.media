@@ -69,8 +69,8 @@ describe('the Home loader: shown only to a device that will get the Helix', () =
         for (const webgl2 of [false, true])
           for (const deviceMemory of [undefined, minMemoryGb / 2, minMemoryGb])
             for (const cores of [undefined, minCores - 1, minCores]) {
-              const device = { reducedMotion, saveData, webgl2, deviceMemory, cores }
-              const helix = chooseHomeMode({ ...device, featuredCount: 1 }) === 'room'
+              const device = { reducedMotion, saveData, webgl2, hover: true, deviceMemory, cores }
+              const helix = chooseHomeMode({ ...device, featuredCount: 1 }) !== 'static'
               expect(run(device).loading(), JSON.stringify(device)).toBe(helix)
             }
   })

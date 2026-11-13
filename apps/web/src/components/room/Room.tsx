@@ -7,7 +7,7 @@ import { loaded } from '../../lib/home-loader'
 import { isMenuOpen } from '../../lib/menu-a11y'
 import { WORK_LINK_ATTRIBUTE } from '../../lib/home-marks'
 import { createScroll, scrollBy, stepScroll } from '../../lib/room-model'
-import { isPortrait, wheelPixels } from '../../lib/room-motion'
+import { usesPhoneStops, wheelPixels } from '../../lib/room-motion'
 import {
   createOpening,
   createOpeningState,
@@ -41,11 +41,14 @@ import type { RoomFrame } from './scene'
 export function Room({
   works,
   showreel,
+  light,
   onFail,
 }: {
   works: HelixWork[]
   /** The Showreel's 16:9 loop, for the opening; none: the opening starts on the middle monitor's own Work. */
   showreel: { src: string } | null
+  /** The light variant (a capable device with no hover, #133): tap for hover, the phone stops, fewer objects and loops. */
+  light: boolean
   onFail: () => void
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -59,12 +62,15 @@ export function Room({
   useEffect(() => {
     const canvas = canvasRef.current!
     const root = document.documentElement
-    const touch = window.matchMedia('(hover: none)').matches
+    const touch = light
     const giveUp = () => {
       loaded()
       fail()
     }
-    const where = readRoomStart(works, isPortrait(window.innerWidth / window.innerHeight))
+    const where = readRoomStart(
+      works,
+      usesPhoneStops(touch, window.innerWidth / window.innerHeight),
+    )
     let renderer: RoomRenderer
     try {
       // The Showreel is loaded only for an opening that will use it.
@@ -243,7 +249,7 @@ export function Room({
       delete root.dataset.helixPhase
       loaded()
     }
-  }, [works, showreel])
+  }, [works, showreel, light])
 
   return (
     // Hidden until the first frame sets the marks. No landmark of its own: the static section of
