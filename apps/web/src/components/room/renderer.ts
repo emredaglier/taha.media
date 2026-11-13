@@ -11,13 +11,20 @@ import { createRoomScene, RoomUnavailable, type RoomFrame, type RoomPalette } fr
 
 export { RoomUnavailable }
 
-/** What the room needs of a Featured Work: its Preview loop and its still (the loop's poster). */
-export type RoomMedia = Pick<HelixWork, 'poster' | 'previewLoop'>
+/** What the room needs of a Featured Work: its Preview loop and its still (the loop's poster), and what its tag says. */
+export type RoomMedia = Pick<HelixWork, 'poster' | 'previewLoop' | 'title' | 'disciplines' | 'year'>
 
 export type RoomRenderer = {
   /** Resolves once the stills have loaded or failed, or after `ROOM_TUNING.stillsWaitMs`: a place without its still keeps the placeholder grey. */
   ready: Promise<void>
   draw(frame: RoomFrame): void
+  /** The Work whose screen is at a point of the canvas (`nx`, `ny`: -1 to 1 across and up) as the visitor sees it through the glass, or -1; a finger (`touch`) is blunter. */
+  pick(nx: number, ny: number): number
+  /** Starts the camera's push-in to Work `place`'s screen. */
+  push(place: number): void
+  /** The Work whose screen is hot (-1 none), and whether the push-in has arrived. */
+  readonly hot: number
+  readonly pushed: boolean
   /** Matches the drawing buffer to the canvas's size on screen (device pixel ratio capped, lower on touch). */
   resize(): void
   destroy(): void
@@ -120,10 +127,16 @@ export function createRoomRenderer(
   const statement = statementElement?.textContent?.trim() ?? ''
   const family = statementElement ? getComputedStyle(statementElement).fontFamily : 'serif'
   room.setStatement(statement, family)
+  const tags = works
+    .slice(0, ROOM_TUNING.places)
+    .map(({ title, disciplines, year }) => ({ title, meta: `${disciplines} · ${year}` }))
+  room.setTags(tags, family)
   const statementReady = (document.fonts?.load(`100px ${family}`, statement) ?? Promise.resolve())
     .catch(() => undefined) // no font: the sheet keeps the fallback face
     .then(() => {
-      if (!destroyed) room.setStatement(statement, family)
+      if (destroyed) return
+      room.setStatement(statement, family)
+      room.setTags(tags, family) // painted again, in the font that has loaded
     })
   const placed = works.slice(0, ROOM_TUNING.places)
   const stills: (HTMLImageElement | null)[] = placed.map(() => null)
@@ -179,6 +192,18 @@ export function createRoomRenderer(
         frame.seconds,
       )
       glass.render(room.scene, room.camera)
+    },
+    pick(nx, ny) {
+      throughGlass(nx, ny, aspect, seenPointer)
+      const { margin, touchMargin } = ROOM_TUNING.pick
+      return room.pick(seenPointer.nx, seenPointer.ny, touch ? touchMargin : margin)
+    },
+    push: (place) => room.startPush(place),
+    get hot() {
+      return room.hot
+    },
+    get pushed() {
+      return room.pushed
     },
     resize() {
       renderer.setPixelRatio(pixelRatioFor(window.devicePixelRatio, touch))

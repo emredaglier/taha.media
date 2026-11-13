@@ -2,6 +2,15 @@ import * as THREE from 'three'
 
 import { cameraPose } from '../../lib/room-model'
 import {
+  createHeat,
+  pickScreen,
+  pushBlend,
+  pushPose,
+  stepHeat,
+  tagPlace,
+  type ScreenPlane,
+} from '../../lib/room-pointing'
+import {
   atlasRect,
   fovFor,
   isPortrait,
@@ -29,8 +38,9 @@ import {
  * desk at night, every shape built in code, one lit shader for all the furniture with up to eight
  * fake lights, baked vertex shading, contact-shadow and glow quads. About 15 draw calls. It draws
  * the room at rest: the Works' stills on their places, spare places dark, the loops painted over
- * them (`setFrame`, #129), the Statement on its sheet (#128; the glass is `glass.ts`). The opening,
- * hover and the phone's light variant are later tickets.
+ * them (`setFrame`, #129), the Statement on its sheet (#128; the glass is `glass.ts`). Pointing
+ * (#130): the screen under the pointer is hot (brighter, with its tag), and a click pushes the
+ * camera into it. The opening and the phone's light variant are later tickets.
  */
 
 /** The room can't run here (no WebGL2, no 2D canvas, a shader that doesn't compile, a lost context): the static Home stays. */
@@ -68,6 +78,15 @@ export type RoomScene = {
   clearStill(place: number): void
   /** Where each place's screen is (its centre), for picking the screens that play. */
   screenCentres: readonly THREE.Vector3[]
+  /** Sets each place's tag (its title and its Discipline and year lines, or null for a dark place), in the CSS font `family`; call again once the font has loaded. */
+  setTags(tags: readonly ({ title: string; meta: string } | null)[], family: string): void
+  /** The place whose screen is under the point (`nx`, `ny`: -1 to 1 across and up, before the glass is undone by the caller) with a `margin` of blunt, or -1. */
+  pick(nx: number, ny: number, margin: number): number
+  /** Starts the camera's push-in to `place`'s screen; ignored while one runs or for a place with no Work. */
+  startPush(place: number): void
+  /** The hot place (-1 none) and whether the push-in has arrived; they change as `update` runs. */
+  readonly hot: number
+  readonly pushed: boolean
   dispose(): void
 }
 
@@ -98,6 +117,7 @@ export function createRoomScene({
   const { raised: RAISED, placeholder: PLACEHOLDER, muted: MUTED } = palette
   const scene = new THREE.Scene()
   const camera = new THREE.PerspectiveCamera(58, 1, 0.02, 24)
+  scene.add(camera) // the tag is drawn on a group that hangs on it
   const geometries: THREE.BufferGeometry[] = []
   const materials: THREE.Material[] = []
   const textures: THREE.Texture[] = []
@@ -268,36 +288,35 @@ export function createRoomScene({
     mul(prints[0]!, M(0, 0, 0.0315)),
     mul(prints[1]!, M(0, 0, 0.0315)),
   ]
-  // How bright each place is at rest: a place with no Work stays dark.
-  const bright = screenPlacement.map((_, place) =>
-    places[place] ? ROOM_TUNING.screens[place]!.base : 0,
-  )
+  // How bright each place is: at rest a place with no Work stays dark; hovering changes it (`stepHeat`).
+  const heat = createHeat(places)
+  const bright = heat.bright
   const screenCentre = screenPlacement.map(() => new THREE.Vector3())
   const screenFacing = screenPlacement.map(() => new THREE.Vector3())
-  const right = new THREE.Vector3()
-  const up = new THREE.Vector3()
+  const screenRight = screenPlacement.map(() => new THREE.Vector3())
+  const screenUp = screenPlacement.map(() => new THREE.Vector3())
+  const screenMaterials: THREE.ShaderMaterial[] = []
   screenPlacement.forEach((m, place) => {
     const { width, light, power } = ROOM_TUNING.screens[place]!
     const [u, v, su, sv] = atlasRect(place)
-    const screen = new THREE.Mesh(
-      own(new THREE.PlaneGeometry(width, (width * 9) / 16)),
-      ownMaterial(
-        new THREE.ShaderMaterial({
-          uniforms: {
-            uMap: { value: atlas },
-            uRect: { value: new THREE.Vector4(u, v, su, sv) },
-            uB: { value: bright[place] },
-          },
-          vertexShader: SCREEN_VS,
-          fragmentShader: SCREEN_FS,
-        }),
-      ),
+    const material = ownMaterial(
+      new THREE.ShaderMaterial({
+        uniforms: {
+          uMap: { value: atlas },
+          uRect: { value: new THREE.Vector4(u, v, su, sv) },
+          uB: { value: bright[place] },
+        },
+        vertexShader: SCREEN_VS,
+        fragmentShader: SCREEN_FS,
+      }),
     )
+    screenMaterials.push(material)
+    const screen = new THREE.Mesh(own(new THREE.PlaneGeometry(width, (width * 9) / 16)), material)
     screen.matrixAutoUpdate = false
     screen.matrix.copy(m)
     screen.frustumCulled = false
     scene.add(screen)
-    m.extractBasis(right, up, screenFacing[place]!)
+    m.extractBasis(screenRight[place]!, screenUp[place]!, screenFacing[place]!)
     screenCentre[place]!.setFromMatrixPosition(m)
     // The screens that can throw light on something: a monitor or laptop beams it, a flat device lights the desk in front of it.
     if (place < 6) {
@@ -309,6 +328,18 @@ export function createRoomScene({
     }
   })
   scene.updateMatrixWorld(true)
+  // The screens as rectangles in space, for picking and the push-in.
+  const planes: ScreenPlane[] = screenPlacement.map((_, place) => {
+    const { width } = ROOM_TUNING.screens[place]!
+    return {
+      centre: screenCentre[place]!,
+      right: screenRight[place]!,
+      up: screenUp[place]!,
+      normal: screenFacing[place]!,
+      width,
+      height: (width * 9) / 16,
+    }
+  })
 
   // ---- the static room, one merged mesh ----
   const S = makeMerge()
@@ -677,6 +708,7 @@ export function createRoomScene({
   glowGeometry.setAttribute('aKind', new THREE.Float32BufferAttribute(glows.kind, 1))
   glowGeometry.setAttribute('aA', new THREE.Float32BufferAttribute(glows.a, 2))
   glowGeometry.setIndex(glows.idx)
+  const glowAmount = glowGeometry.getAttribute('aA') as THREE.BufferAttribute
   const glowMesh = new THREE.Mesh(
     glowGeometry,
     ownMaterial(
@@ -712,14 +744,175 @@ export function createRoomScene({
   const ray = new THREE.Vector3()
   const scratch = new THREE.Vector3()
 
+  // ---- the push-in: the camera blends from the path to straight in front of a screen ----
+  let pushing = -1 // the place being pushed into, or -1
+  let pushSeconds = 0
+  const pushPosition = new THREE.Vector3()
+  const pushQuaternion = new THREE.Quaternion()
+  const pushBasis = new THREE.Matrix4()
+  const view = { width: 1, height: 1 }
+
+  // ---- the tag beside the hot screen: its title, Discipline and year on a plate, hung on the camera ----
+  const HUD = 0.5 // metres in front of the camera
+  const TITLE_PX = 96
+  const META_PX = 24
+  const PAD = 28
+  type Tag = {
+    mesh: THREE.Mesh
+    material: THREE.MeshBasicMaterial
+    texture: THREE.CanvasTexture
+    width: number
+    height: number
+  }
+  const tagUnit = own(new THREE.PlaneGeometry(1, 1))
+  let tagTexts: readonly ({ title: string; meta: string } | null)[] = []
+  let tagFamily = 'serif'
+  const tags: (Tag | undefined)[] = []
+  function freeTags() {
+    for (const tag of tags) {
+      if (!tag) continue
+      camera.remove(tag.mesh)
+      tag.material.dispose()
+      tag.texture.dispose()
+    }
+    tags.length = 0
+  }
+  /** Paints a place's tag the first time it is shown (so its font is in), or null for a place with no Work. */
+  function tagOf(place: number): Tag | null {
+    if (tags[place]) return tags[place]!
+    const text = tagTexts[place]
+    const canvas = document.createElement('canvas')
+    const draw = canvas.getContext('2d')
+    if (!text || !draw) return null
+    const meta = text.meta.toLocaleUpperCase('tr')
+    draw.font = `${TITLE_PX}px ${tagFamily}`
+    const titleWidth = draw.measureText(text.title).width
+    draw.font = `${META_PX}px ${tagFamily}`
+    const metaWidth = draw.measureText(meta).width
+    canvas.width = Math.ceil(Math.max(titleWidth, metaWidth) + PAD * 2)
+    canvas.height = Math.ceil(TITLE_PX * 1.1 + META_PX * 1.3 + PAD * 2)
+    draw.fillStyle = 'rgba(0, 0, 0, 0.86)'
+    draw.fillRect(0, 0, canvas.width, canvas.height)
+    draw.textBaseline = 'top'
+    draw.font = `${TITLE_PX}px ${tagFamily}`
+    draw.fillStyle = '#ededed'
+    draw.fillText(text.title, PAD, PAD)
+    draw.font = `${META_PX}px ${tagFamily}`
+    draw.fillStyle = hexColour(MUTED)
+    draw.fillText(meta, PAD, PAD + TITLE_PX * 1.1)
+    const texture = new THREE.CanvasTexture(canvas)
+    const material = new THREE.MeshBasicMaterial({
+      map: texture,
+      transparent: true,
+      depthTest: false,
+      depthWrite: false,
+      toneMapped: false,
+    })
+    const mesh = new THREE.Mesh(tagUnit, material)
+    mesh.renderOrder = 61
+    mesh.frustumCulled = false
+    mesh.visible = false
+    camera.add(mesh)
+    return (tags[place] = { mesh, material, texture, width: canvas.width, height: canvas.height })
+  }
+  let tagAt = -1
+  let tagAlpha = 0
+  const tagBox = { x0: 0, x1: 0, y0: 0, y1: 0 }
+  const tagSize = { width: 0, height: 0 }
+  const tagSpot = { left: 0, top: 0 }
+  /** Fades the hot screen's tag in beside it, and the last one out. */
+  function updateTag(dt: number) {
+    const show = heat.hot >= 0 && pushing < 0
+    if (show && heat.hot !== tagAt) {
+      if (tagAt >= 0 && tags[tagAt]) tags[tagAt]!.mesh.visible = false
+      tagAt = heat.hot
+      tagAlpha = 0
+    }
+    tagAlpha += ((show ? 1 : 0) - tagAlpha) * (1 - Math.exp(-dt * ROOM_TUNING.tag.fadeRate))
+    const tag = tagAt >= 0 ? tagOf(tagAt) : null
+    if (!tag) return
+    tag.mesh.visible = tagAlpha > 0.01
+    if (!tag.mesh.visible) return
+    // The screen's box on the view, in px.
+    const { width, height } = planes[tagAt]!
+    tagBox.x0 = tagBox.y0 = Infinity
+    tagBox.x1 = tagBox.y1 = -Infinity
+    for (let k = 0; k < 4; k++) {
+      scratch
+        .copy(screenCentre[tagAt]!)
+        .addScaledVector(screenRight[tagAt]!, k & 1 ? width / 2 : -width / 2)
+        .addScaledVector(screenUp[tagAt]!, k & 2 ? height / 2 : -height / 2)
+        .project(camera)
+      const x = (scratch.x * 0.5 + 0.5) * view.width
+      const y = (0.5 - scratch.y * 0.5) * view.height
+      tagBox.x0 = Math.min(tagBox.x0, x)
+      tagBox.x1 = Math.max(tagBox.x1, x)
+      tagBox.y0 = Math.min(tagBox.y0, y)
+      tagBox.y1 = Math.max(tagBox.y1, y)
+    }
+    // The title is 34 to 80 px, and the tag never wider than the view.
+    let scale = Math.min(80, Math.max(34, view.width * 0.05)) / TITLE_PX
+    scale = Math.min(scale, (view.width - 64) / tag.width)
+    tagSize.width = tag.width * scale
+    tagSize.height = tag.height * scale
+    tagPlace(tagBox, tagSize, view, portrait, tagSpot)
+    const unit = (2 * Math.tan((camera.fov * Math.PI) / 360) * HUD) / view.height
+    tag.mesh.position.set(
+      (tagSpot.left + tagSize.width / 2 - view.width / 2 - (1 - tagAlpha) * 12) * unit,
+      -(tagSpot.top + tagSize.height / 2 - view.height / 2) * unit,
+      -HUD,
+    )
+    tag.mesh.scale.set(tagSize.width * unit, tagSize.height * unit, 1)
+    tag.material.opacity = tagAlpha
+  }
+
+  /** Writes the heat into what draws it: each screen, the light it throws and the glow on what is near it. */
+  function applyHeat() {
+    for (let place = 0; place < screenMaterials.length; place++) {
+      screenMaterials[place]!.uniforms.uB!.value = bright[place]
+      if (place < 6) LP[place]!.w = ROOM_TUNING.screens[place]!.light * bright[place]!
+    }
+    glows.owner.forEach((place, quad) => {
+      const intensity = bright[place]! * bright[place]! * (heat.hot === place ? 1.5 : 1)
+      for (let k = 0; k < 4; k++) glowAmount.setXY(quad * 4 + k, intensity, heat.grow[place]!)
+    })
+    glowAmount.needsUpdate = true
+  }
+
+  function rayThrough(nx: number, ny: number) {
+    origin.setFromMatrixPosition(camera.matrixWorld)
+    ray.set(nx, ny, 0.5).unproject(camera).sub(origin).normalize()
+  }
+
   function update({ seconds, dt, progress, pointer }: RoomFrame) {
     const hover = pointer !== null && !touch
+    if (pushing >= 0) pushSeconds += dt
+    const blend = pushing >= 0 ? pushBlend(pushSeconds) : 0
     cameraPose(progress, portrait, pose)
     stepLook(look, hover ? pointer : null, dt)
     camera.position.set(pose.position[0], pose.position[1], pose.position[2])
     camera.lookAt(pose.lookAt[0], pose.lookAt[1], pose.lookAt[2])
-    camera.quaternion.multiply(lookQuaternion.setFromEuler(lookEuler.set(look.y, look.x, 0, 'YXZ')))
+    // The pointer's turn of the view fades out as the camera goes into the screen.
+    camera.quaternion.multiply(
+      lookQuaternion.setFromEuler(
+        lookEuler.set(look.y * (1 - blend), look.x * (1 - blend), 0, 'YXZ'),
+      ),
+    )
+    if (pushing >= 0) {
+      camera.position.lerp(pushPosition, blend)
+      camera.quaternion.slerp(pushQuaternion, blend)
+    }
     camera.updateMatrixWorld(true)
+
+    // Which Work is under the pointer, and how hot every screen is.
+    let hit = -1
+    if (hover && pushing < 0) {
+      rayThrough(pointer.nx, pointer.ny)
+      hit = pickScreen(origin, ray, planes, places, ROOM_TUNING.pick.margin)
+    }
+    stepHeat(heat, pushing >= 0 ? pushing : hit, places, dt)
+    applyHeat()
+    updateTag(dt)
 
     // The lamp head follows the pointer a little: it aims where the pointer's ray meets the desk.
     origin.setFromMatrixPosition(camera.matrixWorld)
@@ -770,6 +963,8 @@ export function createRoomScene({
     resize(width, height) {
       const aspect = width / height
       portrait = isPortrait(aspect)
+      view.width = width
+      view.height = height
       camera.aspect = aspect
       camera.fov = fovFor(aspect)
       camera.updateProjectionMatrix()
@@ -783,7 +978,35 @@ export function createRoomScene({
       atlas.needsUpdate = true
     },
     screenCentres: screenCentre,
+    setTags(texts, family) {
+      freeTags()
+      tagTexts = texts
+      tagFamily = family
+    },
+    pick(nx, ny, margin) {
+      rayThrough(nx, ny)
+      return pickScreen(origin, ray, planes, places, margin)
+    },
+    startPush(place) {
+      if (pushing >= 0 || !places[place]) return
+      pushing = place
+      pushSeconds = 0
+      heat.hot = place // this screen is the hot one at once, whatever the hold says
+      heat.held = 0
+      const end = pushPose(planes[place]!, camera.fov, camera.aspect)
+      pushPosition.set(end.position[0], end.position[1], end.position[2])
+      // Straight in front of the screen, its own way up.
+      pushBasis.makeBasis(screenRight[place]!, screenUp[place]!, screenFacing[place]!)
+      pushQuaternion.setFromRotationMatrix(pushBasis)
+    },
+    get hot() {
+      return heat.hot
+    },
+    get pushed() {
+      return pushing >= 0 && pushSeconds >= ROOM_TUNING.push.seconds
+    },
     dispose() {
+      freeTags()
       geometries.forEach((g) => g.dispose())
       materials.forEach((m) => m.dispose())
       textures.forEach((t) => t.dispose())
