@@ -20,6 +20,7 @@ describe('clearOutput', () => {
   it('removes the screenshots of an earlier run and nothing else', () => {
     fs.writeFileSync(path.join(dir, 'cards.png'), 'old')
     fs.writeFileSync(path.join(dir, 'empty.png'), 'old')
+    fs.writeFileSync(path.join(dir, 'room.png'), 'old')
     fs.writeFileSync(path.join(dir, 'notes.txt'), 'mine')
     fs.mkdirSync(path.join(dir, 'keep'))
     fs.writeFileSync(path.join(dir, 'keep', 'inner.txt'), 'mine')
@@ -39,8 +40,13 @@ describe('clearOutput', () => {
 describe('saveShots', () => {
   it('writes each screenshot as a PNG, creating the directory', () => {
     const target = path.join(dir, 'nested', 'out')
-    saveShots(target, { cards: dataUrl('card bytes'), empty: dataUrl('empty bytes') })
+    saveShots(target, {
+      cards: dataUrl('card bytes'),
+      empty: dataUrl('empty bytes'),
+      room: dataUrl('room bytes'),
+    })
     expect(fs.readFileSync(path.join(target, 'cards.png'), 'utf8')).toBe('card bytes')
     expect(fs.readFileSync(path.join(target, 'empty.png'), 'utf8')).toBe('empty bytes')
+    expect(fs.readFileSync(path.join(target, 'room.png'), 'utf8')).toBe('room bytes')
   })
 })

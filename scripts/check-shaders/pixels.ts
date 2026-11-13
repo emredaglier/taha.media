@@ -35,13 +35,29 @@ export function pixelStats(rgba: ArrayLike<number>): PixelStats {
   return stats
 }
 
-/** What the run saw: `gl.getError()` after each drawn sequence, and the pixels of two frames. */
+/** What a frame of the Edit Room says: its canvas is opaque, so the question is whether it drew anything but black. */
+export type RoomStats = {
+  total: number
+  /** Pixels with any colour channel above 0. */
+  lit: number
+}
+
+export function roomStats(rgba: ArrayLike<number>): RoomStats {
+  const stats: RoomStats = { total: rgba.length / 4, lit: 0 }
+  for (let i = 0; i < rgba.length; i += 4)
+    if (rgba[i]! > 0 || rgba[i + 1]! > 0 || rgba[i + 2]! > 0) stats.lit++
+  return stats
+}
+
+/** What the run saw: `gl.getError()` after each drawn sequence, and the pixels of three frames. */
 export type Observation = {
-  glErrors: { frames: number; empty: number }
+  glErrors: { frames: number; empty: number; room: number }
   /** The frame with cards (and a Showreel melt before it). */
   cards: PixelStats
   /** The frame after an empty scene: no cards, no Showreel, the cursor moving. */
   empty: PixelStats
+  /** The Edit Room, at rest, from the doorway. */
+  room: RoomStats
 }
 
 const NO_ERROR = 0
@@ -54,7 +70,14 @@ const NO_ERROR = 0
 export const MIN_CARD_COVERAGE = 0.05
 
 /** The reasons the run fails, none if it passes. */
-export function judge({ glErrors, cards, empty }: Observation): string[] {
+/**
+ * The least share of the room frame's pixels that must be lit (any colour). A room whose shader
+ * did not compile draws nothing and stays black; the real doorway view lights the walls and floor
+ * and the screens, far above this.
+ */
+export const MIN_ROOM_LIT = 0.05
+
+export function judge({ glErrors, cards, empty, room }: Observation): string[] {
   const failures: string[] = []
   const percent = (share: number) => `${(share * 100).toFixed(1)}%`
   const hex = (error: number) => `0x${error.toString(16)}`
@@ -67,6 +90,13 @@ export function judge({ glErrors, cards, empty }: Observation): string[] {
     failures.push(
       `the card frame covers ${percent(coverage)} of its pixels (${cards.opaque} of ${cards.total}), at least ${percent(MIN_CARD_COVERAGE)} expected: the cards were barely drawn`,
     )
+  if (glErrors.room !== NO_ERROR)
+    failures.push(`gl.getError() is ${hex(glErrors.room)} after drawing the Edit Room`)
+  const roomLit = room.total === 0 ? 0 : room.lit / room.total
+  if (roomLit < MIN_ROOM_LIT)
+    failures.push(
+      `the Edit Room frame has ${percent(roomLit)} of its pixels lit (${room.lit} of ${room.total}), at least ${percent(MIN_ROOM_LIT)} expected: the room was barely drawn`,
+    )
   if (cards.invalidPremultiplied > 0)
     failures.push(
       `invalid premultiplied output: ${cards.invalidPremultiplied} of ${cards.total} pixels have a colour channel above their alpha`,
@@ -78,9 +108,10 @@ export function judge({ glErrors, cards, empty }: Observation): string[] {
 
 /** What the page tells the driver: the observation and a screenshot of each frame, or the error. */
 export type Report =
-  { observation: Observation; shots: { cards: string; empty: string } } | { error: string }
+  | { observation: Observation; shots: { cards: string; empty: string; room: string } }
+  | { error: string }
 
 /** The one line a passing run prints. */
-export function summary({ cards, empty }: Observation): string {
-  return `check:shaders ok: every program compiles and links, no GL error, ${cards.opaque} of ${cards.total} card pixels drawn (valid premultiplied), the empty scene stays clear (alpha ${empty.maxAlpha})`
+export function summary({ cards, empty, room }: Observation): string {
+  return `check:shaders ok: every program compiles and links, no GL error, ${cards.opaque} of ${cards.total} card pixels drawn (valid premultiplied), the empty scene stays clear (alpha ${empty.maxAlpha}), ${room.lit} of ${room.total} Edit Room pixels lit`
 }

@@ -3,7 +3,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-const SHOTS = ['cards', 'empty'] as const
+const SHOTS = ['cards', 'empty', 'room'] as const
 
 /** Removes the screenshots of an earlier run from `outputDir`, and nothing else in it. */
 export function clearOutput(outputDir: string): void {

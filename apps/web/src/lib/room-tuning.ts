@@ -46,4 +46,37 @@ export const ROOM_TUNING = {
    */
   desktopPlaceStops: [2, 1, 3, 5, 4, 4, 5, 5] as readonly number[],
   phonePlaceStops: [3, 2, 4, 6, 5, 6, 7, 8] as readonly number[],
+  /** Lens: the field of view (degrees) widens from `base` on a wide screen to `base + extra` on a tall one. */
+  fov: { base: 58, extra: 17, tallAspect: 0.6, wideAspect: 1.3 },
+  /** Below this width / height the screen is a phone held upright and the camera takes the phone stops. */
+  portraitBelow: 0.9,
+  /** A wheel in line mode counts this many px a line (page mode counts the viewport's height). */
+  wheelLinePx: 16,
+  /** The pointer turns the view: at most `yaw` and `pitch` (radians, about 10 and 6 degrees), following at `rate` per second. */
+  look: { yaw: 0.17, pitch: 0.1, rate: 2.6 },
+  /** The chair swivels on a spring as the pointer passes (angles in radians). */
+  chair: { stiffness: 14, damping: 3.2, maxYaw: 0.55, push: 0.006, maxMovePx: 40, reach: 0.16 },
+  /**
+   * The desk lamp: its head aims `pull` of the way back to rest from the pointer (0 follows it, 1
+   * never moves) and follows at `rate` per second; `light` and `spot` are the strengths of its two lights.
+   */
+  lamp: { pull: 0.72, rate: 3, light: 3.2, spot: 3.4 },
+  /** The still of a place is painted into one atlas of `columns` by `rows` cells, each `cellWidth` by `cellHeight` px (16:9). */
+  atlas: { columns: 4, rows: 2, cellWidth: 512, cellHeight: 288 },
+  /** Device pixel ratio cap: 2, and 1.5 on touch. */
+  pixelRatio: { max: 2, touchMax: 1.5 },
+  /**
+   * The eight places' screens: width in metres (16:9), brightness at rest, the light each throws
+   * on the room (`light`, with `power` the tightness of its beam).
+   */
+  screens: [
+    { width: 0.56, base: 0.88, light: 1.5, power: 1.6 },
+    { width: 0.56, base: 0.88, light: 1.5, power: 1.6 },
+    { width: 0.56, base: 0.88, light: 1.5, power: 1.6 },
+    { width: 0.3, base: 0.82, light: 1.2, power: 1.4 },
+    { width: 0.248, base: 0.82, light: 0.6, power: 1 },
+    { width: 0.142, base: 0.8, light: 0.5, power: 1 },
+    { width: 0.64, base: 0.66, light: 0, power: 1 },
+    { width: 0.64, base: 0.66, light: 0, power: 1 },
+  ] as readonly { width: number; base: number; light: number; power: number }[],
 }

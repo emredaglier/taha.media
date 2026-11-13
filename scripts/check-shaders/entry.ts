@@ -1,13 +1,22 @@
 // The browser side of `pnpm check:shaders` (run.ts bundles and loads it): drives the real Helix
-// renderer on a canvas with generated posters, and reports what it saw (pixels.ts judges it).
-// A program that doesn't compile or link throws from `createHelixRenderer`; the report carries
-// that error, with the GL info log in its message.
+// renderer and the real Edit Room renderer, each on a canvas with generated posters, and reports
+// what it saw (pixels.ts judges it). A program that doesn't compile or link throws from
+// `createHelixRenderer`, or from the room's first draw; the report carries that error, with the GL
+// info log in its message.
 import {
   createHelixRenderer,
   type HelixCard,
   type HelixFrame,
 } from '../../apps/web/src/components/helix/renderer'
-import { pixelStats, type Observation, type PixelStats, type Report } from './pixels.ts'
+import { createRoomRenderer } from '../../apps/web/src/components/room/renderer'
+import {
+  pixelStats,
+  roomStats,
+  type Observation,
+  type PixelStats,
+  type Report,
+  type RoomStats,
+} from './pixels.ts'
 
 declare global {
   interface Window {
@@ -136,12 +145,57 @@ async function run(): Promise<Report> {
   const emptyError = gl.getError()
 
   renderer.destroy()
+
+  const room = await checkRoom(works)
   const observation: Observation = {
-    glErrors: { frames: framesError, empty: emptyError },
+    glErrors: { frames: framesError, empty: emptyError, room: room.glError },
     cards: withCards.stats,
     empty: empty.stats,
+    room: room.stats,
   }
-  return { observation, shots: { cards: withCards.shot, empty: empty.shot } }
+  return { observation, shots: { cards: withCards.shot, empty: empty.shot, room: room.shot } }
+}
+
+/**
+ * The Edit Room at rest, from the doorway, the middle of its path and its end, with the pointer
+ * over it. A program that fails to compile throws from the first draw, with the GL info log.
+ */
+async function checkRoom(
+  works: Works,
+): Promise<{ glError: number; stats: RoomStats; shot: string }> {
+  const canvas = document.getElementById('room') as HTMLCanvasElement
+  const room = createRoomRenderer(canvas, works, false, (error) => {
+    throw error
+  })
+  const gl = canvas.getContext('webgl2')
+  if (!gl) throw new Error('The room canvas has no WebGL2 context')
+  room.resize()
+  await room.ready
+  const draw = (progress: number) =>
+    room.draw({
+      seconds: 1,
+      dt: 1 / 60,
+      progress,
+      pointer: { nx: 0.3, ny: -0.2, dx: 8 },
+    })
+  for (const progress of [0.5, 1, 0.5]) for (let step = 0; step < 30; step++) draw(progress)
+  const glError = gl.getError()
+  draw(0)
+  // Read in the same task as the draw, before the frame is presented.
+  const rgba = new Uint8Array(gl.drawingBufferWidth * gl.drawingBufferHeight * 4)
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+  gl.readPixels(
+    0,
+    0,
+    gl.drawingBufferWidth,
+    gl.drawingBufferHeight,
+    gl.RGBA,
+    gl.UNSIGNED_BYTE,
+    rgba,
+  )
+  const result = { glError, stats: roomStats(rgba), shot: canvas.toDataURL('image/png') }
+  room.destroy()
+  return result
 }
 
 run()
