@@ -1,7 +1,7 @@
 import { handleEndpoints } from 'payload'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { FEATURED_MAX, FEATURED_MIN } from '../featured'
+import { FEATURED_ROOM } from '../featured'
 import { isSixteenByNine } from '../featured-loop'
 import { createTestSite, type TestSite } from '../testing'
 import { VIDEO_USES } from '../video-limits'
@@ -38,7 +38,7 @@ describe('the local seed', () => {
   // instead of running them on a half-seeded database (a timed-out seed keeps running).
   beforeAll(() => seedLocal(site.cms, { photoWidth }), 60_000)
 
-  it('fills published Works of all three main-media kinds, Disciplines and 6-12 featured', async () => {
+  it('fills published Works of all three main-media kinds, Disciplines and featured Works', async () => {
     const { docs: works } = await site.cms.find({ collection: 'works', limit: 100, depth: 1 })
     expect(works.length).toBeGreaterThanOrEqual(8)
     expect(new Set(works.map((w) => w.mainMedia?.kind))).toEqual(
@@ -47,8 +47,8 @@ describe('the local seed', () => {
     expect(new Set(works.flatMap((w) => w.disciplines)).size).toBeGreaterThanOrEqual(3)
     expect(works.every((w) => w._status === 'published')).toBe(true)
     const featured = works.filter((w) => w.featured)
-    expect(featured.length).toBeGreaterThanOrEqual(FEATURED_MIN)
-    expect(featured.length).toBeLessThanOrEqual(FEATURED_MAX)
+    expect(featured.length).toBeGreaterThan(0)
+    expect(featured.length).toBeLessThanOrEqual(FEATURED_ROOM)
     expect(works.every((w) => typeof w.cover === 'object' && w.cover !== null)).toBe(true)
     expect(works.some((w) => w.previewLoop)).toBe(true)
     for (const work of featured) {

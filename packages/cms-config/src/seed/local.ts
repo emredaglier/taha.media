@@ -363,7 +363,7 @@ async function seedPages(seeder: Seeder): Promise<void> {
 
 /**
  * The local demo seed: Works of all three main-media kinds, several Disciplines, six featured
- * (Home needs 6 to 12), fixture images and videos within the caps, filled single-entry pages and a
+ * (the Edit Room shows up to 8), fixture images and videos within the caps, filled single-entry pages and a
  * demo Editor, so frontend work does not wait for content. Everything goes through the Local API
  * with validation on. Safe to run again: it only adds what is missing and never overwrites edits.
  *
