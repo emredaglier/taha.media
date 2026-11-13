@@ -1,3 +1,4 @@
+import { crtWarp } from './crt'
 import { ROOM_TUNING } from './room-tuning'
 
 /**
@@ -87,4 +88,36 @@ export function atlasRect(place: number): [number, number, number, number] {
   const { columns, rows } = ROOM_TUNING.atlas
   const row = Math.floor(place / columns)
   return [(place % columns) / columns, 1 - (row + 1) / rows, 1 / columns, 1 / rows]
+}
+
+/** The device pixel ratio the room draws at: the screen's own, capped at 2, and at 1.5 on touch. A ratio the browser doesn't give counts as 1. */
+export function pixelRatioFor(devicePixelRatio: number, touch: boolean): number {
+  const { max, touchMax } = ROOM_TUNING.pixelRatio
+  return Math.min(devicePixelRatio > 0 ? devicePixelRatio : 1, touch ? touchMax : max)
+}
+
+const warped = { x: 0, y: 0 }
+
+/**
+ * The point of the room (`nx`, `ny`: -1 to 1 across and up, before the glass) that the screen point
+ * (`nx`, `ny`) shows through the curved glass: the pointer mapped back through the bend, so picking
+ * and the lamp hit what the visitor sees. Written into `out`, which it returns: no allocation. The
+ * centre stays, the edges map inward and the corners stay on the corners (`crtWarp`).
+ */
+export function throughGlass(
+  nx: number,
+  ny: number,
+  aspect: number,
+  out: { nx: number; ny: number },
+): { nx: number; ny: number } {
+  crtWarp(
+    clamp(finite(nx), -1, 1),
+    clamp(finite(ny), -1, 1),
+    aspect > 0 && Number.isFinite(aspect) ? aspect : 1,
+    ROOM_TUNING.glass.bend,
+    warped,
+  )
+  out.nx = warped.x
+  out.ny = warped.y
+  return out
 }

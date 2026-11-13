@@ -67,6 +67,23 @@ export const ROOM_TUNING = {
   stillsWaitMs: 3000,
   /** Device pixel ratio cap: 2, and 1.5 on touch. */
   pixelRatio: { max: 2, touchMax: 1.5 },
+  /** The curved glass in front of the room (#128): the CRT bend (0 none) and how much of the bright parts' glow is added back. The prototype's values. */
+  glass: { bend: 0.2, glow: 0.7 },
+  /**
+   * The Statement's sheet, taped above the monitors: its size in metres and where its centre is on
+   * the back wall, its canvas in px, and the largest and smallest type size (px) the Statement is
+   * set in to fit it (line height as a share of the size, text width as a share of the canvas).
+   */
+  sheet: {
+    width: 1.9,
+    height: 0.78,
+    centre: [0, 2.0, -1.994] as readonly [number, number, number],
+    canvas: [2048, 840] as readonly [number, number],
+    fontMax: 300,
+    fontMin: 60,
+    lineHeight: 0.95,
+    textWidth: 0.88,
+  },
   /**
    * The eight places' screens: width in metres (16:9), brightness at rest, the light each throws
    * on the room (`light`, with `power` the tightness of its beam).

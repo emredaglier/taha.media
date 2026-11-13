@@ -1,6 +1,7 @@
 // The Edit Room's shaders, ported from the prototype (docs/design/home2/editroom.js). Three.js adds
 // `modelMatrix`, `viewMatrix`, `position`, `normal`, `uv` and the projection matrices to a
 // ShaderMaterial, so these use them as they are.
+import { CRT_WARP_GLSL } from '../../lib/crt'
 
 /**
  * The one lit shader the furniture, walls and floor share: up to eight fake point/spot lights from
@@ -9,10 +10,10 @@
  */
 export const LIT_VS = `
 attribute vec3 aCol;
-varying vec3 vP; varying vec3 vN; varying vec3 vC;
+varying vec3 vP; varying vec3 vN; varying vec3 vC; varying vec2 vUv;
 void main(){
   vec4 w = modelMatrix * vec4(position, 1.);
-  vP = w.xyz; vN = mat3(modelMatrix) * normal; vC = aCol;
+  vP = w.xyz; vN = mat3(modelMatrix) * normal; vC = aCol; vUv = uv;
   gl_Position = projectionMatrix * viewMatrix * w;
 }`
 
@@ -20,7 +21,10 @@ export const LIT_FS = `
 precision highp float;
 uniform vec4 uLP[8]; uniform vec4 uLD[8];
 uniform float uRoom, uStripe, uT;
-varying vec3 vP; varying vec3 vN; varying vec3 vC;
+#ifdef LIT_MAP
+uniform sampler2D uMap; uniform float uFloor;
+#endif
+varying vec3 vP; varying vec3 vN; varying vec3 vC; varying vec2 vUv;
 void main(){
   vec3 N = normalize(vN); if (!gl_FrontFacing) N = -N;
   float lit = .15 * uRoom;
@@ -37,12 +41,17 @@ void main(){
   float ph = vP.y * 8.5 + vP.z * 3. - vP.x * 2.2 + uT * .03;
   float st = smoothstep(.2, .34, abs(fract(ph) - .5));
   lit += uStripe * .11 * sf * st * exp((vP.x + 1.5) * -.3) * uRoom;
+#ifdef LIT_MAP
+  // a textured sheet (the Statement's): its picture, lit by the same lights over a floor of light
+  gl_FragColor = vec4(texture2D(uMap, vUv).rgb * (lit + uFloor * uRoom), 1.);
+#else
   vec3 a3 = abs(N);
   float aox = mix(1., mix(.6, 1., smoothstep(0., .5, 1.5 - abs(vP.x))), 1. - a3.x);
   float aoy = mix(1., mix(.5, 1., smoothstep(0., .55, vP.y)) * mix(.65, 1., smoothstep(0., .5, 2.6 - vP.y)), 1. - a3.y);
   float aoz = mix(1., mix(.55, 1., smoothstep(0., .5, vP.z + 2.)), 1. - a3.z);
   float ud = (1. - smoothstep(.5, .72, vP.y)) * step(abs(vP.x), 1.05) * step(vP.z, -1.25) * (1. - step(vP.z, -2.01));
   gl_FragColor = vec4(vC * lit * aox * aoy * aoz * (1. - .5 * ud), 1.);
+#endif
 }`
 
 /** A screen: its cell of the atlas (`uRect`), at brightness `uB`, darker towards the corners. */
@@ -91,3 +100,30 @@ export const SHADOW_VS =
 
 export const SHADOW_FS =
   'precision highp float; varying vec2 vUv; varying float vS; void main(){ float r = clamp(length(vUv*2.-1.),0.,1.); float a = 1.-smoothstep(0.,1.,r); gl_FragColor = vec4(0.,0.,0.,a*a*vS); }'
+
+// ---- the glass (#128), from the prototype shell (docs/design/prototype-home-2.html) ----
+// Greys only: the prototype's colour fringe, scanlines, grain and vignette are left out.
+
+/** Every full-screen pass: a 2 by 2 quad straight to clip space. */
+export const PASS_VS =
+  'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0., 1.); }'
+
+/** The picture's bright parts (the glow's source). */
+export const BRIGHT_FS =
+  'precision highp float; varying vec2 vUv; uniform sampler2D t; void main(){ vec3 c = texture2D(t, vUv).rgb; float l = max(c.r, max(c.g, c.b)); gl_FragColor = vec4(c * smoothstep(.5, .95, l), 1.); }'
+
+/** A blur of 5 taps along `d` (one pixel step in a direction), run across and then down. */
+export const BLUR_FS =
+  'precision highp float; varying vec2 vUv; uniform sampler2D t; uniform vec2 d; void main(){ vec3 c = texture2D(t, vUv).rgb * .227; c += (texture2D(t, vUv + d * 1.385).rgb + texture2D(t, vUv - d * 1.385).rgb) * .316; c += (texture2D(t, vUv + d * 3.231).rgb + texture2D(t, vUv - d * 3.231).rgb) * .0703; gl_FragColor = vec4(c, 1.); }'
+
+/** The glass: the room read through the CRT bend, with the blurred bright parts added back as glow. */
+export const GLASS_FS = `
+precision highp float;
+varying vec2 vUv;
+uniform sampler2D tPic, tBloom;
+uniform float uAspect, uBend, uBloom;
+${CRT_WARP_GLSL}
+void main(){
+  vec2 p = crtWarp(vUv * 2. - 1., uAspect, uBend) * .5 + .5;
+  gl_FragColor = vec4(texture2D(tPic, p).rgb + texture2D(tBloom, p).rgb * uBloom, 1.);
+}`

@@ -25,7 +25,8 @@ const TIMEOUT_MS = 120_000
 const PAGE = `<!doctype html><meta charset="utf-8">
 <style>html,body{margin:0;background:#000}#host,#room-host{position:relative;width:1280px;height:800px}canvas{width:100%;height:100%;display:block}</style>
 <div id="host"><canvas id="helix"></canvas></div>
-<div id="room-host"><canvas id="room"></canvas></div>`
+<div id="room-host"><canvas id="room"></canvas></div>
+<p data-home-statement style="font-family:serif">Kurgu, hareket ve tasarım. Görüntüyü ritme çeviriyorum.</p>`
 
 async function bundle(): Promise<string> {
   const { outputFiles } = await build({

@@ -24,3 +24,9 @@ export const HERO_TEXT_ATTRIBUTE = 'data-home-hero-text'
 
 /** Selects the hero's text the Helix draws. */
 export const HERO_TEXT_SELECTOR = `[${HERO_TEXT_ATTRIBUTE}]`
+
+/** The attribute on the hero's Statement, which the Edit Room reads to draw it on its sheet (#128). */
+export const STATEMENT_ATTRIBUTE = 'data-home-statement'
+
+/** Selects the hero's Statement. */
+export const STATEMENT_SELECTOR = `[${STATEMENT_ATTRIBUTE}]`

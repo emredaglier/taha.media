@@ -4,9 +4,11 @@ import {
   atlasRect,
   fovFor,
   isPortrait,
+  pixelRatioFor,
   stepChair,
   stepLook,
   stillCrop,
+  throughGlass,
   wheelPixels,
 } from './room-motion'
 import { ROOM_TUNING } from './room-tuning'
@@ -151,6 +153,73 @@ describe('atlasRect: each place has its own cell of the atlas', () => {
       expect(v).toBeGreaterThanOrEqual(0)
       expect(u + width).toBeLessThanOrEqual(1 + 1e-9)
       expect(v + height).toBeLessThanOrEqual(1 + 1e-9)
+    }
+  })
+})
+
+describe('pixelRatioFor: the drawing buffer is sharp but not wasteful', () => {
+  const { max, touchMax } = ROOM_TUNING.pixelRatio
+
+  it('follows the screen up to the cap: 2, and 1.5 on touch', () => {
+    expect(max).toBe(2)
+    expect(touchMax).toBe(1.5)
+    expect(pixelRatioFor(1, false)).toBe(1)
+    expect(pixelRatioFor(3, false)).toBe(max)
+    expect(pixelRatioFor(3, true)).toBe(touchMax)
+    expect(pixelRatioFor(1.25, true)).toBe(1.25)
+  })
+
+  it('takes 1 for a ratio the browser does not give', () => {
+    for (const bad of [0, -2, NaN]) expect(pixelRatioFor(bad, false)).toBe(1)
+  })
+})
+
+describe('throughGlass: a screen point back through the bend, to the point of the room it shows', () => {
+  const { bend } = ROOM_TUNING.glass
+  const at = (nx: number, ny: number, aspect = 16 / 9) =>
+    throughGlass(nx, ny, aspect, { nx: 0, ny: 0 })
+
+  it('maps the centre to the centre', () => {
+    expect(at(0, 0)).toEqual({ nx: 0, ny: 0 })
+  })
+
+  it('maps the edges inward, the middle most, and keeps the corners on the corners', () => {
+    const edge = at(1, 0)
+    expect(edge.nx).toBeGreaterThan(0)
+    expect(edge.nx).toBeLessThan(1)
+    expect(at(0.01, 0).nx / 0.01).toBeCloseTo(1 / (1 + bend), 1) // the middle is magnified by 1 + bend
+    expect(at(1, 1).nx).toBeCloseTo(1)
+    expect(at(-1, -1).ny).toBeCloseTo(-1)
+  })
+
+  it('is symmetric, and never reads past the room', () => {
+    const a = at(0.6, -0.3)
+    const b = at(-0.6, 0.3)
+    expect(b.nx).toBeCloseTo(-a.nx)
+    expect(b.ny).toBeCloseTo(-a.ny)
+    for (const nx of [-1, -0.5, 0, 0.5, 1])
+      for (const ny of [-1, -0.5, 0, 0.5, 1]) {
+        const p = at(nx, ny)
+        expect(Math.abs(p.nx)).toBeLessThanOrEqual(1 + 1e-9)
+        expect(Math.abs(p.ny)).toBeLessThanOrEqual(1 + 1e-9)
+      }
+  })
+
+  it('writes into the point it is given and returns it, so a frame allocates nothing', () => {
+    const out = { nx: 9, ny: 9 }
+    expect(throughGlass(0.5, 0.5, 1.5, out)).toBe(out)
+    expect(out.nx).not.toBe(9)
+  })
+
+  it('never gives NaN, whatever the pointer or the screen', () => {
+    for (const [x, y, aspect] of [
+      [NaN, 0.2, 1.5],
+      [0.2, Infinity, 1.5],
+      [0.2, 0.2, NaN],
+      [0.2, 0.2, 0],
+    ] as const) {
+      const p = at(x, y, aspect)
+      expect(Number.isFinite(p.nx) && Number.isFinite(p.ny)).toBe(true)
     }
   })
 })

@@ -11,6 +11,7 @@ import {
   type ChairSwivel,
   type Look,
 } from '../../lib/room-motion'
+import { layoutStatement } from '../../lib/room-statement'
 import { ROOM_TUNING } from '../../lib/room-tuning'
 import {
   GLOW_FS,
@@ -27,8 +28,9 @@ import {
  * The Edit Room's scene (#127), ported from the prototype (`docs/design/home2/editroom.js`): Taha's
  * desk at night, every shape built in code, one lit shader for all the furniture with up to eight
  * fake lights, baked vertex shading, contact-shadow and glow quads. About 15 draw calls. It draws
- * the room at rest: the Works' stills on their places, spare places dark. Glass, the Statement
- * sheet, loops, the opening, hover and the phone's light variant are later tickets.
+ * the room at rest: the Works' stills on their places, spare places dark, the Statement on its
+ * sheet (#128; the glass is `glass.ts`). Loops, the opening, hover and the phone's light variant
+ * are later tickets.
  */
 
 /** The room can't run here (no WebGL2, no 2D canvas, a shader that doesn't compile, a lost context): the static Home stays. */
@@ -58,6 +60,8 @@ export type RoomScene = {
     image: CanvasImageSource & { width: number; height: number },
     focalPoint: { x: number; y: number },
   ): void
+  /** Draws the Statement on the sheet above the monitors, in the CSS font `family`; call again once the font has loaded. */
+  setStatement(text: string, family: string): void
   dispose(): void
 }
 
@@ -65,7 +69,14 @@ type Vec3Tuple = [number, number, number]
 
 const DEG = Math.PI / 180
 // Greys between the site's tokens, for the furniture the tokens don't name.
-const GREY = { floor: 0x484848, wall: 0x555555, desk: 0x6a6a6a, rug: 0x303030, chair: 0x3a3a3a }
+const GREY = {
+  paper: 0xbdbdbd,
+  floor: 0x484848,
+  wall: 0x555555,
+  desk: 0x6a6a6a,
+  rug: 0x303030,
+  chair: 0x3a3a3a,
+}
 
 export function createRoomScene({
   places,
@@ -341,7 +352,70 @@ export function createRoomScene({
     S.add(Box(0.78, 0.5, 0.03), mul(print, M(0, 0, 0.015)), RAISED, false)
     S.add(Box(0.7, 0.42, 0.031), mul(print, M(0, 0, 0.0155)), MUTED, false)
   }
-  // The Statement's sheet, taped above the monitors, is a later ticket: the wall stays bare there.
+  // The Statement's sheet, taped above the monitors: paper lit by the room's lights, its text
+  // (the hero's, read by the renderer) drawn on a canvas by `setStatement`.
+  const { width: sheetWidth, height: sheetHeight, centre: sheetAt } = ROOM_TUNING.sheet
+  for (const [tx, ty] of [
+    [-1, 1],
+    [1, 1],
+    [-1, -1],
+    [1, -1],
+  ] as const)
+    S.add(
+      Box(0.12, 0.03, 0.004),
+      M(
+        sheetAt[0] + (tx * (sheetWidth - 0.04)) / 2,
+        sheetAt[1] + (ty * (sheetHeight - 0.06)) / 2,
+        -1.992,
+        0,
+        0,
+        0.5,
+      ),
+      MUTED,
+      false,
+    )
+  const sheetCanvas = document.createElement('canvas')
+  ;[sheetCanvas.width, sheetCanvas.height] = ROOM_TUNING.sheet.canvas
+  const sheetPaint = sheetCanvas.getContext('2d')
+  if (!sheetPaint) throw new RoomUnavailable('No 2D context for the sheet')
+  const sheetTexture = new THREE.CanvasTexture(sheetCanvas)
+  sheetTexture.anisotropy = 4
+  textures.push(sheetTexture)
+  const sheet = new THREE.Mesh(
+    own(new THREE.PlaneGeometry(sheetWidth, sheetHeight)),
+    ownMaterial(
+      new THREE.ShaderMaterial({
+        uniforms: { ...litUniforms, uFloor: { value: 0.22 }, uMap: { value: sheetTexture } },
+        vertexShader: LIT_VS,
+        fragmentShader: LIT_FS,
+        defines: { LIT_MAP: '' },
+      }),
+    ),
+  )
+  sheet.position.set(...sheetAt)
+  scene.add(sheet)
+  /** Draws `text` on the sheet in `family`, as large as fits (`layoutStatement`). */
+  function setStatement(text: string, family: string) {
+    const [width, height] = ROOM_TUNING.sheet.canvas
+    sheetPaint!.fillStyle = hexColour(GREY.paper)
+    sheetPaint!.fillRect(0, 0, width, height)
+    const { fontMax, fontMin, lineHeight, textWidth } = ROOM_TUNING.sheet
+    const { size, lines } = layoutStatement(
+      text,
+      { width: width * textWidth, height: height * 0.9, fontMax, fontMin, lineHeight },
+      (line, px) => {
+        sheetPaint!.font = `${px}px ${family}`
+        return sheetPaint!.measureText(line).width
+      },
+    )
+    sheetPaint!.font = `${size}px ${family}`
+    sheetPaint!.fillStyle = hexColour(RAISED)
+    sheetPaint!.textAlign = 'center'
+    sheetPaint!.textBaseline = 'middle'
+    const top = (height - lines.length * size * lineHeight) / 2 + (size * lineHeight) / 2
+    lines.forEach((line, k) => sheetPaint!.fillText(line, width / 2, top + k * size * lineHeight))
+    sheetTexture.needsUpdate = true
+  }
   // window frame and blind slats
   S.add(Box(0.05, 0.05, 1.16), M(-1.48, 2.12, -0.55), RAISED, false)
   S.add(Box(0.05, 0.05, 1.16), M(-1.48, 0.88, -0.55), RAISED, false)
@@ -670,6 +744,7 @@ export function createRoomScene({
     scene,
     camera,
     update,
+    setStatement,
     resize(width, height) {
       const aspect = width / height
       portrait = isPortrait(aspect)

@@ -1,5 +1,10 @@
 import type { Site } from '../data/pages'
-import { HERO_ATTRIBUTE, HERO_PHONE_ATTRIBUTE, HERO_TEXT_ATTRIBUTE } from '../lib/home-marks'
+import {
+  HERO_ATTRIBUTE,
+  HERO_PHONE_ATTRIBUTE,
+  HERO_TEXT_ATTRIBUTE,
+  STATEMENT_ATTRIBUTE,
+} from '../lib/home-marks'
 import { copyrightNotice, OWNER_NAME } from '../lib/site'
 import { LoopVideo } from './LoopVideo'
 import { Picture } from './Picture'
@@ -129,6 +134,7 @@ export function Hero({ site }: { site: Site | null }) {
           {site?.statement ? (
             <p
               {...DRAWN_TEXT}
+              {...{ [STATEMENT_ATTRIBUTE]: '' }}
               className={`max-w-[11.2em] font-serif text-[clamp(1.75rem,2.9vw,2.75rem)] leading-[0.92] tracking-[-0.01em] ${DRAWN}`}
             >
               {site.statement}

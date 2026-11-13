@@ -1,7 +1,10 @@
 import * as THREE from 'three'
 
+import { STATEMENT_SELECTOR } from '../../lib/home-marks'
+import { pixelRatioFor, throughGlass } from '../../lib/room-motion'
 import { ROOM_TUNING } from '../../lib/room-tuning'
 import type { HelixWork } from '../FeaturedWorks'
+import { createGlass } from './glass'
 import { createRoomScene, RoomUnavailable, type RoomFrame, type RoomPalette } from './scene'
 
 export { RoomUnavailable }
@@ -72,7 +75,7 @@ export function createRoomRenderer(
   try {
     renderer = new THREE.WebGLRenderer({
       canvas,
-      antialias: true,
+      antialias: false, // the room is drawn to a multisampled target (glass.ts)
       powerPreference: 'high-performance',
     })
   } catch (error) {
@@ -107,40 +110,67 @@ export function createRoomRenderer(
     freeGl()
     throw error
   }
+  const glass = createGlass(renderer)
   let destroyed = false
+  // The Statement is the static hero's text, drawn on the sheet once its font is in (the page's text stays the heading).
+  const statementElement = document.querySelector(STATEMENT_SELECTOR)
+  const statement = statementElement?.textContent?.trim() ?? ''
+  const family = statementElement ? getComputedStyle(statementElement).fontFamily : 'serif'
+  room.setStatement(statement, family)
+  const statementReady = (document.fonts?.load(`100px ${family}`) ?? Promise.resolve())
+    .catch(() => undefined) // no font: the sheet keeps the fallback face
+    .then(() => {
+      if (!destroyed) room.setStatement(statement, family)
+    })
   // A still that hangs doesn't hold the room back: after the wait it draws with that place's placeholder.
   let waiting: ReturnType<typeof setTimeout> | undefined
   const give = new Promise<void>((resolve) => {
     waiting = setTimeout(resolve, ROOM_TUNING.stillsWaitMs)
   })
   const ready = Promise.race([
-    Promise.all(
-      works.slice(0, ROOM_TUNING.places).map(async ({ poster }, place) => {
+    Promise.all([
+      statementReady,
+      ...works.slice(0, ROOM_TUNING.places).map(async ({ poster }, place) => {
         const image = await loadStill(poster.src)
         if (image && !destroyed) room.setStill(place, image, poster.focalPoint)
       }),
-    ).then(() => undefined),
+    ]).then(() => undefined),
     give,
   ]).finally(() => clearTimeout(waiting))
+
+  // What a frame hands the scene: the pointer mapped back through the bend (one object, reused).
+  const seen: RoomFrame = { seconds: 0, dt: 0, progress: 0, pointer: null }
+  const seenPointer = { nx: 0, ny: 0, dx: 0 }
+  let aspect = 1
 
   return {
     ready,
     draw(frame) {
-      room.update(frame)
-      renderer.render(room.scene, room.camera)
+      seen.seconds = frame.seconds
+      seen.dt = frame.dt
+      seen.progress = frame.progress
+      seen.pointer = frame.pointer && seenPointer
+      if (frame.pointer) {
+        throughGlass(frame.pointer.nx, frame.pointer.ny, aspect, seenPointer)
+        seenPointer.dx = frame.pointer.dx
+      }
+      room.update(seen)
+      glass.render(room.scene, room.camera)
     },
     resize() {
-      const { max, touchMax } = ROOM_TUNING.pixelRatio
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, touch ? touchMax : max))
+      renderer.setPixelRatio(pixelRatioFor(window.devicePixelRatio, touch))
       const width = Math.max(1, canvas.clientWidth)
       const height = Math.max(1, canvas.clientHeight)
       renderer.setSize(width, height, false)
+      glass.setSize(canvas.width, canvas.height)
+      aspect = width / height
       room.resize(width, height)
     },
     destroy() {
       destroyed = true
       clearTimeout(waiting)
       canvas.removeEventListener('webglcontextlost', lost)
+      glass.dispose()
       room.dispose()
       freeGl()
     },

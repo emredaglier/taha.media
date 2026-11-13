@@ -35,7 +35,7 @@ export function pixelStats(rgba: ArrayLike<number>): PixelStats {
   return stats
 }
 
-/** What a frame of the Edit Room says: its canvas is opaque, so the question is whether it drew anything but black. */
+/** What a frame of the Edit Room says, as it leaves the glass pass: its canvas is opaque, so the question is whether it drew anything but black (a glass that did not compile leaves it black). */
 export type RoomStats = {
   total: number
   /** Pixels with any colour channel above 0. */

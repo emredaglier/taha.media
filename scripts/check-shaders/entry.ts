@@ -157,7 +157,7 @@ async function run(): Promise<Report> {
 }
 
 /**
- * The Edit Room at rest, from the doorway, the middle of its path and its end, with the pointer
+ * The Edit Room at rest, through the glass pass (bend and glow) and with the Statement on its sheet, from the doorway, the middle of its path and its end, with the pointer
  * over it. A program that fails to compile throws from the first draw, with the GL info log.
  */
 async function checkRoom(
