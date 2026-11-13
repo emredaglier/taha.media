@@ -10,7 +10,7 @@ const SIZES = '(min-width: 768px) 50vw, 100vw'
 /** A Work in a list: its Preview loop (or cover), title, Disciplines and year, linking to its page. */
 export function WorkCard({ work }: { work: Work }) {
   return (
-    <Link href={`/isler/${work.slug}`} className="group block">
+    <Link href={`/isler/${work.slug}`} className="group block" data-cursor="İzle">
       {work.previewLoop ? (
         <LoopVideo video={work.previewLoop} sizes={SIZES} hoverToPlay />
       ) : (

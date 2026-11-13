@@ -85,6 +85,8 @@ export function LoopVideo({
           loop
           playsInline
           preload="none"
+          crossOrigin="anonymous"
+          data-melt=""
           aria-hidden="true"
           tabIndex={-1}
           className="absolute inset-0 size-full object-cover"

@@ -46,6 +46,7 @@ export function GalleryGrid({ items }: { items: GalleryItem[] }) {
                   href={fullSizeFile(item)}
                   aria-haspopup="dialog"
                   className="block"
+                  data-cursor="Büyüt"
                   onClick={(event) => {
                     if (!isPlainClick(event)) return
                     event.preventDefault()
