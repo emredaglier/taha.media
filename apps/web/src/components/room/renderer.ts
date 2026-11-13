@@ -1,16 +1,18 @@
 import * as THREE from 'three'
 
 import { STATEMENT_SELECTOR } from '../../lib/home-marks'
+import { livePlaces } from '../../lib/room-model'
 import { pixelRatioFor, throughGlass } from '../../lib/room-motion'
 import { ROOM_TUNING } from '../../lib/room-tuning'
 import type { HelixWork } from '../FeaturedWorks'
 import { createGlass } from './glass'
+import { createRoomLoops } from './loops'
 import { createRoomScene, RoomUnavailable, type RoomFrame, type RoomPalette } from './scene'
 
 export { RoomUnavailable }
 
-/** What the room needs of a Featured Work: its still (the Preview loop's poster). */
-export type RoomMedia = Pick<HelixWork, 'poster'>
+/** What the room needs of a Featured Work: its Preview loop and its still (the loop's poster). */
+export type RoomMedia = Pick<HelixWork, 'poster' | 'previewLoop'>
 
 export type RoomRenderer = {
   /** Resolves once the stills have loaded or failed, or after `ROOM_TUNING.stillsWaitMs`: a place without its still keeps the placeholder grey. */
@@ -122,6 +124,17 @@ export function createRoomRenderer(
     .then(() => {
       if (!destroyed) room.setStatement(statement, family)
     })
+  const placed = works.slice(0, ROOM_TUNING.places)
+  const stills: (HTMLImageElement | null)[] = placed.map(() => null)
+  const loops = createRoomLoops(placed, canvas.parentElement ?? document.body, {
+    paint: (place, video) => room.setFrame(place, video, placed[place]!.poster.focalPoint),
+    restore: (place) => {
+      const still = stills[place]
+      if (still) room.setStill(place, still, placed[place]!.poster.focalPoint)
+    },
+  })
+  const hasWork = Array.from({ length: ROOM_TUNING.places }, (_, place) => place < placed.length)
+  const live: boolean[] = []
   // A still that hangs doesn't hold the room back: after the wait it draws with that place's placeholder.
   let waiting: ReturnType<typeof setTimeout> | undefined
   const give = new Promise<void>((resolve) => {
@@ -130,9 +143,11 @@ export function createRoomRenderer(
   const ready = Promise.race([
     Promise.all([
       statementReady,
-      ...works.slice(0, ROOM_TUNING.places).map(async ({ poster }, place) => {
+      ...placed.map(async ({ poster }, place) => {
         const image = await loadStill(poster.src)
-        if (image && !destroyed) room.setStill(place, image, poster.focalPoint)
+        if (!image || destroyed) return
+        stills[place] = image
+        room.setStill(place, image, poster.focalPoint)
       }),
     ]).then(() => undefined),
     give,
@@ -155,6 +170,8 @@ export function createRoomRenderer(
         seenPointer.dx = frame.pointer.dx
       }
       room.update(seen)
+      // Only the screens nearest the camera play; the others hold their last frame or their still.
+      loops.update(livePlaces(room.camera.position, room.screenCentres, hasWork, touch, live))
       glass.render(room.scene, room.camera)
     },
     resize() {
@@ -171,6 +188,7 @@ export function createRoomRenderer(
       clearTimeout(waiting)
       canvas.removeEventListener('webglcontextlost', lost)
       glass.dispose()
+      loops.destroy()
       room.dispose()
       freeGl()
     },

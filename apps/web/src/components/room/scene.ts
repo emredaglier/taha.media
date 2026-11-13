@@ -28,9 +28,9 @@ import {
  * The Edit Room's scene (#127), ported from the prototype (`docs/design/home2/editroom.js`): Taha's
  * desk at night, every shape built in code, one lit shader for all the furniture with up to eight
  * fake lights, baked vertex shading, contact-shadow and glow quads. About 15 draw calls. It draws
- * the room at rest: the Works' stills on their places, spare places dark, the Statement on its
- * sheet (#128; the glass is `glass.ts`). Loops, the opening, hover and the phone's light variant
- * are later tickets.
+ * the room at rest: the Works' stills on their places, spare places dark, the loops painted over
+ * them (`setFrame`, #129), the Statement on its sheet (#128; the glass is `glass.ts`). The opening,
+ * hover and the phone's light variant are later tickets.
  */
 
 /** The room can't run here (no WebGL2, no 2D canvas, a shader that doesn't compile, a lost context): the static Home stays. */
@@ -62,6 +62,10 @@ export type RoomScene = {
   ): void
   /** Draws the Statement on the sheet above the monitors, in the CSS font `family`; call again once the font has loaded. */
   setStatement(text: string, family: string): void
+  /** Paints a Preview loop's current frame into Work `place`'s cell, cut as its still is: the screen and its desk mirror show it. */
+  setFrame(place: number, video: HTMLVideoElement, focalPoint: { x: number; y: number }): void
+  /** Where each place's screen is (its centre), for picking the screens that play. */
+  screenCentres: readonly THREE.Vector3[]
   dispose(): void
 }
 
@@ -192,6 +196,19 @@ export function createRoomScene({
     x: (place % columns) * cellWidth,
     y: Math.floor(place / columns) * cellHeight,
   })
+  /** Paints `source` (`width` by `height` px, cut to 16:9 around the focal point) into `place`'s cell. */
+  const paintCell = (
+    place: number,
+    source: CanvasImageSource,
+    width: number,
+    height: number,
+    focalPoint: { x: number; y: number },
+  ) => {
+    const crop = stillCrop(width, height, focalPoint)
+    const { x, y } = cell(place)
+    paint.drawImage(source, crop.x, crop.y, crop.width, crop.height, x, y, cellWidth, cellHeight)
+    atlas.needsUpdate = true
+  }
   places.forEach((hasWork, place) => {
     paint.fillStyle = hasWork ? hexColour(PLACEHOLDER) : '#000'
     paint.fillRect(cell(place).x, cell(place).y, cellWidth, cellHeight)
@@ -752,12 +769,11 @@ export function createRoomScene({
       camera.fov = fovFor(aspect)
       camera.updateProjectionMatrix()
     },
-    setStill(place, image, focalPoint) {
-      const crop = stillCrop(image.width, image.height, focalPoint)
-      const { x, y } = cell(place)
-      paint.drawImage(image, crop.x, crop.y, crop.width, crop.height, x, y, cellWidth, cellHeight)
-      atlas.needsUpdate = true
-    },
+    setStill: (place, image, focalPoint) =>
+      paintCell(place, image, image.width, image.height, focalPoint),
+    setFrame: (place, video, focalPoint) =>
+      paintCell(place, video, video.videoWidth, video.videoHeight, focalPoint),
+    screenCentres: screenCentre,
     dispose() {
       geometries.forEach((g) => g.dispose())
       materials.forEach((m) => m.dispose())
