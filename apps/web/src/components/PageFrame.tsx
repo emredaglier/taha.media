@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 
+import { SiteCursor } from './SiteCursor'
 import { SiteFooter } from './SiteFooter'
 
 /**
@@ -8,9 +9,12 @@ import { SiteFooter } from './SiteFooter'
  */
 export function PageMain({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <main id="main" className={`flex-1 px-6 ${className ?? ''}`.trimEnd()}>
-      {children}
-    </main>
+    <>
+      <main id="main" className={`flex-1 px-6 ${className ?? ''}`.trimEnd()}>
+        {children}
+      </main>
+      <SiteCursor />
+    </>
   )
 }
 
