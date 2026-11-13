@@ -96,6 +96,35 @@ export function stopForPlace(place: number, phone: boolean): { index: number; pr
   return { index, progress: index / (stopsOf(phone).length - 1) }
 }
 
+type Point = { readonly x: number; readonly y: number; readonly z: number }
+const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z)
+
+/**
+ * Which places play their loop (#129): the `ROOM_TUNING.liveLoops` screens nearest `camera` that
+ * have a Work, by their centres. Written into `out` (true: plays) without allocating, for the frame loop.
+ */
+export function livePlaces(
+  camera: Point,
+  centres: readonly Point[],
+  hasWork: readonly boolean[],
+  touch: boolean,
+  out: boolean[] = [],
+): boolean[] {
+  out.length = centres.length
+  out.fill(false)
+  for (let left = ROOM_TUNING.liveLoops[touch ? 'touch' : 'desktop']; left > 0; left--) {
+    let nearest = -1
+    for (let place = 0; place < centres.length; place++) {
+      if (out[place] || !hasWork[place]) continue
+      if (nearest < 0 || distance(camera, centres[place]!) < distance(camera, centres[nearest]!))
+        nearest = place
+    }
+    if (nearest < 0) break
+    out[nearest] = true
+  }
+  return out
+}
+
 /** The virtual scroll: where the wheel or drag has asked the camera to be, and where it is. Both 0 to 1 along the path. */
 export type RoomScroll = { target: number; progress: number }
 

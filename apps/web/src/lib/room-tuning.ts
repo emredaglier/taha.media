@@ -9,6 +9,8 @@ export type Stop = { readonly position: Vec3; readonly lookAt: Vec3 }
 export const ROOM_TUNING = {
   /** Places in the room: 0-2 monitors (1 is the middle one), 3 laptop, 4 tablet, 5 phone, 6-7 framed prints. */
   places: 8,
+  /** How many screens play their loop at once, the ones nearest the camera; the rest hold a frame or their still. */
+  liveLoops: { desktop: 4, touch: 3 },
   /** Wheel or drag travel (CSS px) that carries the camera along the whole path. */
   scrollLengthPx: 3200,
   /** How fast the camera follows the virtual scroll, per second (time-based easing). */

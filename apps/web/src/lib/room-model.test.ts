@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   cameraPose,
   createScroll,
+  livePlaces,
   placeWorks,
   scrollBy,
   stepScroll,
@@ -314,5 +315,45 @@ describe('cameraPose into a reused pose', () => {
       expect(cameraPose(progress, false, reused)).toBe(reused)
       expect(reused).toEqual(cameraPose(progress, false))
     }
+  })
+})
+
+describe('livePlaces', () => {
+  const camera = { x: 0, y: 0, z: 0 }
+  // Place i stands at distance `far[i]` along x: place 5 is the nearest, then 2, 7, 0, ...
+  const far = [4, 7, 2, 8, 6, 1, 5, 3]
+  const centres = far.map((x) => ({ x, y: 0, z: 0 }))
+  const all = range(ROOM_TUNING.places).map(() => true)
+  const playing = (live: readonly boolean[]) => range(live.length).filter((place) => live[place])
+
+  it('plays the tuned number of screens, the nearest ones', () => {
+    expect(ROOM_TUNING.liveLoops.desktop).toBe(4)
+    expect(playing(livePlaces(camera, centres, all, false))).toEqual([0, 2, 5, 7])
+  })
+
+  it('plays at most three on a phone', () => {
+    expect(ROOM_TUNING.liveLoops.touch).toBe(3)
+    expect(playing(livePlaces(camera, centres, all, true))).toEqual([2, 5, 7])
+  })
+
+  it('never plays a dark place, and the next nearest takes its turn', () => {
+    const works = all.map((_, place) => place !== 5)
+    expect(playing(livePlaces(camera, centres, works, true))).toEqual([0, 2, 7])
+  })
+
+  it('plays every Work when there are fewer than the tuned number', () => {
+    const works = all.map((_, place) => place < 2)
+    expect(playing(livePlaces(camera, centres, works, false))).toEqual([0, 1])
+  })
+
+  it('follows the camera', () => {
+    expect(playing(livePlaces({ x: 8, y: 0, z: 0 }, centres, all, true))).toEqual([1, 3, 4])
+  })
+
+  it('writes into a reused list', () => {
+    const out: boolean[] = []
+    expect(livePlaces(camera, centres, all, true, out)).toBe(out)
+    livePlaces({ x: 8, y: 0, z: 0 }, centres, all, true, out)
+    expect(playing(out)).toEqual([1, 3, 4])
   })
 })
