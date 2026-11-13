@@ -7,7 +7,7 @@ import { CAN_HOVER, POINTER_FINE, REDUCED_MOTION, subscribeToPreferences } from 
 
 const NATIVE_HIDDEN = 'site-cursor'
 const DROP = 14
-const BLOT = 220
+const BLOT = 150
 /** A link's box taller than this gets its label cut out of the blot; a smaller one gets none. */
 const LABEL_MIN_HEIGHT = 90
 const STIFFNESS = 160
@@ -173,8 +173,8 @@ export function SiteCursor() {
         style={{ display: 'none' }}
         className="pointer-events-none fixed z-[90] overflow-hidden mix-blend-difference"
       >
-        <div className="absolute top-0 left-0 grid h-[220px] w-[220px] animate-[site-cursor-wobble_5s_linear_infinite] place-items-center bg-text">
-          <span className="font-serif text-[52px] leading-none font-normal text-background" />
+        <div className="absolute top-0 left-0 grid h-[150px] w-[150px] animate-[site-cursor-wobble_5s_linear_infinite] place-items-center bg-text">
+          <span className="font-serif text-[38px] leading-none font-normal text-background" />
         </div>
       </div>
     </>
