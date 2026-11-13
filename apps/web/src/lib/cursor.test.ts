@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
 
-import { cursorLabel } from './cursor'
+import { cursorLabel, cursorTarget } from './cursor'
 
 const ORIGIN = location.origin
 
@@ -41,5 +41,26 @@ describe('cursorLabel', () => {
 
   it('has no label for an anchor without href', () => {
     expect(cursorLabel(hit('<a id="hit">x</a>'), ORIGIN)).toBe('')
+  })
+})
+
+describe('cursorTarget', () => {
+  it('gives the data-cursor element, not the child under the mouse', () => {
+    const child = hit('<a href="/x" data-cursor="İzle" id="outer"><i id="hit"></i></a>')
+    expect(cursorTarget(child, ORIGIN)?.element).toBe(document.getElementById('outer'))
+  })
+
+  it('gives the link when it has no data-cursor', () => {
+    const child = hit('<a href="/x" id="outer"><i id="hit"></i></a>')
+    expect(cursorTarget(child, ORIGIN)).toEqual({
+      element: document.getElementById('outer'),
+      label: 'Aç',
+    })
+  })
+
+  it('gives nothing for an empty data-cursor, a plain element or no element', () => {
+    expect(cursorTarget(hit('<a href="/x" data-cursor="" id="hit">x</a>'), ORIGIN)).toBeNull()
+    expect(cursorTarget(hit('<p id="hit">x</p>'), ORIGIN)).toBeNull()
+    expect(cursorTarget(null, ORIGIN)).toBeNull()
   })
 })
