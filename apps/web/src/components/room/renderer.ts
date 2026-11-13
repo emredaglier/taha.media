@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import { STATEMENT_SELECTOR } from '../../lib/home-marks'
 import { livePlaces } from '../../lib/room-model'
 import { createOpeningState } from '../../lib/room-opening'
+import { pickMargin } from '../../lib/room-pointing'
 import { pixelRatioFor, throughGlass } from '../../lib/room-motion'
 import { ROOM_TUNING } from '../../lib/room-tuning'
 import type { HelixWork } from '../FeaturedWorks'
@@ -215,8 +216,7 @@ export function createRoomRenderer(
     },
     pick(nx, ny) {
       throughGlass(nx, ny, aspect, seenPointer)
-      const { margin, touchMargin } = ROOM_TUNING.pick
-      return room.pick(seenPointer.nx, seenPointer.ny, touch ? touchMargin : margin)
+      return room.pick(seenPointer.nx, seenPointer.ny, pickMargin(touch))
     },
     push: (place) => room.startPush(place),
     get hot() {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   createHeat,
+  pickMargin,
   pickScreen,
   pushBlend,
   pushPose,
@@ -45,6 +46,12 @@ describe('pickScreen', () => {
     const near = toward(0.4) // 0.4 m right of the middle one's centre: its half width is 0.3
     expect(pickScreen(eye, near, wall, lit, 1)).toBe(-1)
     expect(pickScreen(eye, near, wall, lit, ROOM_TUNING.pick.touchMargin)).toBe(1)
+  })
+
+  it('uses the wider hit area on touch only', () => {
+    expect(pickMargin(false)).toBe(ROOM_TUNING.pick.margin)
+    expect(pickMargin(true)).toBe(ROOM_TUNING.pick.touchMargin)
+    expect(pickMargin(true)).toBeGreaterThan(pickMargin(false))
   })
 
   it('never picks a place with no Work, nor a screen seen from behind or behind the eye', () => {

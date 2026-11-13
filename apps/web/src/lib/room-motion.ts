@@ -57,6 +57,10 @@ const smoothstep = (low: number, high: number, x: number) => {
 /** Whether a screen `aspect` (width / height) is a phone held upright: the camera takes the phone stops. */
 export const isPortrait = (aspect: number): boolean => aspect < ROOM_TUNING.portraitBelow
 
+/** Whether the camera takes the phone stops: a screen held upright, or any device with no hover (`touch`, a phone held sideways too). */
+export const usesPhoneStops = (touch: boolean, aspect: number): boolean =>
+  touch || isPortrait(aspect)
+
 /** The camera's field of view (degrees) for a screen `aspect`: wider on a tall screen, so the room still fits. */
 export function fovFor(aspect: number): number {
   const { base, extra, tallAspect, wideAspect } = ROOM_TUNING.fov

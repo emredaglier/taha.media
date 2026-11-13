@@ -10,6 +10,7 @@ const capable = {
   reducedMotion: false,
   saveData: false,
   webgl2: true,
+  hover: true,
   deviceMemory: minMemoryGb * 2,
   cores: minCores * 2,
   featuredCount: 6,
@@ -18,6 +19,15 @@ const capable = {
 describe('chooseHomeMode', () => {
   it('gives the room when every check is clear', () => {
     expect(chooseHomeMode(capable)).toBe('room')
+  })
+
+  it('gives the light room to a capable device with no hover, and the static Home to a weak one', () => {
+    expect(chooseHomeMode({ ...capable, hover: false })).toBe('light')
+    expect(chooseHomeMode({ ...capable, hover: false, deviceMemory: minMemoryGb / 2 })).toBe(
+      'static',
+    )
+    expect(chooseHomeMode({ ...capable, hover: false, saveData: true })).toBe('static')
+    expect(chooseHomeMode({ ...capable, hover: false, featuredCount: 0 })).toBe('static')
   })
 
   it.each([

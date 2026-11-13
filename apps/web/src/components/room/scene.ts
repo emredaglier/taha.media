@@ -14,10 +14,10 @@ import {
 import {
   atlasRect,
   fovFor,
-  isPortrait,
   stepChair,
   stepLook,
   stillCrop,
+  usesPhoneStops,
   type ChairSwivel,
   type Look,
 } from '../../lib/room-motion'
@@ -1007,7 +1007,7 @@ export function createRoomScene({
     setStatement,
     resize(width, height) {
       const aspect = width / height
-      portrait = isPortrait(aspect)
+      portrait = usesPhoneStops(touch, aspect)
       view.width = width
       view.height = height
       camera.aspect = aspect

@@ -24,6 +24,13 @@ export function HomeRoom({
 }) {
   const mode = useHomeMode(works.length)
   const [failed, setFailed] = useState(false)
-  if (mode !== 'room' || failed) return null
-  return <Room works={works} showreel={showreel} onFail={() => setFailed(true)} />
+  if (mode === 'static' || failed) return null
+  return (
+    <Room
+      works={works}
+      showreel={showreel}
+      light={mode === 'light'}
+      onFail={() => setFailed(true)}
+    />
+  )
 }

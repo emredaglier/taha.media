@@ -25,6 +25,10 @@ const clamp = (value: number, low: number, high: number) => Math.min(high, Math.
 // NaN counts as 0, so one bad input never sticks a value at NaN.
 const positive = (value: number) => (value > 0 ? value : 0)
 
+/** The hit area for picking a screen: wider for a finger than for a pointer. */
+export const pickMargin = (touch: boolean): number =>
+  touch ? ROOM_TUNING.pick.touchMargin : ROOM_TUNING.pick.margin
+
 /**
  * The place whose screen the ray (`origin`, unit `dir`) meets first, or -1: the ray is tested
  * against each screen's plane by hand, and counts as on it within `margin` times its size (plus
