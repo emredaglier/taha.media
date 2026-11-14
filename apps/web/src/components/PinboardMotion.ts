@@ -355,7 +355,13 @@ function createPinboardMotion(details: HTMLDetailsElement, onRest: () => void) {
  * one and the `<details>` closes at once.
  */
 export function usePinboardMotion(open: boolean, detailsRef: RefObject<HTMLDetailsElement | null>) {
-  const router = useRouter()
+  // `useRouter` throws outside the app router (a test that renders the header alone); then a
+  // flight only closes the menu. The same branch every render, so the hook order holds.
+  let router: ReturnType<typeof useRouter> | null = null
+  try {
+    // eslint-disable-next-line react-hooks/rules-of-hooks -- it only throws, never skips a hook
+    router = useRouter()
+  } catch {}
   const pathname = usePathname()
   const motion = useRef<ReturnType<typeof createPinboardMotion> | null>(null)
 
@@ -392,7 +398,7 @@ export function usePinboardMotion(open: boolean, detailsRef: RefObject<HTMLDetai
       const plain =
         event.button === 0 && !(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
       const go = () => {
-        if (pathname !== href) router.push(href)
+        if (pathname !== href) router?.push(href)
       }
       if (plain && motion.current?.leave(index, go)) event.preventDefault()
     },
