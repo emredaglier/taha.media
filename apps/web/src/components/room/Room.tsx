@@ -11,8 +11,10 @@ import { usesPhoneStops, wheelPixels } from '../../lib/room-motion'
 import {
   createOpening,
   createOpeningState,
+  HOLD_SECONDS,
   isOpening,
   openingAt,
+  openingSeconds,
   skipOpening,
   stepOpening,
 } from '../../lib/room-opening'
@@ -25,10 +27,11 @@ import type { RoomFrame } from './scene'
 /**
  * The Edit Room on Home (#127), loaded only on a device that passed the capability check. It draws
  * the room: each Featured Work's loop or still on its place, spare places dark. A document loaded
- * on Home opens with the middle monitor waking on the Showreel (#131, `room-opening`); a click or
- * tap skips it. Client navigation to Home, and coming back from a Work page, start at rest, the
- * latter at the stop that shows that Work (`room-start`). The wheel and a
- * vertical drag move the camera along the path and the page never scrolls (ADR-0103); the pointer
+ * on Home opens with the middle monitor waking on the Showreel (#131, `room-opening`) and holds
+ * there; the scroll plays the rest of the opening, and scrolling back up past the path's start
+ * returns to it (#140). A click or tap skips it. Client navigation to Home, and coming back from a
+ * Work page, start at rest, the latter at the stop that shows that Work (`room-start`). The wheel
+ * and a vertical drag move the camera along the path and the page never scrolls (ADR-0103); the pointer
  * turns the view a little. Pointing at a screen makes its Work hot (brighter, with its tag, and
  * the site's Drop cursor swells); a click pushes the camera into it and then opens the Work's
  * page, a drag is no click (#130). The static Home stays in the page underneath, visually hidden, so
@@ -78,14 +81,8 @@ export function Room({
     )
     let renderer: RoomRenderer
     try {
-      // The Showreel is loaded only for an opening that will use it.
-      renderer = createRoomRenderer(
-        canvas,
-        works,
-        touch,
-        giveUp,
-        where.opening ? (showreel?.src ?? null) : null,
-      )
+      // The Showreel loads at rest too: a scroll back up reaches the opening (#140).
+      renderer = createRoomRenderer(canvas, works, touch, giveUp, showreel?.src ?? null)
     } catch (error) {
       if (!(error instanceof RoomUnavailable)) throw error
       giveUp()
@@ -115,7 +112,7 @@ export function Room({
       last = now
       stepScroll(scroll, dt)
       stepOpening(clock, dt)
-      openingAt(clock.seconds, opening)
+      openingAt(openingSeconds(clock, scroll.progress), opening)
       input.seconds = now / 1000
       input.dt = dt
       input.progress = scroll.progress
@@ -152,17 +149,19 @@ export function Room({
     const onVisibility = () => (document.hidden ? stop() : start())
 
     // --- input: the wheel and a vertical drag move the camera; the menu, when open, has the input.
+    // The intro plays by time: the scroll takes over at the hold on the Showreel.
+    const scrub = (px: number) => {
+      if (clock.seconds >= HOLD_SECONDS) scrollBy(scroll, px)
+    }
     const onWheel = (event: WheelEvent) => {
       // Before the first frame the static Home shows and the page scrolls: the wheel is the browser's.
       if (!shown || event.ctrlKey || isMenuOpen(document)) return // ctrl + wheel is the browser's zoom
       if (pushing >= 0) return event.preventDefault() // the camera is on its way in
       event.preventDefault()
-      scrollBy(scroll, wheelPixels(event.deltaY, event.deltaMode, window.innerHeight))
+      scrub(wheelPixels(event.deltaY, event.deltaMode, window.innerHeight))
     }
     const onPointerDown = (event: PointerEvent) => {
       if (!event.isPrimary || event.button !== 0 || isMenuOpen(document) || pushing >= 0) return
-      // A click or tap during the opening skips it, and only that: no Work can be chosen yet.
-      if (isOpening(clock)) return skipOpening(clock)
       try {
         canvas.setPointerCapture(event.pointerId)
       } catch {
@@ -188,7 +187,7 @@ export function Room({
         ROOM_TUNING.clickSlopPx
       )
         drag.moved = true
-      scrollBy(scroll, drag.lastY - event.clientY) // dragging up goes further in
+      scrub(drag.lastY - event.clientY) // dragging up goes further in
       drag.lastY = event.clientY
     }
     const onPointerEnd = (event: PointerEvent) => {
@@ -199,6 +198,8 @@ export function Room({
       const click = drag?.id === event.pointerId && !drag.moved
       onPointerEnd(event)
       if (!click || !shown || pushing >= 0 || isMenuOpen(document)) return
+      // A click or tap during the opening skips it, and only that: no Work can be chosen yet.
+      if (isOpening(clock, scroll)) return skipOpening(clock, scroll)
       const box = canvas.getBoundingClientRect()
       const place = renderer.pick(
         ((event.clientX - box.left) / Math.max(1, box.width)) * 2 - 1,
@@ -228,7 +229,7 @@ export function Room({
       const place = placeOfLink(event.target)
       if (place < 0 || pushing >= 0) return
       focused = place
-      skipOpening(clock)
+      skipOpening(clock, scroll)
       scroll.target = stopForPlace(
         place,
         usesPhoneStops(touch, window.innerWidth / window.innerHeight),

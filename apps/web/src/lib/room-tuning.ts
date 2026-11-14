@@ -74,9 +74,15 @@ export const ROOM_TUNING = {
    * wakes on the Showreel and fills the view; the camera pulls back from it; the room's light
    * comes up; the other screens (`place`, its start, how long it takes) and the lamp follow; the
    * Showreel hands over to the middle monitor's own Work. Every value only ever rises (the
-   * Showreel's share and the pull-back only fall), so no screen flashes (WCAG 2.3.1).
+   * Showreel's share and the pull-back only fall), so no screen flashes (WCAG 2.3.1). Time plays
+   * it until the pull-back starts and it holds on the Showreel; from there the scroll scrubs the
+   * rest (#140): `scrollPx` of wheel or drag travel takes it from the hold to rest, and however
+   * fast the scroll, the scrub takes at least `scrubSeconds`, so a flick never jumps the room's
+   * light (WCAG 2.3.1).
    */
   opening: {
+    scrollPx: 1200,
+    scrubSeconds: 1.2,
     /** The monitor that wakes first, and that the camera starts at: the middle one. */
     place: 1,
     screens: [

@@ -125,19 +125,34 @@ export function livePlaces(
   return out
 }
 
-/** The virtual scroll: where the wheel or drag has asked the camera to be, and where it is. Both 0 to 1 along the path. */
+/**
+ * The virtual scroll: where the wheel or drag has asked the camera to be, and where it is. 0 to 1
+ * along the path; below 0, back to `HOLD_PROGRESS`, the scroll scrubs the opening (#140).
+ */
 export type RoomScroll = { target: number; progress: number }
+
+/** Where the scroll holds the opening on the Showreel: the opening's scroll length before the path's start. */
+export const HOLD_PROGRESS = -ROOM_TUNING.opening.scrollPx / ROOM_TUNING.scrollLengthPx
 
 export const createScroll = (): RoomScroll => ({ target: 0, progress: 0 })
 
-/** The wheel or a vertical drag moved `px` CSS px (positive: further in). Stops at both ends. Changes `scroll` in place. */
+/** The wheel or a vertical drag moved `px` CSS px (positive: further in). Stops at the last stop and at the hold. Changes `scroll` in place. */
 export function scrollBy(scroll: RoomScroll, px: number): void {
-  scroll.target = clamp01(scroll.target + (Number.isNaN(px) ? 0 : px) / ROOM_TUNING.scrollLengthPx)
+  const target = scroll.target + (Number.isNaN(px) ? 0 : px) / ROOM_TUNING.scrollLengthPx
+  scroll.target = target > HOLD_PROGRESS ? Math.min(1, target) : HOLD_PROGRESS
 }
 
 /** Moves `progress` towards `target` for one frame of `seconds`, with time-based easing: it never overshoots. Changes `scroll` in place. */
 export function stepScroll(scroll: RoomScroll, seconds: number): void {
   const dt = Math.min(seconds > 0 ? seconds : 0, ROOM_TUNING.maxFrameSeconds)
-  scroll.progress +=
+  const next =
+    scroll.progress +
     (scroll.target - scroll.progress) * (1 - Math.exp(-dt * ROOM_TUNING.followRate))
+  // Below the path's start (the opening) it moves no faster than the scrub's pace: a flick never
+  // jumps the room's light (WCAG 2.3.1).
+  const most = (dt * -HOLD_PROGRESS) / ROOM_TUNING.opening.scrubSeconds
+  scroll.progress = Math.min(
+    scroll.progress < 0 ? scroll.progress + most : Infinity,
+    Math.max(Math.min(scroll.progress, 0) - most, next),
+  )
 }

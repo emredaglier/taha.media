@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   cameraPose,
   createScroll,
+  HOLD_PROGRESS,
   livePlaces,
   placeWorks,
   scrollBy,
@@ -266,7 +267,7 @@ describe('virtual scroll', () => {
     expect(state.progress).toBeCloseTo(0.25, 6)
   })
 
-  it('stops at both ends however far the wheel goes, and never overshoots', () => {
+  it("stops at the last stop and at the opening's hold however far the wheel goes, and never overshoots", () => {
     const state = createScroll()
     scrollBy(state, ROOM_TUNING.scrollLengthPx * 50)
     expect(state.target).toBe(1)
@@ -275,11 +276,12 @@ describe('virtual scroll', () => {
       expect(state.progress).toBeLessThanOrEqual(1)
     }
     scrollBy(state, -ROOM_TUNING.scrollLengthPx * 50)
-    expect(state.target).toBe(0)
-    for (let i = 0; i < 600; i += 1) {
+    expect(state.target).toBe(HOLD_PROGRESS)
+    for (let i = 0; i < 1200; i += 1) {
       stepScroll(state, 1 / 60)
-      expect(state.progress).toBeGreaterThanOrEqual(0)
+      expect(state.progress).toBeGreaterThanOrEqual(HOLD_PROGRESS)
     }
+    expect(state.progress).toBeCloseTo(HOLD_PROGRESS, 6)
   })
 
   it('moves the same distance in the same time at any frame rate, and survives a stalled frame', () => {
@@ -295,6 +297,16 @@ describe('virtual scroll', () => {
     stepScroll(stalled, 60)
     expect(stalled.progress).toBeLessThanOrEqual(1)
     expect(Number.isFinite(stalled.progress)).toBe(true)
+  })
+
+  it('scrolls back past the doorway into the opening by its own scroll length (#140)', () => {
+    expect(HOLD_PROGRESS).toBeCloseTo(
+      -ROOM_TUNING.opening.scrollPx / ROOM_TUNING.scrollLengthPx,
+      12,
+    )
+    const state = createScroll()
+    scrollBy(state, -ROOM_TUNING.opening.scrollPx / 2)
+    expect(state.target).toBeCloseTo(HOLD_PROGRESS / 2, 12)
   })
 
   it('ignores a NaN input and does not stick at NaN', () => {

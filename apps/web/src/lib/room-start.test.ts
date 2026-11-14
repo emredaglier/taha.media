@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { stopForPlace } from './room-model'
+import { HOLD_PROGRESS, stopForPlace } from './room-model'
 import {
   markRoomOpened,
   readRoomStart,
@@ -14,8 +14,8 @@ const works = [{ slug: 'a' }, { slug: 'b' }, { slug: 'c' }]
 const fresh: RoomStartFacts = { opensOnHome: true, firstRoom: true, remembered: null, phone: false }
 
 describe('where the room starts (pure)', () => {
-  it('opens when the document was loaded on Home and no room has run yet', () => {
-    expect(roomStart(fresh)).toEqual({ opening: true, progress: 0 })
+  it('opens, held on the Showreel, when the document was loaded on Home and no room has run yet', () => {
+    expect(roomStart(fresh)).toEqual({ opening: true, progress: HOLD_PROGRESS })
   })
 
   it('client navigation to Home starts at rest: no opening, at the doorway', () => {
@@ -93,7 +93,7 @@ describe('what the room reads from the page', () => {
   it('a reload of Home starts with the opening again, forgetting the remembered Work', () => {
     loadedAs('reload', '/')
     rememberWork('b')
-    expect(readRoomStart(works, false)).toEqual({ opening: true, progress: 0 })
+    expect(readRoomStart(works, false)).toEqual({ opening: true, progress: HOLD_PROGRESS })
     expect(window.history.state).not.toHaveProperty('roomWork')
   })
 })

@@ -5,7 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vite
 
 import { LOADING_CLASS } from '../../lib/home-loader'
 import { stopForPlace } from '../../lib/room-model'
-import { OPENING_SECONDS } from '../../lib/room-opening'
+import { HOLD_SECONDS, OPENING_SECONDS } from '../../lib/room-opening'
+import { ROOM_TUNING } from '../../lib/room-tuning'
 import { rememberWork } from '../../lib/room-start'
 import type { RoomWork } from '../FeaturedWorks'
 import { Room } from './Room'
@@ -286,26 +287,79 @@ describe('the Edit Room on Home', () => {
       canvas().setPointerCapture = vi.fn()
       canvas().dispatchEvent(event)
     }
+    const pointerUp = () =>
+      canvas().dispatchEvent(
+        Object.assign(new MouseEvent('pointerup', { button: 0 }), {
+          pointerId: 1,
+          isPrimary: true,
+        }),
+      )
+    const wheel = (deltaY: number) =>
+      window.dispatchEvent(new WheelEvent('wheel', { deltaY, cancelable: true }))
+    const holdFrames = Math.ceil((HOLD_SECONDS * 1000) / 16) + 1
+    const settleFrames = 10 * 60
 
-    it('plays on a document loaded on Home: it starts at the middle monitor and reaches rest', async () => {
+    it('plays on a document loaded on Home: it holds on the Showreel until the scroll takes it to rest', async () => {
       loadedOnHome()
       await mount()
       runFrame()
       expect(draws[0]!.opening).toMatchObject({ reel: 1, fly: 1, settled: false })
       expect(renderer.create.mock.calls[0]![4]).toBe(showreel.src)
 
-      runFrames(Math.ceil((OPENING_SECONDS * 1000) / 16) + 10)
+      runFrames(Math.ceil((OPENING_SECONDS * 1000) / 16) + 60)
+      expect(draws.at(-1)!.opening).toMatchObject({ reel: 1, fly: 1, settled: false }) // the hold
+
+      wheel(ROOM_TUNING.opening.scrollPx)
+      runFrames(settleFrames)
       expect(draws.at(-1)!.opening).toMatchObject({ reel: 0, fly: 0, settled: true })
+      expect(draws.at(-1)!.progress).toBeCloseTo(0, 3)
     })
 
-    it('is skipped by a click or tap, which lands on rest and picks no Work itself', async () => {
+    it('scrubs nothing while the intro plays: a wheel before the hold is dropped', async () => {
       loadedOnHome()
       await mount()
-      runFrames(5)
-      expect(draws.at(-1)!.opening.settled).toBe(false)
-      pointerDown()
       runFrame()
-      expect(draws.at(-1)!.opening).toMatchObject({ reel: 0, fly: 0, settled: true })
+      wheel(ROOM_TUNING.opening.scrollPx * 4)
+      runFrames(holdFrames + settleFrames)
+      expect(draws.at(-1)!.opening).toMatchObject({ reel: 1, fly: 1, settled: false })
+    })
+
+    it('is skipped by a click or tap during the intro, the hold or the scrub, landing on rest', async () => {
+      loadedOnHome()
+      for (const [frames, px] of [
+        [5, 0],
+        [holdFrames, 0],
+        [holdFrames, ROOM_TUNING.opening.scrollPx / 2],
+      ] as const) {
+        await mount()
+        runFrames(frames)
+        wheel(px)
+        runFrames(10)
+        expect(draws.at(-1)!.opening.settled).toBe(false)
+        pointerDown()
+        pointerUp()
+        runFrame()
+        expect(draws.at(-1)!.opening).toMatchObject({ reel: 0, fly: 0, settled: true })
+        act(() => root.unmount())
+        root = createRoot(container)
+        delete document.documentElement.dataset.roomOpened // the next mount opens again
+      }
+    })
+
+    it('scrubs on a vertical drag too: dragging up goes into the room', async () => {
+      loadedOnHome()
+      await mount()
+      runFrames(holdFrames)
+      pointerDown()
+      canvas().dispatchEvent(
+        Object.assign(new MouseEvent('pointermove', { clientY: -ROOM_TUNING.opening.scrollPx }), {
+          pointerId: 1,
+          isPrimary: true,
+        }),
+      )
+      pointerUp()
+      runFrames(settleFrames)
+      expect(draws.at(-1)!.opening.settled).toBe(true)
     })
 
     it('lets a Work be chosen right after a skip, and a click during the opening chooses nothing', async () => {
@@ -347,11 +401,14 @@ describe('the Edit Room on Home', () => {
       expect(window.history.state).toMatchObject({ roomWork: 'b' })
     })
 
-    it('does not play on client navigation to Home: rest from the first frame, no Showreel loaded', async () => {
+    it('does not play on client navigation to Home: rest from the first frame, and a scroll up reaches the Showreel', async () => {
       await mount() // no document load on Home: the page was reached by a client navigation
       runFrame()
       expect(draws[0]!.opening.settled).toBe(true)
-      expect(renderer.create.mock.calls[0]![4]).toBeNull()
+      expect(renderer.create.mock.calls[0]![4]).toBe(showreel.src)
+      wheel(-1e6)
+      runFrames(settleFrames)
+      expect(draws.at(-1)!.opening).toMatchObject({ reel: 1, fly: 1, settled: false })
     })
 
     it('does not play a second time in the same document', async () => {
@@ -373,7 +430,6 @@ describe('the Edit Room on Home', () => {
       runFrame()
       expect(draws[0]!.opening.settled).toBe(true)
       expect(draws[0]!.progress).toBeCloseTo(stopForPlace(2, false).progress, 5)
-      expect(renderer.create.mock.calls[0]![4]).toBeNull()
     })
 
     it('remembers the Work whose link is followed, for the way back', async () => {

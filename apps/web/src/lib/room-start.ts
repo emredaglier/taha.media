@@ -1,4 +1,4 @@
-import { stopForPlace } from './room-model'
+import { HOLD_PROGRESS, stopForPlace } from './room-model'
 import { ROOM_TUNING } from './room-tuning'
 
 /**
@@ -21,7 +21,8 @@ export type RoomStartFacts = {
 export function roomStart({ opensOnHome, firstRoom, remembered, phone }: RoomStartFacts) {
   if (remembered !== null)
     return { opening: false, progress: stopForPlace(remembered, phone).progress }
-  return { opening: opensOnHome && firstRoom, progress: 0 }
+  const opening = opensOnHome && firstRoom
+  return { opening, progress: opening ? HOLD_PROGRESS : 0 } // the opening holds on the Showreel (#140)
 }
 
 // ---- the page: what the facts are read from ----
