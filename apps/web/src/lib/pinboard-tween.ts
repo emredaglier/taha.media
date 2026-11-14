@@ -257,11 +257,14 @@ export function createPinboardMoments<S extends MomentSheet>(
   let lastTurn = -Infinity
   /** A hover asked for within the hold; undefined when none waits. */
   let waiting: HoverPick<S> | undefined
+  /** The fade after a leave waits for `release`: the next page is not there yet. */
+  let held = false
 
   const toRest = () => {
     tweens.kill([...board.sheets, board.wall, board.page, board.spot, board.strings, board.fade])
     resetBoard(board)
     waiting = undefined
+    held = false
     onRest()
   }
 
@@ -280,6 +283,9 @@ export function createPinboardMoments<S extends MomentSheet>(
       tweens.to(board.spot, { x: pick.x, y: pick.y, a: 1 }, { duration: 0.5, ease: 'power3.out' })
     } else tweens.to(board.spot, { a: 0 }, { duration: 0.5 })
   }
+
+  const fade = () =>
+    tweens.to(board.fade, { o: 0 }, { duration: 0.22, ease: 'power1.out', onComplete: toRest })
 
   return {
     /** Pins the page to the board and brings the sheets in; reverses a close from where it is. Does nothing during a leave. */
@@ -345,9 +351,10 @@ export function createPinboardMoments<S extends MomentSheet>(
     /**
      * Flies `sheet` off its pin at the view while the rest falls and the strings and light fade;
      * `onArrive` runs once when its picture fills the view (within 900 ms), then the board fades
-     * out to rest. Only on an open board; a second leave is ignored.
+     * out to rest. Only on an open board; a second leave is ignored. When `onArrive` returns true
+     * the sheet keeps covering the view until `release()`, so a slow route change shows no old page.
      */
-    leave(sheet: S, onArrive: () => void) {
+    leave(sheet: S, onArrive: () => boolean | void) {
       if (board.leaving || !board.open) return
       board.leaving = sheet
       board.hovered = sheet
@@ -367,18 +374,21 @@ export function createPinboardMoments<S extends MomentSheet>(
             board.open = false
             tweens.kill(board.page)
             board.page.t = 0
-            onArrive()
+            held = onArrive() === true
             board.fading = true
-            tweens.to(
-              board.fade,
-              { o: 0 },
-              { duration: 0.22, ease: 'power1.out', onComplete: toRest },
-            )
+            if (!held) fade()
           },
         },
       )
       tweens.to(board.strings, { o: 0 }, { duration: 0.3 })
       tweens.to(board.spot, { a: 0 }, { duration: 0.3 })
+    },
+
+    /** Lets a held fade run (the next page is there, or has given up). */
+    release() {
+      if (!held) return
+      held = false
+      fade()
     },
 
     /** Moves the board to `now` (ms, the clock's timeline). */

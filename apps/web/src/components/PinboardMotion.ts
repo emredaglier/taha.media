@@ -39,6 +39,9 @@ const motionAllowed = () =>
 type Sheet = MomentSheet &
   HingeSheet & { el: HTMLElement; sd: HTMLElement; link: number; z: string; zNow: string }
 
+/** How long a flown sheet waits for the next page before the board fades anyway. */
+const HOLD_MS = 4000
+
 /** What the loop writes on a sheet or its shadow; removed again at rest, so the static board shows. */
 const SHEET_STYLES = ['transform', 'opacity', 'will-change', 'height']
 
@@ -93,6 +96,8 @@ function createPinboardMotion(details: HTMLDetailsElement, onRest: () => void) {
   const listeners = new AbortController()
   let pointerSeen = false
   let hoverTimer: ReturnType<typeof setTimeout> | undefined
+  /** When a held leave gives up waiting for the route (ms on the loop's clock); 0 when none waits. */
+  let holdUntil = 0
 
   let L: Layout = layoutBoard(1, 1, PINBOARD_LABELS)
   let vw = 1
@@ -206,6 +211,7 @@ function createPinboardMotion(details: HTMLDetailsElement, onRest: () => void) {
     const dt = (now - last) / 1000
     last = now
     moments.step(now)
+    if (holdUntil && now >= holdUntil) release()
     if (rested) {
       stop()
       clear()
@@ -232,6 +238,11 @@ function createPinboardMotion(details: HTMLDetailsElement, onRest: () => void) {
     removeEventListener('resize', layout)
     listeners.abort()
     clearTimeout(hoverTimer)
+  }
+
+  function release() {
+    holdUntil = 0
+    moments.release()
   }
 
   // SiteMenu's scroll lock ends with `open`; this one holds it until the close has ended, so the
@@ -316,12 +327,19 @@ function createPinboardMotion(details: HTMLDetailsElement, onRest: () => void) {
 
   return {
     /** Takes a plain click on sheet `index`: flies it at the view, then `onArrive`. True once a leave owns the click (a second click included). */
-    leave(index: number, onArrive: () => void) {
+    leave(index: number, onArrive: () => boolean) {
       if (board.leaving) return true
       if (!board.open) return false
-      moments.leave(sheets[index]!, onArrive)
+      moments.leave(sheets[index]!, () => {
+        const hold = onArrive()
+        // shortcut: a route that takes longer than this fades the board anyway, or a failed one would stick it.
+        if (hold) holdUntil = performance.now() + HOLD_MS
+        return hold
+      })
       return true
     },
+    /** The route has changed: the held board fades out. */
+    release,
     get leaving() {
       return board.leaving !== null
     },
@@ -366,13 +384,7 @@ function createPinboardMotion(details: HTMLDetailsElement, onRest: () => void) {
  * one and the `<details>` closes at once.
  */
 export function usePinboardMotion(open: boolean, detailsRef: RefObject<HTMLDetailsElement | null>) {
-  // `useRouter` throws outside the app router (a test that renders the header alone); then a
-  // flight only closes the menu. The same branch every render, so the hook order holds.
-  let router: ReturnType<typeof useRouter> | null = null
-  try {
-    // eslint-disable-next-line react-hooks/rules-of-hooks -- it only throws, never skips a hook
-    router = useRouter()
-  } catch {}
+  const router = useRouter()
   const pathname = usePathname()
   const motion = useRef<ReturnType<typeof createPinboardMotion> | null>(null)
 
@@ -391,6 +403,11 @@ export function usePinboardMotion(open: boolean, detailsRef: RefObject<HTMLDetai
     else details.open = false // also resets a native toggle made before hydration
   }, [open, detailsRef])
 
+  // The next page is there: a held board fades out over it.
+  useEffect(() => {
+    motion.current?.release()
+  }, [pathname])
+
   useEffect(
     () => () => {
       motion.current?.dispose()
@@ -408,8 +425,11 @@ export function usePinboardMotion(open: boolean, detailsRef: RefObject<HTMLDetai
     follow(event: MouseEvent, href: string, index: number) {
       const plain =
         event.button === 0 && !(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+      // The page we are on has no route change to wait for.
       const go = () => {
-        if (pathname !== href) router?.push(href)
+        if (pathname === href) return false
+        router.push(href)
+        return true
       }
       if (plain && motion.current?.leave(index, go)) event.preventDefault()
     },

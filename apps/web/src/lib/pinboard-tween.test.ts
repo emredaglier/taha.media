@@ -468,7 +468,9 @@ describe('leave', () => {
       const rig = opened(ms)
       const picked = rig.prints[2]!
       let arrived = 0
-      rig.moments.leave(picked, () => arrived++)
+      rig.moments.leave(picked, () => {
+        arrived++
+      })
       expect(rig.board.leaving).toBe(picked)
       rig.run(900)
       expect(arrived).toBe(1)
@@ -485,13 +487,17 @@ describe('leave', () => {
     const rig = opened()
     const [first, second] = rig.prints
     let arrived = 0
-    rig.moments.leave(first!, () => arrived++)
+    rig.moments.leave(first!, () => {
+      arrived++
+    })
     rig.run(200)
     const before = drawn(rig)
     rig.moments.close()
     rig.moments.hover({ sheet: second!, x: 0, y: 0 })
     rig.moments.open()
-    rig.moments.leave(second!, () => (arrived += 10))
+    rig.moments.leave(second!, () => {
+      arrived += 10
+    })
     rig.at(rig.now())
     expectStill(rig, before)
     expect(rig.board.open).toBe(true)
@@ -512,6 +518,29 @@ describe('leave', () => {
     expect(rig.rests()).toBe(1)
   })
 
+  it('holds the flown sheet over the view until release when the call back asks', () => {
+    const rig = opened()
+    rig.moments.leave(rig.prints[0]!, () => true)
+    rig.run(3000)
+    expect(rig.board.fade.o).toBe(1)
+    expect(rig.prints[0]!.fl).toBe(1)
+    expect(rig.rests()).toBe(0)
+    rig.moments.release()
+    rig.run(300)
+    expectClosed(rig)
+    expect(rig.rests()).toBe(1)
+  })
+
+  it('release does nothing when nothing is held', () => {
+    const rig = opened()
+    rig.moments.release()
+    rig.moments.leave(rig.prints[0]!, () => {})
+    rig.run(900)
+    rig.moments.release()
+    rig.run(300)
+    expect(rig.rests()).toBe(1)
+  })
+
   it('an open during the fade cuts it short and opens', () => {
     const rig = opened()
     rig.moments.leave(rig.prints[0]!, () => {})
@@ -526,7 +555,9 @@ describe('leave', () => {
   it('does nothing on a closed board', () => {
     const rig = boardRig()
     let arrived = 0
-    rig.moments.leave(rig.prints[0]!, () => arrived++)
+    rig.moments.leave(rig.prints[0]!, () => {
+      arrived++
+    })
     rig.run(1500)
     expect(arrived).toBe(0)
     expectClosed(rig)
