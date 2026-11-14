@@ -26,7 +26,6 @@ const POUR_ID = 'site-cursor-pour'
 /** The columns' idle top edge sits this far above the box, so the blur never shows a strip at rest. */
 const POUR_TOP = -20
 const POUR_REST = 16
-const SVG = 'http://www.w3.org/2000/svg'
 
 const wanted = () =>
   matchMedia(`${CAN_HOVER} and ${POINTER_FINE}`).matches && !matchMedia(REDUCED_MOTION).matches
@@ -67,7 +66,7 @@ export function SiteCursor() {
       if (count === columns.length) return
       for (const column of columns) column.remove()
       columns = Array.from({ length: count }, (_, index) => {
-        const column = document.createElementNS(SVG, 'rect')
+        const column = document.createElementNS(pour.namespaceURI, 'rect') as SVGRectElement
         column.setAttribute('x', `${index * COLUMN + 1}`)
         column.setAttribute('y', `${POUR_TOP}`)
         column.setAttribute('width', `${COLUMN - 2}`)
