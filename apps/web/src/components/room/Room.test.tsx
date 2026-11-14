@@ -298,6 +298,25 @@ describe('the Edit Room on Home', () => {
       expect(draws.at(-1)!.opening).toMatchObject({ reel: 0, fly: 0, settled: true })
     })
 
+    it("sets the Hero text's variable from the pull-back, 0 at the Showreel and 1 at rest, and removes it on unmount (#141)", async () => {
+      loadedOnHome()
+      await mount()
+      const gone = () => document.documentElement.style.getPropertyValue('--room-hero-gone')
+      runFrame()
+      expect(gone()).toBe('0')
+      runFrames(Math.ceil((OPENING_SECONDS * 1000) / 16) + 10)
+      expect(gone()).toBe('1')
+      act(() => root.unmount())
+      expect(gone()).toBe('')
+      root = createRoot(container)
+    })
+
+    it('has the Hero text gone from the first frame of a rest start (#141)', async () => {
+      await mount()
+      runFrame()
+      expect(document.documentElement.style.getPropertyValue('--room-hero-gone')).toBe('1')
+    })
+
     it('is skipped by a click or tap, which lands on rest and picks no Work itself', async () => {
       loadedOnHome()
       await mount()
