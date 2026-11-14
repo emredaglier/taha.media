@@ -101,6 +101,7 @@ export function Room({
     let pushing = -1 // the Work being pushed into, once a click has picked it; stays set until unmount
     let opened = false
     let focused = -1 // the Work whose link has keyboard focus (#132)
+    let heroGone = NaN // the last `--room-hero-gone` set: the Hero's text leaves as `fly` falls (#141)
 
     let frameId = 0
     let last = 0
@@ -113,6 +114,8 @@ export function Room({
       stepScroll(scroll, dt)
       stepOpening(clock, dt)
       openingAt(openingSeconds(clock, scroll.progress), opening)
+      if (1 - opening.fly !== heroGone)
+        root.style.setProperty('--room-hero-gone', String((heroGone = 1 - opening.fly)))
       input.seconds = now / 1000
       input.dt = dt
       input.progress = scroll.progress
@@ -289,6 +292,7 @@ export function Room({
       renderer.destroy()
       canvas.remove()
       delete root.dataset.home
+      root.style.removeProperty('--room-hero-gone')
       loaded()
     }
   }, [works, showreel, light])

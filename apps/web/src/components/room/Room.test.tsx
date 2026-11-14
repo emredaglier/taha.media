@@ -315,6 +315,28 @@ describe('the Edit Room on Home', () => {
       expect(draws.at(-1)!.progress).toBeCloseTo(0, 3)
     })
 
+    it("sets the Hero text's variable from the pull-back, 0 at the Showreel and 1 at rest, and removes it on unmount (#141)", async () => {
+      loadedOnHome()
+      await mount()
+      const gone = () => document.documentElement.style.getPropertyValue('--room-hero-gone')
+      runFrame()
+      expect(gone()).toBe('0')
+      runFrames(holdFrames)
+      expect(gone()).toBe('0') // the hold
+      wheel(ROOM_TUNING.opening.scrollPx)
+      runFrames(settleFrames)
+      expect(gone()).toBe('1')
+      act(() => root.unmount())
+      expect(gone()).toBe('')
+      root = createRoot(container)
+    })
+
+    it('has the Hero text gone from the first frame of a rest start (#141)', async () => {
+      await mount()
+      runFrame()
+      expect(document.documentElement.style.getPropertyValue('--room-hero-gone')).toBe('1')
+    })
+
     it('scrubs nothing while the intro plays: a wheel before the hold is dropped', async () => {
       loadedOnHome()
       await mount()
