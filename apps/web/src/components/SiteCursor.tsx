@@ -1,6 +1,6 @@
 'use client'
 
-import { Fragment, useEffect, useRef, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useSyncExternalStore } from 'react'
 
 import { cursorTarget } from '../lib/cursor'
 import { CAN_HOVER, POINTER_FINE, REDUCED_MOTION, subscribeToPreferences } from '../lib/loop-mode'
@@ -12,37 +12,21 @@ const BLOT = 150
 const LABEL_MIN_HEIGHT = 90
 const STIFFNESS = 160
 const DAMPING = 0.45
+/** The pour's thickness at the link's top edge. */
 const DRIP_STIFFNESS = 90
 const DRIP_DAMPING = 0.5
-const MELT_ID = 'site-cursor-melt'
-
-/**
- * The Melt bend as a displacement map for the label on a picture: green shifts what is drawn
- * downwards in 24 columns of random strength, fading to none at the rim (128 is no shift).
- */
-function meltMap(): string {
-  const size = 256
-  const canvas = document.createElement('canvas')
-  canvas.width = canvas.height = size
-  const context = canvas.getContext('2d')
-  if (!context) return ''
-  const image = context.createImageData(size, size)
-  const drips = Array.from({ length: 24 }, () => 0.2 + Math.random() * 0.8)
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const u = ((x + 0.5) / size) * 2 - 1
-      const v = ((y + 0.5) / size) * 2 - 1
-      const rim = 1 - (u * u + v * v)
-      const shift = rim <= 0 ? 0 : -drips[Math.floor(((u + 1) / 2) * 24)]! * (1 - u * u) * rim
-      const at = (y * size + x) * 4
-      image.data[at] = 128
-      image.data[at + 1] = 128 + 127 * shift
-      image.data[at + 3] = 255
-    }
-  }
-  context.putImageData(image, 0, 0)
-  return canvas.toDataURL()
-}
+/** Pour: liquid columns this wide fall from the top of a link with a picture or a loop in it. */
+const COLUMN = 12
+/** How far each column reaches from the mouse, in px: a bell curve this wide. */
+const POUR_SPREAD = 55
+/** Loose and slow, so the liquid lags the mouse and drips back up after it. */
+const POUR_STIFFNESS = 25
+const POUR_DAMPING = 0.35
+const POUR_ID = 'site-cursor-pour'
+/** The columns' idle top edge sits this far above the box, so the blur never shows a strip at rest. */
+const POUR_TOP = -20
+const POUR_REST = 16
+const SVG = 'http://www.w3.org/2000/svg'
 
 const wanted = () =>
   matchMedia(`${CAN_HOVER} and ${POINTER_FINE}`).matches && !matchMedia(REDUCED_MOTION).matches
@@ -52,7 +36,8 @@ const real = (event: PointerEvent) => event.isTrusted && event.pointerType === '
 
 /**
  * The site's cursor: a drop on the mouse point that stretches with speed. On a link with a
- * picture or a loop in it, the label melts into the picture at the mouse. On any other link it
+ * picture or a loop in it, liquid pours down from the link's top edge above the mouse and drips
+ * back up after it. On any other link it
  * floods the link with a wobbling blot that inverts what is under it, with the label cut out of
  * it on big links. Decorative. Only for a mouse that hovers and with motion allowed.
  * Mounted from the root layout, outside the page sheet box: a transformed box would carry this
@@ -62,19 +47,39 @@ export function SiteCursor() {
   const enabled = useSyncExternalStore(subscribeToPreferences, wanted, () => false)
   const dropRef = useRef<HTMLDivElement>(null)
   const boxRef = useRef<HTMLDivElement>(null)
-  const filterRef = useRef<SVGFilterElement>(null)
 
   useEffect(() => {
     const drop = dropRef.current
     const box = boxRef.current
-    const filter = filterRef.current
-    if (!enabled || !drop || !box || !filter) return
+    if (!enabled || !drop || !box) return
     const blot = box.firstElementChild as HTMLElement
     const text = blot.firstElementChild as HTMLElement
-    const word = box.lastElementChild as HTMLElement
-    const map = filter.querySelector('feImage')!
-    const bends = [...filter.querySelectorAll('feDisplacementMap')]
-    map.setAttribute('href', meltMap())
+    const liquid = box.lastElementChild as SVGSVGElement
+    const pour = liquid.querySelector('g')!
+    const band = pour.firstElementChild as SVGRectElement
+    let columns: SVGRectElement[] = []
+    let lengths = new Float32Array(0)
+    let speeds = new Float32Array(0)
+    let strengths = new Float32Array(0)
+    // One column per COLUMN px of the link, each with its own random reach.
+    const fit = (width: number) => {
+      const count = Math.ceil(width / COLUMN)
+      if (count === columns.length) return
+      for (const column of columns) column.remove()
+      columns = Array.from({ length: count }, (_, index) => {
+        const column = document.createElementNS(SVG, 'rect')
+        column.setAttribute('x', `${index * COLUMN + 1}`)
+        column.setAttribute('y', `${POUR_TOP}`)
+        column.setAttribute('width', `${COLUMN - 2}`)
+        column.setAttribute('height', `${POUR_REST}`)
+        column.setAttribute('rx', `${COLUMN / 2 - 1}`)
+        pour.append(column)
+        return column
+      })
+      lengths = new Float32Array(count)
+      speeds = new Float32Array(count)
+      strengths = Float32Array.from({ length: count }, () => 0.35 + Math.random() * 0.65)
+    }
     const root = document.documentElement
     let mx = 0
     let my = 0
@@ -90,17 +95,16 @@ export function SiteCursor() {
     let soakV = 0
     let drip = 0
     let dripV = 0
+    let poured = true
     let pressed = false
     let shown = false
-    let wordW = 0
-    let wordH = 0
 
     const frame = (now: number) => {
       const dt = Math.min((now - last) / 1000, 1 / 30)
       last = now
       if (over && !over.isConnected) over = null
       const hit = cursorTarget(over, location.origin)
-      // A link with a picture or a loop in it gets the melting label, not the blot.
+      // A link with a picture or a loop in it gets the pour, not the blot.
       const media = hit !== null && hit.element.querySelector('img, video') !== null
       if (hit) {
         // Read each frame: the page scrolls under a resting mouse.
@@ -115,15 +119,9 @@ export function SiteCursor() {
         // Text is written only when it changes, so the frame doesn't force a layout.
         const label = !media && at.height > LABEL_MIN_HEIGHT ? hit.label : ''
         if (text.textContent !== label) text.textContent = label
-        if (media && word.textContent !== hit.label) {
-          word.textContent = hit.label
-          wordW = word.offsetWidth
-          wordH = word.offsetHeight
-          // The bend covers the word's own box.
-          for (const part of [map, ...bends]) {
-            part.setAttribute('width', `${wordW}`)
-            part.setAttribute('height', `${wordH}`)
-          }
+        if (media) {
+          fit(at.width)
+          band.setAttribute('width', `${at.width}`)
         }
       }
       // A loose spring: the blot overshoots and wobbles into place.
@@ -139,25 +137,36 @@ export function SiteCursor() {
         Math.abs(target - soak) < 0.001 &&
         Math.abs(soakV) < 0.01 &&
         Math.abs(dripTo - drip) < 0.001 &&
-        Math.abs(dripV) < 0.01
+        Math.abs(dripV) < 0.01 &&
+        poured
       if (at && !hit && soaked) {
         at = null
         box.style.display = 'none'
       }
       if (at) {
         blot.style.transform = `translate(${mx - at.left - BLOT / 2}px,${my - at.top - BLOT / 2}px) scale(${Math.max(0, soak)})`
-        const melted = Math.max(0, drip)
-        word.style.opacity = `${Math.min(1, melted * 1.5)}`
-        if (melted > 0) {
-          word.style.transform = `translate(${mx - at.left - wordW / 2}px,${my - at.top - 80}px)`
-          // The bend breathes a little.
-          bends.forEach((bend, channel) =>
-            bend.setAttribute(
-              'scale',
-              `${(40 + melted * 110 + Math.sin(now / 500) * 15) * (1 + (channel - 1) * 0.12)}`,
-            ),
-          )
-        }
+        const wet = Math.max(0, drip)
+        const reach = at.height * 0.8
+        const x = mx - at.left
+        poured = true
+        columns.forEach((column, index) => {
+          const want = media
+            ? reach *
+              Math.exp(-(((index * COLUMN + COLUMN / 2 - x) / POUR_SPREAD) ** 2)) *
+              strengths[index]! *
+              // Each column sways a little, so the liquid never freezes.
+              (0.85 + 0.15 * Math.sin(now / 600 + index))
+            : 0
+          speeds[index]! +=
+            ((want - lengths[index]!) * POUR_STIFFNESS -
+              speeds[index]! * 2 * Math.sqrt(POUR_STIFFNESS) * POUR_DAMPING) *
+            dt
+          lengths[index] = Math.max(0, lengths[index]! + speeds[index]! * dt)
+          column.setAttribute('height', `${POUR_REST + lengths[index]!}`)
+          if (lengths[index]! > 0.5) poured = false
+        })
+        band.setAttribute('height', `${POUR_REST + wet * 8}`)
+        liquid.style.display = media || !poured || wet > 0.01 ? '' : 'none'
       }
       drop.style.opacity = shown && (!hit || media) ? '1' : '0'
       if (dt > 0) {
@@ -165,7 +174,7 @@ export function SiteCursor() {
         vy += ((my - lastY) / dt - vy) * 0.25
       }
       const speed = Math.hypot(vx, vy)
-      // The melting label breathes, so the loop runs on while it is up.
+      // The pour sways, so the loop runs on while it is up.
       const resting = mx === lastX && my === lastY && speed < 20 && soaked && !media
       lastX = mx
       lastY = my
@@ -254,50 +263,24 @@ export function SiteCursor() {
         <div className="absolute top-0 left-0 grid h-[150px] w-[150px] animate-[site-cursor-wobble_5s_linear_infinite] place-items-center bg-text">
           <span className="font-serif text-[38px] leading-none font-normal text-background" />
         </div>
-        <div
-          style={{ opacity: 0, filter: `url(#${MELT_ID})` }}
-          className="absolute top-0 left-0 px-6 pt-10 pb-[90px] font-serif text-[96px] leading-none whitespace-nowrap text-text"
-        />
+        {/* Blur then a hard alpha cut fuses the columns into one liquid. */}
+        <svg className="absolute inset-0 h-full w-full" style={{ display: 'none' }}>
+          <filter
+            id={POUR_ID}
+            x="-10%"
+            y="-10%"
+            width="120%"
+            height="140%"
+            colorInterpolationFilters="sRGB"
+          >
+            <feGaussianBlur stdDeviation="6" />
+            <feColorMatrix values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -7" />
+          </filter>
+          <g filter={`url(#${POUR_ID})`} className="fill-text">
+            <rect x="0" y={POUR_TOP} height={POUR_REST} />
+          </g>
+        </svg>
       </div>
-      {/* Bends the label by the Melt map, red, green and blue each a little differently. */}
-      <svg width="0" height="0" aria-hidden="true" className="absolute">
-        <filter
-          ref={filterRef}
-          id={MELT_ID}
-          x="0"
-          y="0"
-          width="100%"
-          height="100%"
-          primitiveUnits="userSpaceOnUse"
-          colorInterpolationFilters="sRGB"
-        >
-          <feImage x="0" y="0" result="map" preserveAspectRatio="none" />
-          {[
-            '1 0 0 0 0  0 0 0 0 0  0 0 0 0 0',
-            '0 0 0 0 0  0 1 0 0 0  0 0 0 0 0',
-            '0 0 0 0 0  0 0 0 0 0  0 0 1 0 0',
-          ].map((channel, index) => (
-            <Fragment key={channel}>
-              <feDisplacementMap
-                in="SourceGraphic"
-                in2="map"
-                x="0"
-                y="0"
-                xChannelSelector="R"
-                yChannelSelector="G"
-                result={`bent${index}`}
-              />
-              <feColorMatrix
-                in={`bent${index}`}
-                values={`${channel}  0 0 0 1 0`}
-                result={`ink${index}`}
-              />
-            </Fragment>
-          ))}
-          <feBlend mode="screen" in="ink0" in2="ink1" result="two" />
-          <feBlend mode="screen" in="two" in2="ink2" />
-        </filter>
-      </svg>
     </>
   )
 }

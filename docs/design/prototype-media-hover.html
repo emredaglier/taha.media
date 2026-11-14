@@ -1,0 +1,364 @@
+<!doctype html>
+<!--
+  THROWAWAY prototype: ten hover animations for a link with a picture or a loop, in place of the melting label.
+  The drop stays; other links keep the Soak blot. The WebGL picture melt is not drawn here.
+  Keys 0-9 or the bar bottom-left switch. Hover the cards; move, rest, leave.
+  0 None      no overlay: only the drop (and, on the site, the WebGL melt).
+  1 Iris      an old-film iris closes in on the mouse and bounces; the rest of the frame goes black.
+  2 Grade     the frame drains to grey and dims; a soft pool of full colour follows the mouse.
+  3 Fill      the card fills with liquid up to the mouse; moving sloshes it.
+  4 Slit      slit-scan: the column of pixels under the mouse stretches out to the edge the way you move.
+  5 Tune      the TV tunes in: the frame rolls once, colours split then settle, a scan bar keeps rolling.
+  6 Halftone  print dots: the picture turns into a halftone screen around the mouse.
+  7 Pour      liquid pours down from the top edge above the mouse and drips back up when you leave.
+  8 Channels  red, green and blue trail the mouse at different speeds and snap back together at rest.
+  9 Sheet     the frame zooms out into a contact sheet of itself around the mouse.
+  FAKE placeholders: card titles, pictures (line patterns and colour fields; the last card is a fake loop).
+  Built for Chrome; Safari not checked. Reduced motion not handled (prototype only).
+-->
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Taha — media hover prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@100..900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#000;--t:#ededed;--mu:#8f8f8f;--rs:#1a1a1a;--ph:#2a2a2a;
+  --serif:'Instrument Serif',Georgia,'Times New Roman',serif;
+  --sans:'Geist',system-ui,-apple-system,'Segoe UI',sans-serif;
+}
+*{box-sizing:border-box;margin:0}
+html{background:var(--bg);color:var(--t);font-family:var(--sans)}
+html,html *{cursor:none!important}
+body{padding:0 48px 160px}
+header{display:flex;justify-content:space-between;align-items:baseline;padding:28px 0 48px}
+header b{font-size:18px;letter-spacing:-.02em}
+#about{max-width:28em;text-align:right;color:var(--mu);font-size:14px;line-height:1.45}
+#about strong{display:block;color:var(--t);font:400 28px/1.1 var(--serif);margin-bottom:4px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.card{display:block;color:inherit;text-decoration:none}
+.card:nth-child(1){--pic:repeating-linear-gradient(90deg,#ededed 0 2px,#111 2px 14px)}
+.card:nth-child(2){--pic:radial-gradient(circle at 30% 40%,#c2371f,transparent 55%),radial-gradient(circle at 75% 70%,#1f4fc2,transparent 60%),#0d0d0d}
+.card:nth-child(3){--pic:repeating-radial-gradient(circle at 50% 50%,#ededed 0 2px,#111 2px 16px)}
+.card:nth-child(4){--pic:linear-gradient(160deg,#e9d8b4,#6b4a2b 60%,#1a120b)}
+.card:nth-child(5){--pic:repeating-linear-gradient(0deg,#ededed 0 2px,transparent 2px 22px),repeating-linear-gradient(90deg,#ededed 0 2px,#111 2px 22px)}
+.card:nth-child(6){--pic:linear-gradient(90deg,#0b3,#09c,#c0c,#f60,#0b3);--size:400% 100%}
+.card:nth-child(6) .pic,.card:nth-child(6) .copy{animation:loop 6s linear infinite}
+@keyframes loop{to{background-position:400% 0}}
+.pic{position:relative;display:block;width:100%;aspect-ratio:16/10;overflow:hidden;isolation:isolate}
+.pic,.copy{background:var(--pic);background-size:var(--size,auto)}
+.layer,.copy,.under,.top{position:absolute;inset:0}
+.layer,.under,.top,.over{display:none}
+.over{position:absolute;inset:0;width:100%;height:100%;mix-blend-mode:difference}
+.over path,.over rect{fill:var(--t)}
+.card h2{font-family:var(--serif);font-weight:400;font-size:22px;margin-top:12px;display:flex;justify-content:space-between}
+.card h2 span{font-family:var(--sans);font-size:14px;color:var(--mu)}
+
+#dot{position:fixed;left:0;top:0;width:14px;height:14px;margin:-7px;border-radius:50%;background:var(--t);
+  mix-blend-mode:difference;pointer-events:none;z-index:50}
+#bar{position:fixed;left:16px;bottom:16px;z-index:200;display:flex;flex-wrap:wrap;gap:6px;font:12px var(--sans)}
+#bar button{font:inherit;color:var(--mu);background:var(--rs);border:1px solid var(--ph);padding:6px 10px}
+#bar button[aria-pressed=true]{color:#000;background:var(--t)}
+</style>
+</head>
+<body>
+<header><b>Taha</b><p id="about"></p></header>
+<main class="grid">
+  <a class="card" href="#"><span class="pic"></span><h2>Kırmızı Oda<span>2026</span></h2></a>
+  <a class="card" href="#"><span class="pic"></span><h2>Gece Yayını<span>2025</span></h2></a>
+  <a class="card" href="#"><span class="pic"></span><h2>Son Kare<span>2025</span></h2></a>
+  <a class="card" href="#"><span class="pic"></span><h2>Çöl Işığı<span>2024</span></h2></a>
+  <a class="card" href="#"><span class="pic"></span><h2>Ses Testi<span>2024</span></h2></a>
+  <a class="card" href="#"><span class="pic"></span><h2>Showreel<span>loop</span></h2></a>
+</main>
+<div id="dot"></div>
+<nav id="bar"></nav>
+
+<svg width="0" height="0" style="position:absolute">
+  <!-- Tune: red left, blue right, by a few px. -->
+  <filter id="f-split" x="-5%" y="0" width="110%" height="100%" color-interpolation-filters="sRGB">
+    <feColorMatrix in="SourceGraphic" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="r"/>
+    <feOffset data-shift="-1" in="r" result="r2"/>
+    <feColorMatrix in="SourceGraphic" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" result="g"/>
+    <feColorMatrix in="SourceGraphic" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" result="b"/>
+    <feOffset data-shift="1" in="b" result="b2"/>
+    <feBlend mode="screen" in="r2" in2="g" result="rg"/>
+    <feBlend mode="screen" in="rg" in2="b2"/>
+  </filter>
+  <!-- Channels: one colour each. -->
+  <filter id="f-r" color-interpolation-filters="sRGB"><feColorMatrix values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"/></filter>
+  <filter id="f-g" color-interpolation-filters="sRGB"><feColorMatrix values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0"/></filter>
+  <filter id="f-b" color-interpolation-filters="sRGB"><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0"/></filter>
+  <!-- Halftone: grey + a tiled dot cell, then a hard threshold: bright areas give big dots. -->
+  <filter id="f-dots" x="0" y="0" width="100%" height="100%" primitiveUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+    <feColorMatrix in="SourceGraphic" values=".3 .59 .11 0 0  .3 .59 .11 0 0  .3 .59 .11 0 0  0 0 0 0 1" result="lum"/>
+    <feImage id="dot-cell" x="0" y="0" width="8" height="8" result="cell"/>
+    <feTile in="cell" result="dots"/>
+    <feComposite id="dot-bias" in="lum" in2="dots" operator="arithmetic" k1="0" k2="1" k3="1" k4="-0.5"/>
+    <feComponentTransfer>
+      <feFuncR type="discrete" tableValues="0 1"/>
+      <feFuncG type="discrete" tableValues="0 1"/>
+      <feFuncB type="discrete" tableValues="0 1"/>
+    </feComponentTransfer>
+  </filter>
+  <!-- Pour: blur + hard alpha fuses the columns into one liquid. -->
+  <filter id="f-pour" x="-10%" y="-10%" width="120%" height="140%" color-interpolation-filters="sRGB">
+    <feGaussianBlur stdDeviation="6"/>
+    <feColorMatrix values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -7"/>
+  </filter>
+</svg>
+
+<script>
+const LOOKS = [
+  ['none', 'None', 'No overlay: only the drop (and, on the site, the WebGL melt).'],
+  ['iris', 'Iris', 'An old-film iris closes in on the mouse and bounces; the rest of the frame goes black.'],
+  ['grade', 'Grade', 'The frame drains to grey and dims; a soft pool of full colour follows the mouse.'],
+  ['fill', 'Fill', 'The card fills with liquid up to the mouse; moving sloshes it.'],
+  ['slit', 'Slit', 'Slit-scan: the column of pixels under the mouse stretches out to the edge the way you move.'],
+  ['tune', 'Tune', 'The TV tunes in: the frame rolls once, colours split then settle, a scan bar keeps rolling.'],
+  ['halftone', 'Halftone', 'Print dots: the picture turns into a halftone screen around the mouse.'],
+  ['pour', 'Pour', 'Liquid pours down from the top edge above the mouse and drips back up when you leave.'],
+  ['channels', 'Channels', 'Red, green and blue trail the mouse at different speeds and snap back together at rest.'],
+  ['sheet', 'Sheet', 'The frame zooms out into a contact sheet of itself around the mouse.'],
+]
+const NS = 'http://www.w3.org/2000/svg'
+const dot = document.getElementById('dot')
+const about = document.getElementById('about')
+const bar = document.getElementById('bar')
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
+const mask = (el, value) => { el.style.webkitMask = el.style.mask = value }
+
+document.getElementById('dot-cell').setAttribute('href', 'data:image/svg+xml,' + encodeURIComponent(
+  "<svg xmlns='http://www.w3.org/2000/svg' width='8' height='8'><defs><radialGradient id='g'><stop offset='0' stop-color='white'/><stop offset='1' stop-color='black'/></radialGradient></defs><rect width='8' height='8' fill='url(#g)'/></svg>"))
+
+// Each picture gets: a black base, three copies of itself, a top sheet and an SVG for liquids.
+for (const pic of document.querySelectorAll('.pic')) {
+  const make = (cls) => Object.assign(document.createElement('div'), { className: cls })
+  const under = make('under')
+  const layers = [0, 1, 2].map(() => { const layer = make('layer'); layer.append(make('copy')); return layer })
+  const top = make('top')
+  const over = document.createElementNS(NS, 'svg')
+  over.classList.add('over')
+  const path = document.createElementNS(NS, 'path')
+  const goo = document.createElementNS(NS, 'g')
+  goo.setAttribute('filter', 'url(#f-pour)')
+  over.append(path, goo)
+  pic.append(under, ...layers, top, over)
+  pic.fx = { under, layers, copies: layers.map((l) => l.firstChild), top, over, path, goo }
+}
+
+function reset(pic) {
+  const fx = pic.fx
+  for (const el of [fx.under, fx.top, fx.over, ...fx.layers, ...fx.copies]) el.style.cssText = ''
+  fx.path.removeAttribute('d')
+  fx.goo.replaceChildren()
+}
+
+let look = 0
+let mx = innerWidth / 2, my = innerHeight / 2, lastX = mx, lastY = my, vx = 0, vy = 0
+let hovered = null, active = null, m = 0, mv = 0, since = 0, last = performance.now(), st = {}
+
+function start(pic) {
+  const fx = pic.fx
+  const { width: w, height: h } = pic.getBoundingClientRect()
+  st = { w, h, dir: 1 }
+  const id = LOOKS[look][0]
+  const show = (...els) => els.forEach((el) => (el.style.display = 'block'))
+  if (id === 'iris') { show(fx.top); fx.top.style.background = '#000' }
+  if (id === 'grade') { show(fx.layers[0], fx.layers[1]); fx.copies[1].style.filter = 'saturate(1.25) contrast(1.08)' }
+  if (id === 'fill') {
+    show(fx.over)
+    st.n = 48; st.hs = new Float32Array(st.n); st.vs = new Float32Array(st.n); st.level = h
+  }
+  if (id === 'slit') { show(fx.layers[0]); fx.copies[0].style.transform = 'scaleX(800)' }
+  if (id === 'tune') {
+    show(fx.layers[0], fx.layers[1], fx.top)
+    fx.copies[0].style.filter = fx.copies[1].style.filter = 'url(#f-split)'
+  }
+  if (id === 'halftone') { show(fx.layers[0]); fx.copies[0].style.filter = 'url(#f-dots)' }
+  if (id === 'pour') {
+    show(fx.over)
+    st.n = Math.ceil(w / 12); st.len = new Float32Array(st.n); st.vel = new Float32Array(st.n)
+    st.r = Float32Array.from({ length: st.n }, () => 0.35 + Math.random() * 0.65)
+    st.rects = Array.from({ length: st.n }, (_, i) => {
+      const rect = document.createElementNS(NS, 'rect')
+      rect.setAttribute('x', i * 12 + 1)
+      rect.setAttribute('width', 10)
+      rect.setAttribute('rx', 5)
+      rect.setAttribute('y', -14)
+      fx.goo.append(rect)
+      return rect
+    })
+    const band = document.createElementNS(NS, 'rect')
+    band.setAttribute('x', 0); band.setAttribute('y', -14); band.setAttribute('width', w)
+    fx.goo.append(band)
+    st.band = band
+  }
+  if (id === 'channels') {
+    show(fx.under, ...fx.layers)
+    fx.under.style.background = '#000'
+    ;['r', 'g', 'b'].forEach((c, i) => {
+      fx.layers[i].style.mixBlendMode = 'screen'
+      fx.copies[i].style.filter = `url(#f-${c})`
+    })
+    st.p = [0, 1, 2].map(() => null)
+  }
+  if (id === 'sheet') { show(fx.layers[0], fx.top) }
+}
+
+/** One frame of the picked look; returns true while it still has motion to finish after the mouse leaves. */
+function step(pic, now, dt) {
+  const fx = pic.fx
+  const { w, h } = st
+  const rect = pic.getBoundingClientRect()
+  const lx = mx - rect.left, ly = my - rect.top
+  const on = hovered === pic
+  const k = Math.max(0, m)
+  const rest = on ? Math.min((now - since) / 1000, 6) : 0
+  const speed = Math.hypot(vx, vy)
+  const id = LOOKS[look][0]
+
+  if (id === 'iris') {
+    const r = Math.max(0, 70 + (1 - m) * Math.hypot(w, h))
+    fx.top.style.opacity = 0.94
+    mask(fx.top, `radial-gradient(circle at ${lx}px ${ly}px, transparent ${r}px, #000 ${r + 1.5}px)`)
+  } else if (id === 'grade') {
+    const kk = clamp(m, 0, 1)
+    fx.copies[0].style.filter = `grayscale(${kk}) brightness(${1 - 0.35 * kk})`
+    const R = 140 * k
+    mask(fx.layers[1], `radial-gradient(circle at ${lx}px ${ly}px, #000 ${R * 0.55}px, transparent ${R}px)`)
+  } else if (id === 'fill') {
+    const { n, hs, vs } = st
+    if (on) st.level += (clamp(ly, 0, h) - st.level) * Math.min(1, dt * 6)
+    const i0 = Math.floor((lx / w) * n)
+    if (on && i0 > 0 && i0 < n - 1) {
+      vs[i0] += clamp(vy * 0.04, -30, 30)
+      vs[i0 - 1] += clamp(vx * 0.02, -20, 20)
+      vs[i0 + 1] -= clamp(vx * 0.02, -20, 20)
+    }
+    for (let s = 0; s < 2; s++) {
+      const d = dt / 2
+      for (let i = 0; i < n; i++) {
+        const lap = hs[Math.max(0, i - 1)] + hs[Math.min(n - 1, i + 1)] - 2 * hs[i]
+        vs[i] += (900 * lap - 40 * hs[i] - 3 * vs[i]) * d
+      }
+      for (let i = 0; i < n; i++) hs[i] = clamp(hs[i] + vs[i] * d, -40, 40)
+    }
+    const y = h - (h - st.level) * k
+    let d = `M0 ${h + 2}`
+    for (let i = 0; i < n; i++) d += ` L${((i / (n - 1)) * w).toFixed(1)} ${(y + hs[i] * k).toFixed(1)}`
+    fx.path.setAttribute('d', `${d} L${w} ${h + 2} Z`)
+  } else if (id === 'slit') {
+    if (Math.abs(vx) > 60) st.dir = Math.sign(vx)
+    const reach = w * k
+    fx.layers[0].style.clipPath = st.dir > 0
+      ? `inset(0 ${Math.max(0, w - lx - reach)}px 0 ${lx}px)`
+      : `inset(0 ${w - lx}px 0 ${Math.max(0, lx - reach)}px)`
+    fx.copies[0].style.transformOrigin = `${lx}px 50%`
+  } else if (id === 'tune') {
+    const off = (1 - m) * h
+    fx.copies[0].style.transform = `translateY(${off}px)`
+    fx.copies[1].style.transform = `translateY(${off - h}px)`
+    const split = 2 + Math.abs(1 - m) * 14 + Math.min(speed / 120, 8)
+    document.querySelectorAll('#f-split [data-shift]').forEach((o) => o.setAttribute('dx', o.dataset.shift * split))
+    const y = ((now / 6) % (h + 120)) - 60
+    fx.top.style.opacity = clamp(m, 0, 1)
+    fx.top.style.background = `linear-gradient(to bottom, transparent ${y - 50}px, rgb(255 255 255/.14) ${y}px, transparent ${y + 50}px), repeating-linear-gradient(to bottom, rgb(0 0 0/.3) 0 1px, transparent 1px 3px)`
+  } else if (id === 'halftone') {
+    const R = 170 * k
+    mask(fx.layers[0], `radial-gradient(circle at ${lx}px ${ly}px, #000 ${R * 0.6}px, transparent ${R}px)`)
+    document.getElementById('dot-bias').setAttribute('k4', -0.5 - (1 - clamp(m, 0, 1)) * 0.5)
+  } else if (id === 'pour') {
+    let busy = false
+    const max = h * 0.8
+    for (let i = 0; i < st.n; i++) {
+      const x = i * 12 + 6
+      const want = on ? max * Math.exp(-(((x - lx) / 55) ** 2)) * st.r[i] * (0.85 + 0.15 * Math.sin(now / 600 + i)) : 0
+      st.vel[i] += ((want - st.len[i]) * 25 - st.vel[i] * 2 * 5 * 0.35) * dt
+      st.len[i] = Math.max(0, st.len[i] + st.vel[i] * dt)
+      st.rects[i].setAttribute('height', 14 + st.len[i])
+      if (st.len[i] > 1) busy = true
+    }
+    st.band.setAttribute('height', 14 + 6 * k)
+    return busy
+  } else if (id === 'channels') {
+    const rates = [18, 9, 4.5]
+    let busy = false
+    st.p.forEach((p, i) => {
+      if (!p) p = st.p[i] = [lx, ly]
+      p[0] += (lx - p[0]) * Math.min(1, rates[i] * dt)
+      p[1] += (ly - p[1]) * Math.min(1, rates[i] * dt)
+      const ox = clamp(p[0] - lx, -50, 50) * 0.35, oy = clamp(p[1] - ly, -50, 50) * 0.35
+      fx.copies[i].style.transform = `translate(${ox}px,${oy}px)`
+      if (Math.hypot(ox, oy) > 0.5) busy = true
+    })
+    return busy
+  } else if (id === 'sheet') {
+    const n = 1 + 2 * k
+    const tw = w / n, th = h / n
+    const pos = `${lx - lx / n}px ${ly - ly / n}px`
+    Object.assign(fx.copies[0].style, { backgroundSize: `${tw}px ${th}px`, backgroundPosition: pos, animation: 'none' })
+    Object.assign(fx.top.style, {
+      background: 'linear-gradient(90deg,#000 0 2px,transparent 2px),linear-gradient(#000 0 2px,transparent 2px)',
+      backgroundSize: `${tw}px ${th}px`, backgroundPosition: pos, opacity: clamp(k * 1.5, 0, 1),
+    })
+  }
+  return false
+}
+
+function pick(index) {
+  look = index
+  const [, name, line] = LOOKS[index]
+  about.innerHTML = `<strong>${index} ${name}</strong>${line}`
+  bar.querySelectorAll('button').forEach((button, i) => button.setAttribute('aria-pressed', i === index))
+  if (active) { reset(active); active = null }
+}
+LOOKS.forEach(([, name], index) => {
+  const button = document.createElement('button')
+  button.textContent = `${index} ${name}`
+  button.onclick = () => pick(index)
+  bar.append(button)
+})
+addEventListener('keydown', (event) => { if (/^[0-9]$/.test(event.key)) pick(Number(event.key)) })
+addEventListener('pointermove', (event) => {
+  mx = event.clientX
+  my = event.clientY
+  hovered = event.target.closest?.('.card')?.querySelector('.pic') ?? null
+})
+
+function frame(now) {
+  const dt = Math.min((now - last) / 1000, 1 / 30)
+  last = now
+  if (dt > 0) {
+    vx += ((mx - lastX) / dt - vx) * 0.25
+    vy += ((my - lastY) / dt - vy) * 0.25
+  }
+  lastX = mx
+  lastY = my
+  dot.style.transform = `translate(${mx}px,${my}px)`
+
+  if (hovered && hovered !== active) {
+    if (active) reset(active)
+    active = hovered
+    m = mv = 0
+    since = now
+    start(active)
+  }
+  if (active) {
+    const to = hovered === active ? 1 : 0
+    mv += ((to - m) * 90 - mv * 2 * Math.sqrt(90) * 0.5) * dt
+    m += mv * dt
+    const busy = step(active, now, dt)
+    if (!to && Math.abs(m) < 0.005 && Math.abs(mv) < 0.01 && !busy) { reset(active); active = null }
+  }
+  requestAnimationFrame(frame)
+}
+
+pick(0)
+requestAnimationFrame(frame)
+</script>
+</body>
+</html>
