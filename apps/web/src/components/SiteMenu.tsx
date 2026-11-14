@@ -6,7 +6,10 @@ import { type CSSProperties, useEffect, useRef, useState } from 'react'
 
 import { lockScroll, MENU_PANEL_ID, nextFocus } from '../lib/menu-a11y'
 import { legalLink, menuLinks } from '../lib/nav-links'
+import type { MenuMedia } from '../data/menu'
 import { layoutBoard, SHEETS, stringCurve } from '../lib/pinboard-layout'
+import { LoopVideo } from './LoopVideo'
+import { Picture } from './Picture'
 
 /** A sheet's place for CSS (`.pb-s`, `.pb-sd` in globals.css): both views' pin and width, the tilt, the stacking. */
 const place = ({ L, P, rest }: (typeof SHEETS)[number], zIndex?: number) =>
@@ -57,6 +60,27 @@ const Clip = () => (
   </svg>
 )
 
+/** A print's picture, in link order (İşler, Galeri, Hakkımda); a missing one leaves the grey slot. */
+function PrintMedia({ media, link }: { media: MenuMedia; link: number }) {
+  // The frame is about a third of the view wide, a half or more in portrait.
+  const sizes = '(max-aspect-ratio: 100/115) 60vw, 30vw'
+  const picture = [
+    media.isler && { kind: 'loop' as const, video: media.isler },
+    media.galeri,
+    media.hakkimda && { kind: 'image' as const, image: media.hakkimda },
+  ][link]
+  if (!picture) return null
+  return picture.kind === 'loop' ? (
+    <LoopVideo video={picture.video} sizes={sizes} fill />
+  ) : (
+    <Picture
+      image={{ ...picture.image, alt: '' }}
+      sizes={sizes}
+      className="size-full object-cover"
+    />
+  )
+}
+
 /**
  * A native <details>, so without JavaScript it still opens and reaches every link. With JS the
  * toggle is taken over: the page behind can't scroll, focus moves in and is trapped (every Tab
@@ -67,9 +91,10 @@ const Clip = () => (
  * notes, a storyboard strip, and last the legal note with Gizlilik and the © line (`copyright`,
  * rendered by the server): Home has no footer (ADR-0103), so the menu holds them. Gizlilik is a
  * link in the panel, so it is in the focus loop like the rest. Sheets are placed by CSS from
- * `lib/pinboard-layout.ts`; each print's `.pb-pic` is its picture slot.
+ * `lib/pinboard-layout.ts`; each print's `.pb-pic` is its picture slot, filled from `media`
+ * (the first Featured Work's loop, the first Gallery item, the portrait).
  */
-export function SiteMenu({ copyright }: { copyright: string }) {
+export function SiteMenu({ copyright, media }: { copyright: string; media: MenuMedia }) {
   const pathname = usePathname()
   const detailsRef = useRef<HTMLDetailsElement>(null)
   const summaryRef = useRef<HTMLElement>(null)
@@ -172,7 +197,10 @@ export function SiteMenu({ copyright }: { copyright: string }) {
                   {...props}
                 >
                   <i className="pb-pin" />
-                  <span className="pb-pic" />
+                  {/* Decorative: the link's name is its word. */}
+                  <div className="pb-pic" aria-hidden="true">
+                    <PrintMedia media={media} link={sheet.link} />
+                  </div>
                   <span className="pb-tape" style={{ '--n': label.length } as CSSProperties}>
                     <span>{label}</span>
                   </span>
