@@ -26,7 +26,7 @@ import type { ImageRead, VideoRead } from '@taha/cms-config'
 
 import type { MenuMedia } from '../data/menu'
 import { REDUCED_MOTION } from '../lib/loop-mode'
-import { PAGE_SHEET_ID } from '../lib/menu-a11y'
+import { MENU_PANEL_ID, PAGE_SHEET_ID } from '../lib/menu-a11y'
 import { legalLink, menuLinks } from '../lib/nav-links'
 import { setDevice } from '../test/device'
 import { SiteMenu } from './SiteMenu'
@@ -372,7 +372,7 @@ describe('with motion', () => {
       advance(1500)
     })
 
-    it('a plain click prevents the default, closes aria-expanded at once and opens the page within 900 ms', () => {
+    it('a plain click prevents the default, closes aria-expanded at once and opens the page within 900 ms', async () => {
       const event = click(links()[1]!)
       expect(event.defaultPrevented).toBe(true)
       expect(toggle().getAttribute('aria-expanded')).toBe('false')
@@ -384,9 +384,22 @@ describe('with motion', () => {
       expect(router.push).not.toHaveBeenCalled()
       advance(900)
       expect(router.push).toHaveBeenCalledExactlyOnceWith('/galeri')
+      // Until the route changes the flown print keeps covering the view.
+      advance(2000)
+      expect(details().open).toBe(true)
+      expect(container.querySelector<HTMLElement>('#' + MENU_PANEL_ID)!.style.opacity).toBe('1')
+      pathname = '/galeri'
+      await render()
       advance(1500)
       expect(details().open).toBe(false)
       expect(page.getAttribute('style')).toBeNull()
+      expect(frames.size).toBe(0)
+    })
+
+    it('fades the board anyway when the route never changes', () => {
+      click(links()[1]!)
+      advance(900 + 4000 + 500)
+      expect(details().open).toBe(false)
       expect(frames.size).toBe(0)
     })
 
