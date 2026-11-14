@@ -14,7 +14,7 @@ export const ROOM_TUNING = {
   /** The most times a second the loops' frames are painted: the shared atlas is uploaded whole each time (a loop is about 30 fps). */
   loopPaintFps: 30,
   /** Wheel or drag travel (CSS px) that carries the camera along the whole path. */
-  scrollLengthPx: 3200,
+  scrollLengthPx: 6400,
   /** How fast the camera follows the virtual scroll, per second (time-based easing). */
   followRate: 4.5,
   /** The longest frame the follow counts (s), so a stalled tab doesn't jump. */
@@ -82,8 +82,8 @@ export const ROOM_TUNING = {
    * `turnSeconds`, so a wiggle never flashes it more than 3 times a second (WCAG 2.3.1).
    */
   opening: {
-    scrollPx: 1200,
-    scrubSeconds: 2,
+    scrollPx: 6000,
+    scrubSeconds: 3,
     turnSeconds: 2,
     /** The monitor that wakes first, and that the camera starts at: the middle one. */
     place: 1,
