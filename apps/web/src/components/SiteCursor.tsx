@@ -27,6 +27,18 @@ const POUR_ID = 'site-cursor-pour'
 const POUR_TOP = -20
 const POUR_REST = 16
 
+type Pour = {
+  el: HTMLElement
+  group: SVGGElement
+  band: SVGRectElement
+  columns: SVGRectElement[]
+  lengths: Float32Array
+  speeds: Float32Array
+  strengths: Float32Array
+  drip: number
+  dripV: number
+}
+
 const wanted = () =>
   matchMedia(`${CAN_HOVER} and ${POINTER_FINE}`).matches && !matchMedia(REDUCED_MOTION).matches
 
@@ -46,38 +58,54 @@ export function SiteCursor() {
   const enabled = useSyncExternalStore(subscribeToPreferences, wanted, () => false)
   const dropRef = useRef<HTMLDivElement>(null)
   const boxRef = useRef<HTMLDivElement>(null)
+  const pourRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const drop = dropRef.current
     const box = boxRef.current
-    if (!enabled || !drop || !box) return
+    const template = pourRef.current
+    if (!enabled || !drop || !box || !template) return
     const blot = box.firstElementChild as HTMLElement
     const text = blot.firstElementChild as HTMLElement
-    const liquid = box.lastElementChild as SVGSVGElement
-    const pour = liquid.querySelector('g')!
-    const band = pour.firstElementChild as SVGRectElement
-    let columns: SVGRectElement[] = []
-    let lengths = new Float32Array(0)
-    let speeds = new Float32Array(0)
-    let strengths = new Float32Array(0)
+    // One pour per link, so a pour drains where it was while the next link's starts from rest.
+    const pours = new Map<Element, Pour>()
+    const newPour = (): Pour => {
+      const el = template.cloneNode(true) as HTMLElement
+      el.style.display = ''
+      template.after(el)
+      const group = el.querySelector('g')!
+      const band = group.firstElementChild as SVGRectElement
+      const empty = new Float32Array(0)
+      return {
+        el,
+        group,
+        band,
+        columns: [],
+        lengths: empty,
+        speeds: empty,
+        strengths: empty,
+        drip: 0,
+        dripV: 0,
+      }
+    }
     // One column per COLUMN px of the link, each with its own random reach.
-    const fit = (width: number) => {
+    const fit = (pour: Pour, width: number) => {
       const count = Math.ceil(width / COLUMN)
-      if (count === columns.length) return
-      for (const column of columns) column.remove()
-      columns = Array.from({ length: count }, (_, index) => {
-        const column = document.createElementNS(pour.namespaceURI, 'rect') as SVGRectElement
+      if (count === pour.columns.length) return
+      for (const column of pour.columns) column.remove()
+      pour.columns = Array.from({ length: count }, (_, index) => {
+        const column = document.createElementNS(pour.group.namespaceURI, 'rect') as SVGRectElement
         column.setAttribute('x', `${index * COLUMN + 1}`)
         column.setAttribute('y', `${POUR_TOP}`)
         column.setAttribute('width', `${COLUMN - 2}`)
         column.setAttribute('height', `${POUR_REST}`)
         column.setAttribute('rx', `${COLUMN / 2 - 1}`)
-        pour.append(column)
+        pour.group.append(column)
         return column
       })
-      lengths = new Float32Array(count)
-      speeds = new Float32Array(count)
-      strengths = Float32Array.from({ length: count }, () => 0.35 + Math.random() * 0.65)
+      pour.lengths = new Float32Array(count)
+      pour.speeds = new Float32Array(count)
+      pour.strengths = Float32Array.from({ length: count }, () => 0.35 + Math.random() * 0.65)
     }
     const root = document.documentElement
     let mx = 0
@@ -92,9 +120,6 @@ export function SiteCursor() {
     let at: DOMRect | null = null
     let soak = 0
     let soakV = 0
-    let drip = 0
-    let dripV = 0
-    let poured = true
     let pressed = false
     let shown = false
 
@@ -118,38 +143,49 @@ export function SiteCursor() {
         // Text is written only when it changes, so the frame doesn't force a layout.
         const label = !media && at.height > LABEL_MIN_HEIGHT ? hit.label : ''
         if (text.textContent !== label) text.textContent = label
-        if (media) {
-          fit(at.width)
-          band.setAttribute('width', `${at.width}`)
-        }
+        if (media && !pours.has(hit.element)) pours.set(hit.element, newPour())
       }
       // A loose spring: the blot overshoots and wobbles into place.
       const target = hit && !media ? 1 : 0
       soakV += ((target - soak) * STIFFNESS - soakV * 2 * Math.sqrt(STIFFNESS) * DAMPING) * dt
       soak += soakV * dt
-      const dripTo = media ? 1 : 0
-      dripV +=
-        ((dripTo - drip) * DRIP_STIFFNESS - dripV * 2 * Math.sqrt(DRIP_STIFFNESS) * DRIP_DAMPING) *
-        dt
-      drip += dripV * dt
-      const soaked =
-        Math.abs(target - soak) < 0.001 &&
-        Math.abs(soakV) < 0.01 &&
-        Math.abs(dripTo - drip) < 0.001 &&
-        Math.abs(dripV) < 0.01 &&
-        poured
+      const soaked = Math.abs(target - soak) < 0.001 && Math.abs(soakV) < 0.01
       if (at && !hit && soaked) {
         at = null
         box.style.display = 'none'
       }
       if (at) {
         blot.style.transform = `translate(${mx - at.left - BLOT / 2}px,${my - at.top - BLOT / 2}px) scale(${Math.max(0, soak)})`
-        const wet = Math.max(0, drip)
-        const reach = at.height * 0.8
-        const x = mx - at.left
-        poured = true
-        columns.forEach((column, index) => {
-          const want = media
+      }
+      for (const [link, pour] of pours) {
+        if (!link.isConnected) {
+          pour.el.remove()
+          pours.delete(link)
+          continue
+        }
+        const on = media && hit.element === link
+        // Read each frame: the page scrolls under a resting mouse.
+        const rect = link.getBoundingClientRect()
+        Object.assign(pour.el.style, {
+          left: `${rect.left}px`,
+          top: `${rect.top}px`,
+          width: `${rect.width}px`,
+          height: `${rect.height}px`,
+        })
+        fit(pour, rect.width)
+        pour.band.setAttribute('width', `${rect.width}`)
+        const dripTo = on ? 1 : 0
+        pour.dripV +=
+          ((dripTo - pour.drip) * DRIP_STIFFNESS -
+            pour.dripV * 2 * Math.sqrt(DRIP_STIFFNESS) * DRIP_DAMPING) *
+          dt
+        pour.drip += pour.dripV * dt
+        const reach = rect.height * 0.8
+        const x = mx - rect.left
+        const { lengths, speeds, strengths } = pour
+        let poured = true
+        pour.columns.forEach((column, index) => {
+          const want = on
             ? reach *
               Math.exp(-(((index * COLUMN + COLUMN / 2 - x) / POUR_SPREAD) ** 2)) *
               strengths[index]! *
@@ -164,8 +200,11 @@ export function SiteCursor() {
           column.setAttribute('height', `${POUR_REST + lengths[index]!}`)
           if (lengths[index]! > 0.5) poured = false
         })
-        band.setAttribute('height', `${POUR_REST + wet * 8}`)
-        liquid.style.display = media || !poured || wet > 0.01 ? '' : 'none'
+        pour.band.setAttribute('height', `${POUR_REST + Math.max(0, pour.drip) * 8}`)
+        if (!on && poured && Math.abs(pour.drip) < 0.01 && Math.abs(pour.dripV) < 0.01) {
+          pour.el.remove()
+          pours.delete(link)
+        }
       }
       drop.style.opacity = shown && (!hit || media) ? '1' : '0'
       if (dt > 0) {
@@ -174,7 +213,7 @@ export function SiteCursor() {
       }
       const speed = Math.hypot(vx, vy)
       // The pour sways, so the loop runs on while it is up.
-      const resting = mx === lastX && my === lastY && speed < 20 && soaked && !media
+      const resting = mx === lastX && my === lastY && speed < 20 && soaked && pours.size === 0
       lastX = mx
       lastY = my
       if (resting) vx = vy = 0
@@ -233,6 +272,7 @@ export function SiteCursor() {
       document.removeEventListener('pointerup', press)
       document.removeEventListener('scroll', wake, { capture: true })
       cancelAnimationFrame(raf)
+      for (const pour of pours.values()) pour.el.remove()
       root.classList.remove(NATIVE_HIDDEN)
     }
   }, [enabled])
@@ -262,19 +302,29 @@ export function SiteCursor() {
         <div className="absolute top-0 left-0 grid h-[150px] w-[150px] animate-[site-cursor-wobble_5s_linear_infinite] place-items-center bg-text">
           <span className="font-serif text-[38px] leading-none font-normal text-background" />
         </div>
-        {/* Blur then a hard alpha cut fuses the columns into one liquid. */}
-        <svg className="absolute inset-0 h-full w-full" style={{ display: 'none' }}>
-          <filter
-            id={POUR_ID}
-            x="-10%"
-            y="-10%"
-            width="120%"
-            height="140%"
-            colorInterpolationFilters="sRGB"
-          >
-            <feGaussianBlur stdDeviation="6" />
-            <feColorMatrix values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -7" />
-          </filter>
+      </div>
+      {/* Blur then a hard alpha cut fuses the columns into one liquid. */}
+      <svg aria-hidden="true" className="pointer-events-none absolute size-0">
+        <filter
+          id={POUR_ID}
+          x="-10%"
+          y="-10%"
+          width="120%"
+          height="140%"
+          colorInterpolationFilters="sRGB"
+        >
+          <feGaussianBlur stdDeviation="6" />
+          <feColorMatrix values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -7" />
+        </filter>
+      </svg>
+      {/* The pour template: each link that pours gets its own copy. */}
+      <div
+        ref={pourRef}
+        aria-hidden="true"
+        style={{ display: 'none' }}
+        className="pointer-events-none fixed z-[90] overflow-hidden mix-blend-difference"
+      >
+        <svg className="absolute inset-0 h-full w-full">
           <g filter={`url(#${POUR_ID})`} className="fill-text">
             <rect x="0" y={POUR_TOP} height={POUR_REST} />
           </g>
