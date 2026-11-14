@@ -406,6 +406,8 @@ html.is-loading .home-loader-mark {
 
 /* The picture slot: real media fills it (#149). */
 .pb-pic {
+  position: relative;
+  overflow: hidden;
   display: block;
   width: 100%;
   aspect-ratio: 16 / 9;

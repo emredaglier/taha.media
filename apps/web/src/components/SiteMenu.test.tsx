@@ -5,6 +5,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 let pathname = '/'
 vi.mock('next/navigation', () => ({ usePathname: () => pathname }))
+// A real loop needs matchMedia and IntersectionObserver, which jsdom lacks: here it is a marker.
+vi.mock('./LoopVideo', async () => {
+  const { createElement } = await import('react')
+  return {
+    LoopVideo: ({ video, fill }: { video: { src: string }; fill?: boolean }) =>
+      createElement('div', { 'data-loop': video.src, 'data-fill': String(fill) }),
+  }
+})
 vi.mock('next/link', async () => {
   const { createElement } = await import('react')
   return {
@@ -13,6 +21,9 @@ vi.mock('next/link', async () => {
   }
 })
 
+import type { ImageRead, VideoRead } from '@taha/cms-config'
+
+import type { MenuMedia } from '../data/menu'
 import { REDUCED_MOTION } from '../lib/loop-mode'
 import { PAGE_SHEET_ID } from '../lib/menu-a11y'
 import { legalLink, menuLinks } from '../lib/nav-links'
@@ -26,7 +37,27 @@ let root: Root
 let page: HTMLElement
 
 const COPYRIGHT = '© Taha Çiftçi'
-const render = () => act(() => root.render(<SiteMenu copyright={COPYRIGHT} />))
+const NO_MEDIA: MenuMedia = { isler: null, galeri: null, hakkimda: null }
+const picture = (name: string): ImageRead => ({
+  id: 1,
+  src: `/${name}.webp`,
+  srcset: '',
+  width: 1600,
+  height: 900,
+  focalPoint: { x: 50, y: 50 },
+  alt: `${name} alt`,
+})
+const loop = (name: string): VideoRead => ({
+  id: 2,
+  src: `/${name}.mp4`,
+  width: 1600,
+  height: 900,
+  duration: 2,
+  hasAudio: false,
+  poster: picture(`${name}-poster`),
+})
+const render = (media: MenuMedia = NO_MEDIA) =>
+  act(() => root.render(<SiteMenu copyright={COPYRIGHT} media={media} />))
 const toggle = () => container.querySelector('summary') as HTMLElement
 const links = () => [...container.querySelectorAll<HTMLAnchorElement>('nav a')]
 const details = () => container.querySelector('details')!
@@ -112,6 +143,51 @@ describe('the Pinboard at rest', () => {
     expect(nav.textContent).toBe(
       [...menuLinks.map(({ label }) => label), legalLink.label, COPYRIGHT].join(''),
     )
+  })
+})
+
+describe('the frame pictures', () => {
+  const slots = () =>
+    [...container.querySelectorAll('nav a.pb-pr')].map((a) => a.querySelector('.pb-pic')!)
+
+  it('leave the grey slot empty when there is no media', async () => {
+    await render()
+    expect(slots().map((slot) => slot.childElementCount)).toEqual([0, 0, 0])
+  })
+
+  it('show a loop in İşler, a still in Galeri and the portrait in Hakkımda, all hidden from assistive tech', async () => {
+    await render({
+      isler: loop('isler'),
+      galeri: {
+        kind: 'image',
+        id: 3,
+        caption: null,
+        year: null,
+        image: { ...picture('galeri'), fullSrc: '/g.webp' },
+      },
+      hakkimda: picture('portre'),
+    })
+    const [isler, galeri, hakkimda] = slots()
+    expect(isler!.querySelector('[data-loop]')?.getAttribute('data-loop')).toBe('/isler.mp4')
+    expect(isler!.querySelector('[data-loop]')?.getAttribute('data-fill')).toBe('true')
+    expect(galeri!.querySelector('img')?.getAttribute('src')).toBe('/galeri.webp')
+    expect(hakkimda!.querySelector('img')?.getAttribute('src')).toBe('/portre.webp')
+    expect(galeri!.querySelector('img')?.getAttribute('alt')).toBe('')
+    expect(hakkimda!.querySelector('img')?.getAttribute('alt')).toBe('')
+    for (const slot of slots()) expect(slot.getAttribute('aria-hidden')).toBe('true')
+    expect(links().map((link) => link.textContent)).toEqual([
+      ...menuLinks.map(({ label }) => label),
+      legalLink.label,
+    ])
+  })
+
+  it('show a Gallery loop in Galeri', async () => {
+    await render({
+      ...NO_MEDIA,
+      galeri: { kind: 'loop', id: 3, caption: null, year: null, video: loop('galeri') },
+    })
+    expect(slots()[1]!.querySelector('[data-loop]')?.getAttribute('data-loop')).toBe('/galeri.mp4')
+    expect(slots()[0]!.childElementCount).toBe(0)
   })
 })
 

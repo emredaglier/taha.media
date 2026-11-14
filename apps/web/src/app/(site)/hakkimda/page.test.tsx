@@ -164,7 +164,8 @@ describe('About published with full content', () => {
   it('shows a client logo only when set', async () => {
     const html = await hakkimda()
     expect(html).toContain('alt="Alfa logosu"')
-    expect(html.match(/<img/g)).toHaveLength(2)
+    // The menu's decorative pictures have an empty alt.
+    expect(html.match(/<img(?![^>]*alt="")/g)).toHaveLength(2)
   })
 
   it('takes the metadata from the About SEO', async () => {
