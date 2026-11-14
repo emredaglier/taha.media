@@ -1,9 +1,12 @@
+import { HOLD_PROGRESS, type RoomScroll } from './room-model'
 import { quartInOut } from './room-pointing'
 import { ROOM_TUNING } from './room-tuning'
 
 /**
- * The Edit Room's opening (#131): pure functions of time, no GSAP, no Three.js. The renderer draws
- * what `openingAt` says; the clock is the only state.
+ * The Edit Room's opening (#131): pure functions of its position (seconds), no GSAP, no Three.js.
+ * The renderer draws what `openingAt` says. Time plays it to the hold on the Showreel; from there
+ * the room's scroll scrubs the rest, and scrolling back up past the path's start returns to the
+ * hold (#140).
  */
 
 /** What the room looks like at one moment of the opening. Every number is 0 to 1. */
@@ -62,23 +65,41 @@ export function openingAt(seconds: number, out: OpeningState): OpeningState {
   return out
 }
 
-/** Where the opening is: seconds since it began. */
+/** Where the opening holds on the Showreel (s), filling the view: time plays it to here, then the scroll takes over. */
+export const HOLD_SECONDS = opening.pullBack.at
+
+/** The intro's clock: seconds the opening has played by itself, up to the hold. */
 export type OpeningClock = { seconds: number }
 
-/** A clock at the start; for a visitor who comes back to the room, already at the end. */
+/** A clock at the start; for a room that starts at rest, already at the hold (the scroll says the rest). */
 export const createOpening = (atRest: boolean): OpeningClock => ({
-  seconds: atRest ? OPENING_SECONDS : 0,
+  seconds: atRest ? HOLD_SECONDS : 0,
 })
 
-/** Moves the clock on by a frame; a bad `dt` moves it by nothing. */
+/** Moves the clock on by a frame, up to the hold; a bad `dt` moves it by nothing. */
 export function stepOpening(clock: OpeningClock, dt: number): void {
-  if (dt > 0) clock.seconds = Math.min(OPENING_SECONDS, clock.seconds + dt)
+  if (dt > 0) clock.seconds = Math.min(HOLD_SECONDS, clock.seconds + dt)
 }
 
-/** A click or tap: jumps to the finished room. */
-export function skipOpening(clock: OpeningClock): void {
-  clock.seconds = OPENING_SECONDS
+/**
+ * Where the opening is (s) for the clock and the scroll's `progress`: the clock's time until the
+ * hold; then the scroll, from the hold at `HOLD_PROGRESS` to rest at the path's start and past it.
+ */
+export function openingSeconds(clock: OpeningClock, progress: number): number {
+  if (clock.seconds < HOLD_SECONDS) return clock.seconds
+  const scrubbed = 1 - progress / HOLD_PROGRESS
+  // The last thousandth (about a px) counts as rest: the scroll's easing only ever nears its target.
+  if (scrubbed >= 0.999) return OPENING_SECONDS
+  return HOLD_SECONDS + (OPENING_SECONDS - HOLD_SECONDS) * (scrubbed > 0 ? scrubbed : 0)
+}
+
+/** A click or tap: jumps to the finished room, at the path's start if the scroll was in the opening. */
+export function skipOpening(clock: OpeningClock, scroll: RoomScroll): void {
+  clock.seconds = HOLD_SECONDS
+  scroll.progress = Math.max(0, scroll.progress)
+  scroll.target = Math.max(0, scroll.target)
 }
 
 /** Whether the opening is still running: until it is over no Work can be chosen, and a click skips it. */
-export const isOpening = (clock: OpeningClock): boolean => clock.seconds < OPENING_SECONDS
+export const isOpening = (clock: OpeningClock, scroll: RoomScroll): boolean =>
+  openingSeconds(clock, scroll.progress) < OPENING_SECONDS

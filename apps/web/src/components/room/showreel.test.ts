@@ -34,7 +34,7 @@ describe('the Showreel in the opening', () => {
     expect(room.setShowreel).toHaveBeenCalledWith(video)
   })
 
-  it('plays from the opening on, and is let go of once it has handed over', async () => {
+  it('plays while it shows, pauses once it has handed over, and plays again on the way back up', async () => {
     const { reel, room, video, host } = make()
     hasFrame(video)
     video.dispatchEvent(new Event('loadeddata'))
@@ -42,11 +42,35 @@ describe('the Showreel in the opening', () => {
     reel.update(at(0))
     reel.update(at(0.5))
     expect(play).toHaveBeenCalledTimes(1)
-    expect(host.contains(video)).toBe(true)
 
     reel.update(at(2.1)) // the hand-over (1.5 s, 0.5 s) is done
-    expect(room.setShowreel).toHaveBeenLastCalledWith(null)
-    expect(host.contains(video)).toBe(false)
+    expect(HTMLMediaElement.prototype.pause).toHaveBeenCalledTimes(1)
+    expect(room.setShowreel).not.toHaveBeenCalledWith(null)
+    expect(host.contains(video)).toBe(true)
+
+    reel.update(at(1)) // scrolled back up into the opening (#140)
+    expect(play).toHaveBeenCalledTimes(2)
+  })
+
+  it('stays when a quick scroll pauses it before it has started playing', async () => {
+    play.mockRejectedValue(new DOMException('paused', 'AbortError'))
+    const { reel, room, video } = make()
+    hasFrame(video)
+    video.dispatchEvent(new Event('loadeddata'))
+    await reel.ready
+    reel.update(at(0))
+    reel.update(at(2.1))
+    await Promise.resolve()
+    expect(room.setShowreel).not.toHaveBeenCalledWith(null)
+  })
+
+  it('comes in late for a room that starts at rest, ready for a scroll up into the opening', async () => {
+    const { reel, room, video } = make()
+    reel.update(at(Infinity)) // drawn at rest: no Showreel showing to pop into
+    hasFrame(video)
+    video.dispatchEvent(new Event('loadeddata'))
+    await reel.ready
+    expect(room.setShowreel).toHaveBeenCalledWith(video)
   })
 
   it('a file that cannot be read does not hold the room back: the opening goes without it', async () => {

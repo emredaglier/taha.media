@@ -1,9 +1,10 @@
 import type { OpeningState } from '../../lib/room-opening'
 
 /**
- * The Showreel for the opening (#131): one more video, loaded with the room, played from the first
- * frame of the opening and let go of once its share of the middle monitor has handed over. A file
- * that can't be read is let go at once and the opening shows the middle monitor's own Work.
+ * The Showreel for the opening (#131): one more video, loaded with the room, played while it has a
+ * share of the middle monitor and paused once it has handed over, ready for a scroll back up into
+ * the opening (#140). A file that can't be read is let go at once and the opening shows the middle
+ * monitor's own Work.
  */
 export function createShowreel(
   src: string,
@@ -56,18 +57,20 @@ export function createShowreel(
   })
   video.src = src
   host.append(video)
-  let started = false
+  let playing = false
   return {
     ready,
     update(opening: OpeningState) {
-      begun = true
-      if (done) return
-      if (opening.reel <= 0) return drop()
-      if (!started && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-        started = true
-        // Refused or unreadable: the Work's own picture, not a frozen frame.
-        video.play().catch(drop)
-      }
+      const shown = opening.reel > 0
+      if (shown) begun = true
+      if (done || shown === playing || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return
+      playing = shown
+      if (!shown) return video.pause() // kept for the way back up (#140)
+      video.play().catch((error: unknown) => {
+        // A pause before it started (a quick scroll in) is no failure; refused or unreadable is:
+        // the Work's own picture, not a frozen frame.
+        if (!(error instanceof DOMException && error.name === 'AbortError')) drop()
+      })
     },
     destroy: drop,
   }
