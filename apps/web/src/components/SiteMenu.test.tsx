@@ -13,13 +13,17 @@ vi.mock('next/link', async () => {
   }
 })
 
+import { REDUCED_MOTION } from '../lib/loop-mode'
+import { PAGE_SHEET_ID } from '../lib/menu-a11y'
 import { legalLink, menuLinks } from '../lib/nav-links'
+import { setDevice } from '../test/device'
 import { SiteMenu } from './SiteMenu'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 let container: HTMLElement
 let root: Root
+let page: HTMLElement
 
 const COPYRIGHT = '© Taha Çiftçi'
 const render = () => act(() => root.render(<SiteMenu copyright={COPYRIGHT} />))
@@ -36,15 +40,20 @@ const press = (key: string, init: KeyboardEventInit = {}) => {
 
 beforeEach(() => {
   pathname = '/'
+  page = document.createElement('div')
+  page.id = PAGE_SHEET_ID
   container = document.createElement('div')
-  document.body.append(container)
+  document.body.append(container, page)
   root = createRoot(container)
 })
 
 afterEach(() => {
   act(() => root.unmount())
   container.remove()
+  page.remove()
   document.documentElement.style.overflow = ''
+  vi.unstubAllGlobals()
+  vi.restoreAllMocks()
 })
 
 describe('closed', () => {
@@ -165,5 +174,105 @@ describe('open', () => {
     await render()
     expect(toggle().getAttribute('aria-expanded')).toBe('false')
     expect(links()[0]!.getAttribute('aria-current')).toBe('page')
+  })
+})
+
+describe('with motion', () => {
+  let frames: Map<number, FrameRequestCallback>
+  let nextFrame: number
+  let clock: number
+  /** Runs `ms` of 60 fps frames. */
+  const advance = (ms: number) =>
+    act(() => {
+      for (let t = 0; t < ms; t += 16) {
+        clock += 16
+        const due = [...frames.values()]
+        frames.clear()
+        for (const callback of due) callback(clock)
+      }
+    })
+  const sheets = () => [...container.querySelectorAll<HTMLElement>('.pb-s, .pb-sd')]
+  let reduced: boolean
+
+  beforeEach(async () => {
+    frames = new Map()
+    nextFrame = 1
+    clock = 1000
+    reduced = false
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      frames.set(nextFrame, callback)
+      return nextFrame++
+    })
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id))
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: reduced && query === REDUCED_MOTION,
+      addEventListener() {},
+      removeEventListener() {},
+    }))
+    vi.spyOn(performance, 'now').mockImplementation(() => clock)
+    await render()
+  })
+
+  it('closes aria-expanded and focuses MENU at once, and the <details> only after the close animation', () => {
+    act(() => toggle().click())
+    advance(1500)
+    expect(page.style.transform).not.toBe('')
+    press('Escape')
+    expect(toggle().getAttribute('aria-expanded')).toBe('false')
+    expect(toggle().textContent).toBe('MENU')
+    expect(document.activeElement).toBe(toggle())
+    expect(details().open).toBe(true)
+    advance(1500)
+    expect(details().open).toBe(false)
+  })
+
+  it('reopened during the close, stays open and ends open', () => {
+    act(() => toggle().click())
+    advance(1500)
+    press('Escape')
+    advance(300)
+    act(() => toggle().click())
+    expect(details().open).toBe(true)
+    advance(3000)
+    expect(details().open).toBe(true)
+    expect(toggle().getAttribute('aria-expanded')).toBe('true')
+    expect(page.style.transform).not.toBe('')
+  })
+
+  it('leaves no style on the page box or the sheets and no frame queued once closed', () => {
+    const atRest = sheets().map((sheet) => sheet.getAttribute('style'))
+    act(() => toggle().click())
+    advance(1500)
+    expect(sheets().some((sheet) => sheet.style.transform !== '')).toBe(true)
+    press('Escape')
+    advance(1500)
+    expect(page.getAttribute('style')).toBeNull()
+    expect(sheets().map((sheet) => sheet.getAttribute('style'))).toEqual(atRest)
+    expect(frames.size).toBe(0)
+  })
+
+  it('leaves no style on the page box and no frame queued after an unmount mid-open', () => {
+    act(() => toggle().click())
+    advance(500)
+    expect(page.style.transform).not.toBe('')
+    act(() => root.unmount())
+    root = createRoot(container)
+    expect(page.getAttribute('style')).toBeNull()
+    expect(frames.size).toBe(0)
+  })
+
+  it.each([
+    ['reduced motion', () => (reduced = true)],
+    ['a weak device', () => setDevice({ cores: 2 })],
+  ])('under %s writes nothing on the page box or the sheets, and closes at once', (_, set) => {
+    set()
+    const atRest = sheets().map((sheet) => sheet.getAttribute('style'))
+    act(() => toggle().click())
+    advance(1000)
+    expect(page.getAttribute('style')).toBeNull()
+    expect(sheets().map((sheet) => sheet.getAttribute('style'))).toEqual(atRest)
+    expect(frames.size).toBe(0)
+    press('Escape')
+    expect(details().open).toBe(false)
   })
 })

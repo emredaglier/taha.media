@@ -7,6 +7,7 @@ import { type CSSProperties, useEffect, useRef, useState } from 'react'
 import { lockScroll, MENU_PANEL_ID, nextFocus } from '../lib/menu-a11y'
 import { legalLink, menuLinks } from '../lib/nav-links'
 import { layoutBoard, SHEETS, stringCurve } from '../lib/pinboard-layout'
+import { PINBOARD_LABELS, usePinboardMotion } from './PinboardMotion'
 
 /** A sheet's place for CSS (`.pb-s`, `.pb-sd` in globals.css): both views' pin and width, the tilt, the stacking. */
 const place = ({ L, P, rest }: (typeof SHEETS)[number], zIndex?: number) =>
@@ -26,14 +27,13 @@ const place = ({ L, P, rest }: (typeof SHEETS)[number], zIndex?: number) =>
  * scaled into a 1x1 viewBox. shortcut: they stretch with the view instead of being redrawn per
  * size (the motion ticket redraws them live).
  */
-const LABELS = { prints: menuLinks.map(({ label }) => label.length), legal: legalLink.label.length }
 const STRINGS = (
   [
     ['pb-str-l', 1440, 900],
     ['pb-str-p', 390, 844],
   ] as const
 ).map(([className, width, height]) => {
-  const [page, ...rest] = layoutBoard(width, height, LABELS).sheets
+  const [page, ...rest] = layoutBoard(width, height, PINBOARD_LABELS).sheets
   const paths = rest.flatMap((sheet, i) => {
     const def = SHEETS[i + 1]!
     return def.kind === 'print'
@@ -61,7 +61,9 @@ const Clip = () => (
  * A native <details>, so without JavaScript it still opens and reaches every link. With JS the
  * toggle is taken over: the page behind can't scroll, focus moves in and is trapped (every Tab
  * step is picked by `nextFocus`, for Safari), Escape closes and returns focus to MENU, and
- * following a link closes it. Adapted from daglier.com's mobile menu (ADR-0100), without its motion.
+ * following a link closes it. Adapted from daglier.com's mobile menu (ADR-0100). With motion
+ * (`usePinboardMotion`), a close keeps the <details> open until the board has fallen away; the
+ * summary, the trap and focus follow `open` at once.
  *
  * The panel is the Pinboard at rest (ADR-0106): a wall with the three pages as print links, blank
  * notes, a storyboard strip, and last the legal note with Gizlilik and the © line (`copyright`,
@@ -75,6 +77,7 @@ export function SiteMenu({ copyright }: { copyright: string }) {
   const summaryRef = useRef<HTMLElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
+  usePinboardMotion(open, detailsRef) // before the effect below: it opens the <details> first
 
   // A route change closes the menu (set state during render, not in an effect).
   const [seenPath, setSeenPath] = useState(pathname)
@@ -84,8 +87,6 @@ export function SiteMenu({ copyright }: { copyright: string }) {
   }
 
   useEffect(() => {
-    const details = detailsRef.current!
-    details.open = open // also resets a native toggle made before hydration
     if (!open) return
     const panel = panelRef.current!
     const summary = summaryRef.current!
@@ -142,11 +143,9 @@ export function SiteMenu({ copyright }: { copyright: string }) {
           <div className="pb-wall" aria-hidden="true" />
           <div className="pb-spot" aria-hidden="true" />
           <div className="pb-shadows" aria-hidden="true">
-            {SHEETS.map((sheet) =>
-              sheet.kind === 'page' ? null : (
-                <div key={sheet.id} className="pb-sd" data-k={sheet.kind} style={place(sheet)} />
-              ),
-            )}
+            {SHEETS.map((sheet) => (
+              <div key={sheet.id} className="pb-sd" data-k={sheet.kind} style={place(sheet)} />
+            ))}
           </div>
           <svg className="pb-str" viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true">
             {STRINGS.map(({ className, scale, paths }) => (
@@ -200,7 +199,14 @@ export function SiteMenu({ copyright }: { copyright: string }) {
                 </div>
               )
             }
-            if (sheet.kind === 'page') return null // the live page joins at motion (#151)
+            if (sheet.kind === 'page') {
+              // The live page's frame: hidden at rest, drawn round the page box with motion.
+              return (
+                <div key={sheet.id} className="pb-s pb-fr" aria-hidden="true" {...props}>
+                  <i className="pb-pin" />
+                </div>
+              )
+            }
             return (
               <div
                 key={sheet.id}
