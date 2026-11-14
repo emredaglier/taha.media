@@ -61,7 +61,7 @@ const Clip = () => (
 )
 
 /** A print's picture, in link order (İşler, Galeri, Hakkımda); a missing one leaves the grey slot. */
-function PrintMedia({ media, link }: { media: MenuMedia; link: number }) {
+function PrintMedia({ media, link, live }: { media: MenuMedia; link: number; live: boolean }) {
   // The frame is about a third of the view wide, a half or more in portrait.
   const sizes = '(max-aspect-ratio: 100/115) 60vw, 30vw'
   const picture = [
@@ -70,11 +70,12 @@ function PrintMedia({ media, link }: { media: MenuMedia; link: number }) {
     media.hakkimda && { kind: 'image' as const, image: media.hakkimda },
   ][link]
   if (!picture) return null
-  return picture.kind === 'loop' ? (
-    <LoopVideo video={picture.video} sizes={sizes} fill />
-  ) : (
+  // A closed menu holds only lazy `<img>`s: a mounted `<video>` would fetch its poster on every page.
+  // Once the menu has been opened, loops go live (and stay, so closing doesn't swap them mid-fall).
+  if (picture.kind === 'loop' && live) return <LoopVideo video={picture.video} sizes={sizes} fill />
+  return (
     <Picture
-      image={{ ...picture.image, alt: '' }}
+      image={{ ...(picture.kind === 'loop' ? picture.video.poster : picture.image), alt: '' }}
       sizes={sizes}
       className="size-full object-cover"
     />
@@ -102,6 +103,8 @@ export function SiteMenu({ copyright, media }: { copyright: string; media: MenuM
   const summaryRef = useRef<HTMLElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
+  const [opened, setOpened] = useState(false) // sticky: the frames' loops mount on the first open
+  if (open && !opened) setOpened(true)
   const { follow, leaving } = usePinboardMotion(open, detailsRef) // before the effect below: it opens the <details> first
 
   // A route change closes the menu (set state during render, not in an effect).
@@ -201,7 +204,7 @@ export function SiteMenu({ copyright, media }: { copyright: string; media: MenuM
                   <i className="pb-pin" />
                   {/* Decorative: the link's name is its word. */}
                   <div className="pb-pic" aria-hidden="true">
-                    <PrintMedia media={media} link={sheet.link} />
+                    <PrintMedia media={media} link={sheet.link} live={opened} />
                   </div>
                   <span className="pb-tape" style={{ '--n': label.length } as CSSProperties}>
                     <span>{label}</span>
