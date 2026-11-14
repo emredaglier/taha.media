@@ -18,9 +18,7 @@
       {
         "rule": "radial-halo",
         "value": "*",
-        "files": [
-          "docs/design/prototype-media-hover.html"
-        ],
+        "files": ["docs/design/prototype-media-hover.html"],
         "createdAt": "2026-11-14T14:58:13.875Z",
         "reason": "Claude: the radial gradient is a fake picture placeholder inside a card in a throwaway prototype, not a page glow"
       }
