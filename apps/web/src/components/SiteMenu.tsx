@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { type CSSProperties, useEffect, useRef, useState } from 'react'
 
-import { lockScroll, MENU_PANEL_ID, nextFocus } from '../lib/menu-a11y'
+import { lockScroll, MENU_PANEL_ID, nextFocus, PAGE_SHEET_ID } from '../lib/menu-a11y'
 import { legalLink, menuLinks } from '../lib/nav-links'
 import type { MenuMedia } from '../data/menu'
 import { layoutBoard, SHEETS, stringCurve } from '../lib/pinboard-layout'
@@ -116,6 +116,9 @@ export function SiteMenu({ copyright, media }: { copyright: string; media: MenuM
     const panel = panelRef.current!
     const summary = summaryRef.current!
     const unlock = lockScroll(document.documentElement)
+    // The page behind (the live sheet with motion) is decoration while the menu is open.
+    const pageBox = document.getElementById(PAGE_SHEET_ID)
+    pageBox?.setAttribute('inert', '')
     panel.querySelector<HTMLElement>('a')?.focus()
 
     const onKey = (event: KeyboardEvent) => {
@@ -139,6 +142,7 @@ export function SiteMenu({ copyright, media }: { copyright: string; media: MenuM
     document.addEventListener('keydown', onKey)
     return () => {
       document.removeEventListener('keydown', onKey)
+      pageBox?.removeAttribute('inert')
       unlock()
     }
   }, [open])

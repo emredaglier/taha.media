@@ -4,7 +4,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { type MouseEvent, type RefObject, useEffect, useRef } from 'react'
 
 import { REDUCED_MOTION, saveDataOn } from '../lib/loop-mode'
-import { MENU_PANEL_ID, PAGE_SHEET_ID } from '../lib/menu-a11y'
+import { lockScroll, MENU_PANEL_ID, PAGE_SHEET_ID } from '../lib/menu-a11y'
 import { legalLink, menuLinks } from '../lib/nav-links'
 import {
   createDraught,
@@ -234,8 +234,17 @@ function createPinboardMotion(details: HTMLDetailsElement, onRest: () => void) {
     clearTimeout(hoverTimer)
   }
 
+  // SiteMenu's scroll lock ends with `open`; this one holds it until the close has ended, so the
+  // sheet's pivot and clip, taken at open, stay true and the scrollbar can't change the width.
+  let unlockClose: (() => void) | null = null
+  const releaseScroll = () => {
+    unlockClose?.()
+    unlockClose = null
+  }
+
   /** Back to the static board: every style the loop wrote, gone. */
   function clear() {
+    releaseScroll()
     page?.removeAttribute('style')
     pageOn = false
     for (const s of sheets) {
@@ -320,6 +329,7 @@ function createPinboardMotion(details: HTMLDetailsElement, onRest: () => void) {
     open() {
       moments.open()
       rested = false
+      releaseScroll() // before SiteMenu's lock, which runs after this hook's effect
       panel.removeAttribute('inert')
       // The wall fades in over the live page instead of the panel's opaque floor.
       panel.style.background = 'transparent'
@@ -336,10 +346,11 @@ function createPinboardMotion(details: HTMLDetailsElement, onRest: () => void) {
     },
     /** Grows the page back while the board falls away; `onRest` runs once it has. */
     close() {
+      // Falling away or flying, it is gone for focus, pointer and screen readers.
+      panel.setAttribute('inert', '')
+      unlockClose ??= lockScroll(document.documentElement)
       if (board.leaving) return // the leave closes the board itself
       moments.close()
-      // Falling away, it is gone for focus, pointer and screen readers.
-      panel.setAttribute('inert', '')
     },
     dispose() {
       stop()

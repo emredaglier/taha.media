@@ -213,6 +213,12 @@ describe('open', () => {
     expect(toggle().textContent).toBe('MENU')
   })
 
+  it('hides the page box from focus and screen readers while open, and not once closed', () => {
+    expect(page.hasAttribute('inert')).toBe(true)
+    act(() => toggle().click())
+    expect(page.hasAttribute('inert')).toBe(false)
+  })
+
   it('closes on Escape and returns focus to MENU', () => {
     const event = press('Escape')
     expect(event.defaultPrevented).toBe(true)
@@ -315,6 +321,19 @@ describe('with motion', () => {
     expect(details().open).toBe(true)
     expect(toggle().getAttribute('aria-expanded')).toBe('true')
     expect(page.style.transform).not.toBe('')
+    press('Escape')
+    advance(1500)
+    expect(document.documentElement.style.overflow).toBe('')
+  })
+
+  it('keeps the page from scrolling until the close has ended', () => {
+    act(() => toggle().click())
+    advance(1500)
+    press('Escape')
+    expect(document.documentElement.style.overflow).toBe('hidden')
+    advance(1500)
+    expect(details().open).toBe(false)
+    expect(document.documentElement.style.overflow).toBe('')
   })
 
   it('leaves no style on the page box or the sheets and no frame queued once closed', () => {
@@ -357,6 +376,11 @@ describe('with motion', () => {
       const event = click(links()[1]!)
       expect(event.defaultPrevented).toBe(true)
       expect(toggle().getAttribute('aria-expanded')).toBe('false')
+      expect(
+        container
+          .querySelector('#' + toggle().getAttribute('aria-controls'))!
+          .hasAttribute('inert'),
+      ).toBe(true)
       expect(router.push).not.toHaveBeenCalled()
       advance(900)
       expect(router.push).toHaveBeenCalledExactlyOnceWith('/galeri')
