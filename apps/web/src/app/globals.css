@@ -32,6 +32,11 @@
  */
 @custom-variant over-hero (html:not([data-home='room']) body:has([data-home-hero]) &);
 
+:root {
+  /* Film grain, for the TV screen and the Pinboard's wall. */
+  --noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
 /*
  * TV screen over every page (`<div class="crt">` in layout.tsx): grain, scanlines and a vignette.
  * The CRT bend itself is in the Edit Room's glass pass. Light on purpose, so text stays
@@ -54,7 +59,7 @@
   position: absolute;
   inset: -50%;
   opacity: 0.09;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-image: var(--noise);
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -191,4 +196,311 @@ html.is-loading .home-loader-mark {
     overflow: hidden;
     overscroll-behavior: none;
   }
+}
+
+/*
+ * The Pinboard menu at rest (ADR-0106): the whole menu without JavaScript, and under reduced motion,
+ * Save-Data or a weak device. Ported from docs/design/menu3/pinboard.js (`.pb-*`). Each sheet's
+ * place comes in as --lw/--lx/--ly (landscape) and --pw/--px/--py (portrait), the pin and width as
+ * view fractions as in lib/pinboard-layout.ts, plus --rest, its tilt. Portrait switches at the
+ * layout's aspect (height > 1.15 x width). `--k` is the layout's K as a length.
+ */
+.pinboard {
+  --k: min(100vw / 1440, 100dvh / 900);
+  --b: calc(12 * var(--k));
+  position: relative;
+  height: 100dvh;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+@media (max-aspect-ratio: 100/115) {
+  .pinboard {
+    --k: min(100vw / 390, 100dvh / 844);
+  }
+}
+
+.pb-wall {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 95% 62% at 50% 120%,
+    rgb(237 237 237 / 0.32),
+    rgb(237 237 237 / 0.09) 52%,
+    transparent 78%
+  );
+}
+
+.pb-wall::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.07;
+  background-image: var(--noise);
+}
+
+.pb-wall::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  box-shadow:
+    inset 0 0 0 1px rgb(237 237 237 / 0.1),
+    inset 0 0 15vmin 2vmin rgb(0 0 0 / 0.65);
+}
+
+.pb-spot {
+  --sp: calc(max(100vw, 100dvh) * 0.42);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--sp);
+  height: var(--sp);
+  margin: calc(var(--sp) / -2) 0 0 calc(var(--sp) / -2);
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(
+    circle,
+    rgb(237 237 237 / 0.3),
+    rgb(237 237 237 / 0.09) 46%,
+    transparent 70%
+  );
+}
+
+.pb-shadows {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* A sheet and its shadow share one place: the pin at top centre, the tilt about the pin. */
+.pb-s,
+.pb-sd {
+  --w: var(--lw);
+  --x: var(--lx);
+  --y: var(--ly);
+  --W: calc(var(--w) * 100vw);
+  position: absolute;
+  left: calc(var(--x) * 100vw - var(--W) / 2);
+  top: calc(var(--y) * 100dvh);
+  width: var(--W);
+  height: var(--h);
+  transform-origin: 50% 0;
+  transform: rotate(var(--rest));
+}
+
+@media (max-aspect-ratio: 100/115) {
+  .pb-s,
+  .pb-sd {
+    --w: var(--pw);
+    --x: var(--px);
+    --y: var(--py);
+  }
+}
+
+[data-k='print'] {
+  --h: calc((var(--W) - 2 * var(--b)) * 9 / 16 + 2 * var(--b));
+}
+
+[data-k='story'] {
+  --h: calc(var(--W) * 0.2);
+}
+
+[data-k='note'],
+[data-k='legal'] {
+  --h: calc(var(--W) * 0.92);
+}
+
+.pb-sd {
+  background: rgb(0 0 0 / 0.5);
+  box-shadow:
+    0 -26px 38px -4px rgb(0 0 0 / 0.65),
+    0 -80px 100px -34px rgb(0 0 0 / 0.45);
+  opacity: 0.8;
+  transform: translateY(-4px) rotate(var(--rest));
+}
+
+.pb-str {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 6;
+  overflow: visible;
+  fill: none;
+  stroke: rgb(237 237 237 / 0.5);
+  stroke-width: 1.2;
+  stroke-linecap: round;
+}
+
+.pb-str path {
+  vector-effect: non-scaling-stroke;
+}
+
+.pb-str-p {
+  display: none;
+}
+
+@media (max-aspect-ratio: 100/115) {
+  .pb-str-l {
+    display: none;
+  }
+
+  .pb-str-p {
+    display: inline;
+  }
+}
+
+.pb-s {
+  pointer-events: none;
+  display: block;
+  color: var(--color-background-raised);
+}
+
+.pb-pin {
+  position: absolute;
+  left: 50%;
+  top: 5px;
+  width: 13px;
+  height: 13px;
+  margin-left: -6.5px;
+  border-radius: 50%;
+  z-index: 3;
+  pointer-events: none;
+  background: radial-gradient(
+    circle at 35% 30%,
+    var(--color-text),
+    var(--color-text-muted) 55%,
+    var(--color-placeholder)
+  );
+  box-shadow: 0 3px 4px rgb(0 0 0 / 0.6);
+}
+
+.pb-pr,
+.pb-note,
+.pb-story {
+  pointer-events: auto;
+}
+
+.pb-pr {
+  background: #e6e6e6;
+  padding: var(--b);
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.12);
+  box-sizing: border-box;
+}
+
+/* The picture slot: real media fills it (#149). */
+.pb-pic {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: var(--color-background-raised);
+}
+
+.pb-pr:focus-visible,
+.pb-note a:focus-visible {
+  outline: 2px solid var(--color-text);
+  outline-offset: 6px;
+}
+
+.pb-tape {
+  --th: calc(var(--W) * 0.26);
+  --tf: min(calc(var(--th) * 0.78), calc(var(--W) * 0.84 / (var(--n) * 0.47)));
+  position: absolute;
+  left: 5%;
+  width: 90%;
+  bottom: calc(var(--th) * -0.42);
+  height: var(--th);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: rotate(-1.4deg);
+  z-index: 2;
+  background: linear-gradient(180deg, rgb(237 237 237 / 0.92), rgb(212 212 212 / 0.9));
+  box-shadow: 0 2px 4px rgb(0 0 0 / 0.45);
+  clip-path: polygon(
+    0 0,
+    100% 0,
+    99% 25%,
+    100% 50%,
+    99% 75%,
+    100% 100%,
+    0 100%,
+    1% 75%,
+    0 50%,
+    1% 25%
+  );
+}
+
+.pb-tape span {
+  font: 400 var(--tf) / 1 var(--font-serif);
+  color: var(--color-background-raised);
+  letter-spacing: -0.015em;
+  white-space: nowrap;
+}
+
+.pb-note {
+  --nf: min(calc(var(--W) * 0.2), calc(var(--W) * 0.8 / (var(--n) * 0.42)));
+  background: #c9c9c9;
+  box-shadow: inset 0 -16px 22px -14px rgb(0 0 0 / 0.22);
+  box-sizing: border-box;
+}
+
+.pb-note[data-k='legal'] {
+  background: #a9a9a9;
+}
+
+.pb-note a {
+  position: absolute;
+  inset: 0;
+  padding: 16% 10% 0;
+  color: var(--color-background-raised);
+  font: italic 400 var(--nf) / 1.02 var(--font-serif);
+}
+
+.pb-cp {
+  position: absolute;
+  left: 10%;
+  right: 8%;
+  bottom: 9%;
+  font: 500 9px / 1.35 var(--font-sans);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-placeholder);
+  pointer-events: none;
+}
+
+.pb-story {
+  background: #cfcfcf;
+  display: flex;
+  gap: 3%;
+  padding: 3.5%;
+  box-sizing: border-box;
+  align-items: center;
+}
+
+.pb-story i {
+  flex: 1;
+  aspect-ratio: 16 / 9;
+  border: 1.5px solid var(--color-background-raised);
+  background: rgb(26 26 26 / 0.05);
+}
+
+.pb-clip {
+  position: absolute;
+  top: -17px;
+  right: 12%;
+  width: 22px;
+  height: 54px;
+  transform: rotate(6deg);
+  z-index: 4;
+  pointer-events: none;
+  fill: none;
+  stroke: #bdbdbd;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  filter: drop-shadow(0 2px 2px rgb(0 0 0 / 0.5));
 }

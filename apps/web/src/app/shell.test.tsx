@@ -49,7 +49,7 @@ describe.each(['/', '/yok-boyle-bir-sayfa'])('the shell around %s', (url) => {
     const details = /<details[\s\S]*<\/details>/.exec(html)?.[0] ?? ''
     expect(details).toMatch(/<summary[^>]*aria-controls="site-menu-panel"/)
     for (const { href, label } of menuLinks) {
-      expect(details).toMatch(new RegExp(`<a[^>]*href="${href}"[^>]*>${label}</a>`))
+      expect(details).toMatch(new RegExp(`<a[^>]*href="${href}"[^>]*>(?:<[^>]+>)*${label}</`))
     }
   })
 

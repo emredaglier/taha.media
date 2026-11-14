@@ -81,6 +81,31 @@ describe('the links', () => {
   })
 })
 
+describe('the Pinboard at rest', () => {
+  it('holds three print links, with the word as a span on the tape', async () => {
+    await render()
+    const prints = [...container.querySelectorAll('nav a.pb-pr')]
+    expect(prints.map((print) => print.querySelector('.pb-tape span')?.textContent)).toEqual(
+      menuLinks.map(({ label }) => label),
+    )
+  })
+
+  it('hides every decoration from assistive tech and holds no note words', async () => {
+    await render()
+    const nav = container.querySelector('nav')!
+    const decorations = nav.querySelectorAll(
+      '.pb-wall, .pb-spot, .pb-shadows, .pb-str, .pb-clip, .pb-story, .pb-note:not([data-k=legal])',
+    )
+    expect(decorations.length).toBeGreaterThan(5)
+    for (const decoration of decorations) {
+      expect(decoration.closest('[aria-hidden=true]')).not.toBeNull()
+    }
+    expect(nav.textContent).toBe(
+      [...menuLinks.map(({ label }) => label), legalLink.label, COPYRIGHT].join(''),
+    )
+  })
+})
+
 describe('open', () => {
   beforeEach(async () => {
     await render()
