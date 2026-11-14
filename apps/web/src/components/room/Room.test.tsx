@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act } from 'react'
+import { act, StrictMode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 
@@ -155,6 +155,23 @@ describe('the Edit Room on Home', () => {
     expect(draws).toHaveLength(1)
     expect(document.documentElement.classList.contains(LOADING_CLASS)).toBe(false)
     expect(document.documentElement.dataset.home).toBe('room')
+  })
+
+  it('gives a second mount a fresh canvas, as the first one lost its context (#138)', async () => {
+    // Strict Mode (next dev) mounts, cleans up and mounts again; the cleanup's destroy kills the
+    // first canvas's WebGL context for good.
+    await act(async () =>
+      root.render(
+        <StrictMode>
+          <Room works={works} showreel={showreel} light={false} onFail={failed} />
+        </StrictMode>,
+      ),
+    )
+    const [first, second] = renderer.create.mock.calls.map(([used]) => used as HTMLCanvasElement)
+    expect(destroy).toHaveBeenCalledOnce()
+    expect(second).not.toBe(first)
+    expect(first!.isConnected).toBe(false)
+    expect(Array.from(container.querySelectorAll('canvas'))).toEqual([second])
   })
 
   it('is the light variant (touch) only when told so', async () => {

@@ -51,7 +51,7 @@ export function Room({
   light: boolean
   onFail: () => void
 }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const hostRef = useRef<HTMLDivElement>(null)
   const fail = useEffectEvent(onFail)
   const router = useRouter()
   const open = useEffectEvent((slug: string) => {
@@ -60,7 +60,12 @@ export function Room({
   })
 
   useEffect(() => {
-    const canvas = canvasRef.current!
+    // A canvas per mount: destroy() kills its WebGL context for good, and Strict Mode (next dev)
+    // mounts again right after a cleanup (#138).
+    const canvas = document.createElement('canvas')
+    canvas.setAttribute('aria-hidden', 'true')
+    canvas.className = 'absolute inset-0 size-full touch-none select-none'
+    hostRef.current!.append(canvas)
     const root = document.documentElement
     const touch = light
     const giveUp = () => {
@@ -84,7 +89,7 @@ export function Room({
     } catch (error) {
       if (!(error instanceof RoomUnavailable)) throw error
       giveUp()
-      return
+      return () => canvas.remove()
     }
 
     // Everything a frame reads or writes is made here once: a frame allocates nothing.
@@ -281,6 +286,7 @@ export function Room({
       document.removeEventListener('focusin', onFocusIn)
       document.removeEventListener('focusout', onFocusOut)
       renderer.destroy()
+      canvas.remove()
       delete root.dataset.home
       loaded()
     }
@@ -289,12 +295,6 @@ export function Room({
   return (
     // Hidden until the first frame sets the marks. No landmark of its own: the static section of
     // Work links is "Öne çıkan işler".
-    <div className="invisible fixed inset-0 z-0 room:visible">
-      <canvas
-        ref={canvasRef}
-        aria-hidden="true"
-        className="absolute inset-0 size-full touch-none select-none"
-      />
-    </div>
+    <div ref={hostRef} className="invisible fixed inset-0 z-0 room:visible" />
   )
 }
