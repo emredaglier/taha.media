@@ -82,8 +82,8 @@ export const ROOM_TUNING = {
    * `turnSeconds`, so a wiggle never flashes it more than 3 times a second (WCAG 2.3.1).
    */
   opening: {
-    scrollPx: 2400,
-    scrubSeconds: 2,
+    scrollPx: 6000,
+    scrubSeconds: 3,
     turnSeconds: 2,
     /** The monitor that wakes first, and that the camera starts at: the middle one. */
     place: 1,
