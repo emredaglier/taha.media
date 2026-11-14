@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { legalLink, menuLinks } from '../lib/nav-links'
+import { copyrightNotice, OWNER_NAME, TAGLINE } from '../lib/site'
 import { startPageSite, type PageSite } from '../test/page-html'
 
 let pages: PageSite
@@ -31,7 +32,9 @@ describe.each(['/', '/yok-boyle-bir-sayfa'])('the shell around %s', (url) => {
   it('has the header, whose name links Home', async () => {
     const html = await htmlOf(url)
     expect(html).toMatch(
-      /<header[\s\S]*<a[^>]*href="\/"[^>]*>Taha Çiftçi<\/a>[\s\S]*creative director/,
+      new RegExp(
+        `<header[\\s\\S]*<a[^>]*href="/"[^>]*>(?:<[^>]+>)*${OWNER_NAME}(?:<[^>]+>|\\s)*${TAGLINE}(?:<[^>]+>)*</a>`,
+      ),
     )
   })
 
@@ -65,7 +68,7 @@ describe.each(['/', '/yok-boyle-bir-sayfa'])('the shell around %s', (url) => {
   })
 })
 
-const COPYRIGHT = '© Taha Çiftçi'
+const COPYRIGHT = copyrightNotice()
 
 describe('the footer', () => {
   beforeAll(async () => {

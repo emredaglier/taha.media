@@ -75,10 +75,11 @@ export const ALLOWLIST: AllowedHost[] = [
   // file type or in another library's chunk still fails.
   {
     host: 'www.w3.org',
-    in: /\/static\/chunks\/|\.(?:html|rsc|svg)$/,
+    in: /\/static\/chunks\/|\.(?:html|rsc|svg|css)$/,
     reason:
       'XML namespace identifiers (SVG, MathML, XLink, XML) that React and inline SVG use to create ' +
-      'elements, and the `xmlns` of prerendered markup or an SVG file; an identifier, not an ' +
+      'elements, and the `xmlns` of prerendered markup, an SVG file or an SVG data URL in CSS (the ' +
+      '`--noise` grain in globals.css); an identifier, not an ' +
       'address anything fetches.',
   },
   {
