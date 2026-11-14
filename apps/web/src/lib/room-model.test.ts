@@ -241,7 +241,7 @@ describe('stopForPlace', () => {
 
 describe('virtual scroll', () => {
   it('starts at the doorway', () => {
-    expect(createScroll()).toEqual({ target: 0, progress: 0 })
+    expect(createScroll()).toMatchObject({ target: 0, progress: 0 })
   })
 
   it('moves the target by the travel over the scroll length, and follows it with weight', () => {
@@ -307,6 +307,23 @@ describe('virtual scroll', () => {
     const state = createScroll()
     scrollBy(state, -ROOM_TUNING.opening.scrollPx / 2)
     expect(state.target).toBeCloseTo(HOLD_PROGRESS / 2, 12)
+  })
+
+  it('in the opening, turns back at once after a still start, then at most once per turnSeconds (#140)', () => {
+    const state = { ...createScroll(), target: HOLD_PROGRESS, progress: HOLD_PROGRESS }
+    scrollBy(state, ROOM_TUNING.opening.scrollPx / 2)
+    for (let i = 0; i < 20; i += 1) stepScroll(state, 1 / 60)
+    scrollBy(state, -ROOM_TUNING.opening.scrollPx) // a change of mind: back out
+    let before = state.progress
+    stepScroll(state, 1 / 60)
+    expect(state.progress).toBeLessThan(before)
+    for (let i = 0; i < 20; i += 1) stepScroll(state, 1 / 60)
+    scrollBy(state, ROOM_TUNING.opening.scrollPx) // and in again, too soon: it waits
+    before = state.progress
+    for (let i = 0; i < 30; i += 1) stepScroll(state, 1 / 60)
+    expect(state.progress).toBe(before)
+    for (let i = 0; i < ROOM_TUNING.opening.turnSeconds * 60; i += 1) stepScroll(state, 1 / 60)
+    expect(state.progress).toBeGreaterThan(before)
   })
 
   it('ignores a NaN input and does not stick at NaN', () => {

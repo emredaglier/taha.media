@@ -29,6 +29,8 @@ export type RoomRenderer = {
   draw(frame: RoomFrame): void
   /** The Work whose screen is at a point of the canvas (`nx`, `ny`: -1 to 1 across and up) as the visitor sees it through the glass, or -1; a finger (`touch`) is blunter. */
   pick(nx: number, ny: number): number
+  /** Loads the Showreel late, for a room that started at rest: a scroll up into the opening shows it once it has a frame (#140). Once only. */
+  loadShowreel(src: string): void
   /** Starts the camera's push-in to Work `place`'s screen. */
   push(place: number): void
   /** The Work whose screen is hot (-1 none), and whether the push-in has arrived. */
@@ -159,9 +161,7 @@ export function createRoomRenderer(
       else room.clearStill(place)
     },
   })
-  const reel = showreel
-    ? createShowreel(showreel, canvas.parentElement ?? document.body, room)
-    : null
+  let reel = showreel ? createShowreel(showreel, canvas.parentElement ?? document.body, room) : null
   const hasWork = Array.from({ length: ROOM_TUNING.places }, (_, place) => place < placed.length)
   const live: boolean[] = []
   // The room draws once all it waits for is in, or after `stillsWaitMs`: what hangs (a still, the Showreel) is left out.
@@ -217,6 +217,9 @@ export function createRoomRenderer(
     pick(nx, ny) {
       throughGlass(nx, ny, aspect, seenPointer)
       return room.pick(seenPointer.nx, seenPointer.ny, pickMargin(touch))
+    },
+    loadShowreel(src) {
+      if (!destroyed) reel ??= createShowreel(src, canvas.parentElement ?? document.body, room)
     },
     push: (place) => room.startPush(place),
     get hot() {

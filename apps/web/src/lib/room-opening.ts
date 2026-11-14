@@ -88,8 +88,9 @@ export function stepOpening(clock: OpeningClock, dt: number): void {
 export function openingSeconds(clock: OpeningClock, progress: number): number {
   if (clock.seconds < HOLD_SECONDS) return clock.seconds
   const scrubbed = 1 - progress / HOLD_PROGRESS
-  // The last thousandth (about a px) counts as rest: the scroll's easing only ever nears its target.
-  if (scrubbed >= 0.999) return OPENING_SECONDS
+  // The last click slop counts as rest: the scroll's easing only ever nears its target, and a tap
+  // at rest that slides a little still chooses a Work.
+  if (scrubbed >= 1 - ROOM_TUNING.clickSlopPx / opening.scrollPx) return OPENING_SECONDS
   return HOLD_SECONDS + (OPENING_SECONDS - HOLD_SECONDS) * (scrubbed > 0 ? scrubbed : 0)
 }
 

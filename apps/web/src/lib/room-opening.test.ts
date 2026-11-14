@@ -30,7 +30,7 @@ const channels = (state: OpeningState) => [
 ]
 
 /**
- * Asserts the picture stays within the flash limit over `states`, one per frame at 60 fps: steps
+ * Asserts the picture stays within the flash limit over `states`, one per frame at `fps`: steps
  * under 10% a frame and at most 3 flashes a second. A worst case over the opening's real values.
  * The picture's brightness is the screens (woken by `screens`, at their rest `base`) weighted by
  * how much of the view each fills: the middle monitor fills the view while the camera is on it
@@ -38,7 +38,7 @@ const channels = (state: OpeningState) => [
  * share what it leaves. What the middle monitor shows is the Showreel (`reel`) or its Work, taken
  * at the extremes (one white, the other black), both ways round.
  */
-function expectWithinFlashLimit(states: OpeningState[]) {
+function expectWithinFlashLimit(states: OpeningState[], fps = FPS) {
   const { place: middle } = ROOM_TUNING.opening
   const others = ROOM_TUNING.places - 1
   const luminance = (state: OpeningState, reelIsWhite: boolean) => {
@@ -64,7 +64,7 @@ function expectWithinFlashLimit(states: OpeningState[]) {
         i === series.length - 1 ||
         Math.sign(series[i + 1]! - series[i]!) * Math.sign(series[i]! - series[i - 1]!) < 0
       if (turning && Math.abs(series[i]! - series[start]!) >= 0.1) {
-        swings.push({ at: i / FPS, delta: series[i]! - series[start]! })
+        swings.push({ at: i / fps, delta: series[i]! - series[start]! })
         start = i
       }
     }
@@ -82,15 +82,15 @@ function expectWithinFlashLimit(states: OpeningState[]) {
 /** A room that plays its opening: the clock at the start, the scroll at the hold. */
 const opens = () => ({
   clock: createOpening(false),
-  scroll: { target: HOLD_PROGRESS, progress: HOLD_PROGRESS },
+  scroll: { ...createScroll(), target: HOLD_PROGRESS, progress: HOLD_PROGRESS },
 })
 /** A room that starts at rest, at the path's first stop. */
 const atRest = () => ({ clock: createOpening(true), scroll: createScroll() })
-/** Runs `count` frames at 60 fps, as the room does, and returns the opening each one shows. */
-const play = (room: { clock: OpeningClock; scroll: RoomScroll }, count: number) =>
+/** Runs `count` frames at `fps`, as the room does, and returns the opening each one shows. */
+const play = (room: { clock: OpeningClock; scroll: RoomScroll }, count: number, fps = FPS) =>
   Array.from({ length: count }, () => {
-    stepScroll(room.scroll, 1 / FPS)
-    stepOpening(room.clock, 1 / FPS)
+    stepScroll(room.scroll, 1 / fps)
+    stepOpening(room.clock, 1 / fps)
     return sample(openingSeconds(room.clock, room.scroll.progress))
   })
 /** The wheel travel that scrubs from the hold to rest. */
@@ -159,25 +159,58 @@ describe('the opening and WCAG 2.3.1 (flashes)', () => {
     expectWithinFlashLimit(frames.map(sample))
   })
 
-  it('keeps a scrub at any speed within the flash limit, both ways and turning back', () => {
-    for (const px of [40, 400, SCRUB_PX, SCRUB_PX * 3, 1e7]) {
-      const room = opens()
-      const states = play(room, FPS) // the intro, to the hold
-      scrollBy(room.scroll, px)
-      states.push(...play(room, 8 * FPS))
-      scrollBy(room.scroll, -px)
-      states.push(...play(room, 8 * FPS))
-      expectWithinFlashLimit(states)
-    }
-    // A flick in, and a flick back out before the room has come up.
-    const room = opens()
-    const states = play(room, FPS)
-    scrollBy(room.scroll, 1e7)
-    states.push(...play(room, FPS / 2))
-    scrollBy(room.scroll, -1e7)
-    states.push(...play(room, 8 * FPS))
-    expectWithinFlashLimit(states)
+  it('scrubs no faster than the opening plays by itself', () => {
+    expect(ROOM_TUNING.opening.scrubSeconds).toBeGreaterThanOrEqual(OPENING_SECONDS - HOLD_SECONDS)
   })
+
+  it.each([60, 30])(
+    'keeps a scrub at any speed within the flash limit, both ways and turning back (%i fps)',
+    (fps) => {
+      for (const px of [40, 400, SCRUB_PX, SCRUB_PX * 3, 1e7]) {
+        const room = opens()
+        play(room, fps, fps) // the intro (timed, checked above), to the hold
+        const states = play(room, 1, fps)
+        scrollBy(room.scroll, px)
+        states.push(...play(room, 8 * fps, fps))
+        scrollBy(room.scroll, -px)
+        states.push(...play(room, 8 * fps, fps))
+        expectWithinFlashLimit(states, fps)
+      }
+      // A flick in, and a flick back out before the room has come up.
+      const room = opens()
+      play(room, fps, fps)
+      const states = play(room, 1, fps)
+      scrollBy(room.scroll, 1e7)
+      states.push(...play(room, fps / 2, fps))
+      scrollBy(room.scroll, -1e7)
+      states.push(...play(room, 8 * fps, fps))
+      expectWithinFlashLimit(states, fps)
+    },
+  )
+
+  it.each([60, 30])(
+    'keeps a fast wiggle of the wheel or a finger within the flash limit (%i fps)',
+    (fps) => {
+      for (const hz of [1, 1.5, 2, 3, 4, 6, 10]) {
+        for (const amplitude of [60, 120, 240, 400, 600, 900]) {
+          for (const centre of [0.25, 0.4, 0.5, 0.6, 0.75]) {
+            const room = opens()
+            play(room, fps, fps) // the intro, to the hold
+            scrollBy(room.scroll, centre * SCRUB_PX)
+            const states = play(room, 4 * fps, fps)
+            let offset = 0
+            for (let frame = 1; frame <= 4 * fps; frame++) {
+              const next = amplitude * Math.sin((2 * Math.PI * hz * frame) / fps)
+              scrollBy(room.scroll, next - offset)
+              offset = next
+              states.push(...play(room, 1, fps))
+            }
+            expectWithinFlashLimit(states, fps)
+          }
+        }
+      }
+    },
+  )
 })
 
 describe('the opening and the scroll (#140)', () => {
@@ -215,6 +248,15 @@ describe('the opening and the scroll (#140)', () => {
     expect(isOpening(room.clock, room.scroll)).toBe(true)
     scrollBy(room.scroll, 1e7)
     expect(play(room, 10 * FPS).at(-1)).toEqual(createOpeningState())
+  })
+
+  it('a tap at rest that slides a little (under the click slop) stays at rest, so it chooses a Work', () => {
+    for (const px of [ROOM_TUNING.clickSlopPx, -ROOM_TUNING.clickSlopPx]) {
+      const room = atRest()
+      scrollBy(room.scroll, px)
+      play(room, 2 * FPS)
+      expect(isOpening(room.clock, room.scroll)).toBe(false)
+    }
   })
 
   it('does not scrub while the intro plays: the clock alone moves it to the hold', () => {

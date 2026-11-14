@@ -24,7 +24,8 @@ export function createShowreel(
   video.style.cssText =
     'position:absolute;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none'
   let done = false
-  let begun = false // the opening has started: a Showreel not in by now stays out
+  let showing = false // the middle monitor shows the Showreel's share now
+  let waiting = false // in while it was showing: waits off-screen until its share is gone
   const drop = () => {
     if (done) return
     done = true
@@ -39,8 +40,8 @@ export function createShowreel(
     video.addEventListener(
       'loadeddata',
       () => {
-        // Late (the room gave up waiting and the opening began): it would pop in mid-opening.
-        if (begun) drop()
+        // Late, while the opening shows the Showreel's share: it would pop in mid-opening.
+        if (showing) waiting = true
         else if (!done) room.setShowreel(video)
         resolve()
       },
@@ -61,11 +62,15 @@ export function createShowreel(
   return {
     ready,
     update(opening: OpeningState) {
-      const shown = opening.reel > 0
-      if (shown) begun = true
-      if (done || shown === playing || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return
-      playing = shown
-      if (!shown) return video.pause() // kept for the way back up (#140)
+      showing = opening.reel > 0
+      if (waiting && !showing && !done) {
+        waiting = false
+        room.setShowreel(video)
+      }
+      if (done || waiting || showing === playing) return
+      if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return
+      playing = showing
+      if (!showing) return video.pause() // kept for the way back up (#140)
       video.play().catch((error: unknown) => {
         // A pause before it started (a quick scroll in) is no failure; refused or unreadable is:
         // the Work's own picture, not a frozen frame.

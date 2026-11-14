@@ -129,12 +129,23 @@ export function livePlaces(
  * The virtual scroll: where the wheel or drag has asked the camera to be, and where it is. 0 to 1
  * along the path; below 0, back to `HOLD_PROGRESS`, the scroll scrubs the opening (#140).
  */
-export type RoomScroll = { target: number; progress: number }
+export type RoomScroll = {
+  target: number
+  progress: number
+  /** Which way `progress` last moved (1 in, -1 out, 0 not yet), and how long ago it last turned (s). */
+  heading: number
+  turnedAgo: number
+}
 
 /** Where the scroll holds the opening on the Showreel: the opening's scroll length before the path's start. */
 export const HOLD_PROGRESS = -ROOM_TUNING.opening.scrollPx / ROOM_TUNING.scrollLengthPx
 
-export const createScroll = (): RoomScroll => ({ target: 0, progress: 0 })
+export const createScroll = (): RoomScroll => ({
+  target: 0,
+  progress: 0,
+  heading: 0,
+  turnedAgo: Infinity,
+})
 
 /** The wheel or a vertical drag moved `px` CSS px (positive: further in). Stops at the last stop and at the hold. Changes `scroll` in place. */
 export function scrollBy(scroll: RoomScroll, px: number): void {
@@ -151,8 +162,19 @@ export function stepScroll(scroll: RoomScroll, seconds: number): void {
   // Below the path's start (the opening) it moves no faster than the scrub's pace: a flick never
   // jumps the room's light (WCAG 2.3.1).
   const most = (dt * -HOLD_PROGRESS) / ROOM_TUNING.opening.scrubSeconds
-  scroll.progress = Math.min(
+  const capped = Math.min(
     scroll.progress < 0 ? scroll.progress + most : Infinity,
     Math.max(Math.min(scroll.progress, 0) - most, next),
   )
+  scroll.turnedAgo += dt
+  const heading = Math.sign(capped - scroll.progress)
+  if (heading !== 0 && heading !== scroll.heading) {
+    // In the opening it turns back at most once per `turnSeconds`: a wiggle never flashes the
+    // room's light more than 3 times a second (WCAG 2.3.1). It waits where it is.
+    const inOpening = Math.min(scroll.progress, capped) < 0
+    if (inOpening && scroll.turnedAgo < ROOM_TUNING.opening.turnSeconds) return
+    if (scroll.heading !== 0) scroll.turnedAgo = 0 // the first move from still is no turn
+    scroll.heading = heading
+  }
+  scroll.progress = capped
 }

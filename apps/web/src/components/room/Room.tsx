@@ -81,8 +81,14 @@ export function Room({
     )
     let renderer: RoomRenderer
     try {
-      // The Showreel loads at rest too: a scroll back up reaches the opening (#140).
-      renderer = createRoomRenderer(canvas, works, touch, giveUp, showreel?.src ?? null)
+      // The opening waits for the Showreel; a room at rest loads it after its first frame (#140).
+      renderer = createRoomRenderer(
+        canvas,
+        works,
+        touch,
+        giveUp,
+        where.opening ? (showreel?.src ?? null) : null,
+      )
     } catch (error) {
       if (!(error instanceof RoomUnavailable)) throw error
       giveUp()
@@ -138,6 +144,8 @@ export function Room({
         window.scrollTo(0, 0)
         markRoomOpened()
         loaded()
+        // For a scroll up into the opening; the first frame never waits for it.
+        if (!where.opening && showreel) renderer.loadShowreel(showreel.src)
       }
     }
     const start = () => {

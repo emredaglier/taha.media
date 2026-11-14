@@ -33,6 +33,7 @@ const showreel = { src: 'https://cdn.example/reel.mp4' }
 // What the stand-in renderer answers: the place under the pointer, the hot one, and the push-in's arrival.
 const scene = { pick: vi.fn<(nx: number, ny: number) => number>(), hot: -1, pushed: false }
 let pushes: number[]
+let lateReels: string[]
 
 type Frame = {
   progress: number
@@ -76,6 +77,7 @@ const canvas = () => container.querySelector('canvas')!
 beforeEach(() => {
   draws = []
   pushes = []
+  lateReels = []
   scene.pick.mockReset().mockReturnValue(-1)
   scene.hot = -1
   scene.pushed = false
@@ -98,6 +100,7 @@ beforeEach(() => {
       })
     },
     pick: scene.pick,
+    loadShowreel: (src) => lateReels.push(src),
     push: (place) => pushes.push(place),
     get hot() {
       return scene.hot
@@ -305,6 +308,7 @@ describe('the Edit Room on Home', () => {
       runFrame()
       expect(draws[0]!.opening).toMatchObject({ reel: 1, fly: 1, settled: false })
       expect(renderer.create.mock.calls[0]![4]).toBe(showreel.src)
+      expect(lateReels).toEqual([]) // an opening waits for its Showreel up front
 
       runFrames(Math.ceil((OPENING_SECONDS * 1000) / 16) + 60)
       expect(draws.at(-1)!.opening).toMatchObject({ reel: 1, fly: 1, settled: false }) // the hold
@@ -427,7 +431,9 @@ describe('the Edit Room on Home', () => {
       await mount() // no document load on Home: the page was reached by a client navigation
       runFrame()
       expect(draws[0]!.opening.settled).toBe(true)
-      expect(renderer.create.mock.calls[0]![4]).toBe(showreel.src)
+      // The first frame never waits for the Showreel: it loads after it, for the way up.
+      expect(renderer.create.mock.calls[0]![4]).toBeNull()
+      expect(lateReels).toEqual([showreel.src])
       wheel(-1e6)
       runFrames(settleFrames)
       expect(draws.at(-1)!.opening).toMatchObject({ reel: 1, fly: 1, settled: false })
@@ -452,6 +458,8 @@ describe('the Edit Room on Home', () => {
       runFrame()
       expect(draws[0]!.opening.settled).toBe(true)
       expect(draws[0]!.progress).toBeCloseTo(stopForPlace(2, false).progress, 5)
+      expect(renderer.create.mock.calls[0]![4]).toBeNull()
+      expect(lateReels).toEqual([showreel.src])
     })
 
     it('remembers the Work whose link is followed, for the way back', async () => {

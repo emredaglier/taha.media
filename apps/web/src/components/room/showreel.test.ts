@@ -101,13 +101,20 @@ describe('the Showreel in the opening', () => {
     expect(host.querySelector('video')).toBeNull()
   })
 
-  it('stays out if it comes in after the opening has begun, rather than popping in mid-opening', async () => {
+  it('waits off-screen if it comes in while the opening shows it, rather than popping in mid-opening', async () => {
     const { reel, room, video, host } = make()
     reel.update(at(0.5)) // the room gave up waiting and drew
     hasFrame(video)
     video.dispatchEvent(new Event('loadeddata'))
     await reel.ready
+    reel.update(at(1))
     expect(room.setShowreel).not.toHaveBeenCalledWith(video)
-    expect(host.contains(video)).toBe(false)
+    expect(play).not.toHaveBeenCalled()
+    expect(host.contains(video)).toBe(true)
+
+    reel.update(at(2.1)) // its share has handed over: in now, for the way back up (#140)
+    expect(room.setShowreel).toHaveBeenLastCalledWith(video)
+    reel.update(at(1))
+    expect(play).toHaveBeenCalledTimes(1)
   })
 })
