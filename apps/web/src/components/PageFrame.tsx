@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react'
 
 import { MeltLayer } from './MeltLayer'
-import { SiteCursor } from './SiteCursor'
 import { SiteFooter } from './SiteFooter'
 
 /**
@@ -14,7 +13,6 @@ export function PageMain({ children, className }: { children: ReactNode; classNa
       <main id="main" className={`flex-1 px-6 ${className ?? ''}`.trimEnd()}>
         {children}
       </main>
-      <SiteCursor />
       <MeltLayer />
     </>
   )
