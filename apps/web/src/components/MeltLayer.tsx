@@ -4,6 +4,7 @@ import { useEffect, useRef, useSyncExternalStore } from 'react'
 
 import { deviceReport, isWeakDevice } from '../lib/weak-device'
 import { CAN_HOVER, POINTER_FINE, REDUCED_MOTION, subscribeToPreferences } from '../lib/loop-mode'
+import { isMenuOpen } from '../lib/menu-a11y'
 import { MELT, settled, springStep, visibleRect, type Rect, type Spring } from '../lib/melt'
 
 const wanted = () =>
@@ -67,7 +68,7 @@ const percent = (value: string | undefined) =>
  * only over media (`data-melt`), never text. A fixed canvas draws the media under the mouse again
  * at its exact box, bent around the mouse, covering the original; elsewhere it stays clear.
  * Decorative. Same gate as `SiteCursor`, plus WebGL2 and a device that isn't weak.
- * shortcut: mounted from PageMain like `SiteCursor`; media inside a scroll container or under an
+ * shortcut: mounted from PageMain; media inside a scroll container or under an
  * overlapping element is drawn unclipped, move the layer into the page if that ever shows.
  */
 export function MeltLayer() {
@@ -210,6 +211,8 @@ export function MeltLayer() {
       const half = MELT.size / 2
       const parts: Part[] = []
       let playing = false
+      // Over the pinned page sheet the rects are tilted, and the melt reads axis-aligned ones.
+      if (isMenuOpen(document)) return { parts, playing }
       for (const el of document.querySelectorAll<HTMLImageElement | HTMLVideoElement>(
         '[data-melt]',
       )) {

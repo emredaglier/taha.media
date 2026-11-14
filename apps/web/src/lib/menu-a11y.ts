@@ -1,3 +1,6 @@
+/** The id of the box that holds the route's content: the Pinboard turns it into a sheet. */
+export const PAGE_SHEET_ID = 'page-sheet'
+
 /** The id of the menu's full-screen panel. */
 export const MENU_PANEL_ID = 'site-menu-panel'
 

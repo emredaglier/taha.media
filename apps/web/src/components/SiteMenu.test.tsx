@@ -4,7 +4,16 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 let pathname = '/'
-vi.mock('next/navigation', () => ({ usePathname: () => pathname }))
+const router = { push: vi.fn() }
+vi.mock('next/navigation', () => ({ usePathname: () => pathname, useRouter: () => router }))
+// A real loop needs matchMedia and IntersectionObserver, which jsdom lacks: here it is a marker.
+vi.mock('./LoopVideo', async () => {
+  const { createElement } = await import('react')
+  return {
+    LoopVideo: ({ video, fill }: { video: { src: string }; fill?: boolean }) =>
+      createElement('div', { 'data-loop': video.src, 'data-fill': String(fill) }),
+  }
+})
 vi.mock('next/link', async () => {
   const { createElement } = await import('react')
   return {
@@ -13,16 +22,43 @@ vi.mock('next/link', async () => {
   }
 })
 
+import type { ImageRead, VideoRead } from '@taha/cms-config'
+
+import type { MenuMedia } from '../data/menu'
+import { REDUCED_MOTION } from '../lib/loop-mode'
+import { MENU_PANEL_ID, PAGE_SHEET_ID } from '../lib/menu-a11y'
 import { legalLink, menuLinks } from '../lib/nav-links'
+import { setDevice } from '../test/device'
 import { SiteMenu } from './SiteMenu'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 let container: HTMLElement
 let root: Root
+let page: HTMLElement
 
 const COPYRIGHT = '© Taha Çiftçi'
-const render = () => act(() => root.render(<SiteMenu copyright={COPYRIGHT} />))
+const NO_MEDIA: MenuMedia = { isler: null, galeri: null, hakkimda: null }
+const picture = (name: string): ImageRead => ({
+  id: 1,
+  src: `/${name}.webp`,
+  srcset: '',
+  width: 1600,
+  height: 900,
+  focalPoint: { x: 50, y: 50 },
+  alt: `${name} alt`,
+})
+const loop = (name: string): VideoRead => ({
+  id: 2,
+  src: `/${name}.mp4`,
+  width: 1600,
+  height: 900,
+  duration: 2,
+  hasAudio: false,
+  poster: picture(`${name}-poster`),
+})
+const render = (media: MenuMedia = NO_MEDIA) =>
+  act(() => root.render(<SiteMenu copyright={COPYRIGHT} media={media} />))
 const toggle = () => container.querySelector('summary') as HTMLElement
 const links = () => [...container.querySelectorAll<HTMLAnchorElement>('nav a')]
 const details = () => container.querySelector('details')!
@@ -36,15 +72,21 @@ const press = (key: string, init: KeyboardEventInit = {}) => {
 
 beforeEach(() => {
   pathname = '/'
+  router.push.mockReset()
+  page = document.createElement('div')
+  page.id = PAGE_SHEET_ID
   container = document.createElement('div')
-  document.body.append(container)
+  document.body.append(container, page)
   root = createRoot(container)
 })
 
 afterEach(() => {
   act(() => root.unmount())
   container.remove()
+  page.remove()
   document.documentElement.style.overflow = ''
+  vi.unstubAllGlobals()
+  vi.restoreAllMocks()
 })
 
 describe('closed', () => {
@@ -81,6 +123,81 @@ describe('the links', () => {
   })
 })
 
+describe('the Pinboard at rest', () => {
+  it('holds three print links, with the word as a span on the tape', async () => {
+    await render()
+    const prints = [...container.querySelectorAll('nav a.pb-pr')]
+    expect(prints.map((print) => print.querySelector('.pb-tape span')?.textContent)).toEqual(
+      menuLinks.map(({ label }) => label),
+    )
+  })
+
+  it('hides every decoration from assistive tech and holds no note words', async () => {
+    await render()
+    const nav = container.querySelector('nav')!
+    const decorations = nav.querySelectorAll(
+      '.pb-wall, .pb-spot, .pb-shadows, .pb-str, .pb-clip, .pb-story, .pb-note:not([data-k=legal])',
+    )
+    expect(decorations.length).toBeGreaterThan(5)
+    for (const decoration of decorations) {
+      expect(decoration.closest('[aria-hidden=true]')).not.toBeNull()
+    }
+    expect(nav.textContent).toBe(
+      [...menuLinks.map(({ label }) => label), legalLink.label, COPYRIGHT].join(''),
+    )
+  })
+})
+
+describe('the frame pictures', () => {
+  const slots = () =>
+    [...container.querySelectorAll('nav a.pb-pr')].map((a) => a.querySelector('.pb-pic')!)
+
+  it('leave the grey slot empty when there is no media', async () => {
+    await render()
+    expect(slots().map((slot) => slot.childElementCount)).toEqual([0, 0, 0])
+  })
+
+  it('show a loop in İşler, a still in Galeri and the portrait in Hakkımda, all hidden from assistive tech', async () => {
+    await render({
+      isler: loop('isler'),
+      galeri: {
+        kind: 'image',
+        id: 3,
+        caption: null,
+        year: null,
+        image: { ...picture('galeri'), fullSrc: '/g.webp' },
+      },
+      hakkimda: picture('portre'),
+    })
+    const [isler, galeri, hakkimda] = slots()
+    // Closed, a loop is only its lazy poster; no video is mounted until the first open.
+    expect(isler!.querySelector('[data-loop]')).toBeNull()
+    expect(isler!.querySelector('img')?.getAttribute('src')).toBe('/isler-poster.webp')
+    act(() => toggle().click())
+    expect(isler!.querySelector('[data-loop]')?.getAttribute('data-loop')).toBe('/isler.mp4')
+    expect(isler!.querySelector('[data-loop]')?.getAttribute('data-fill')).toBe('true')
+    expect(galeri!.querySelector('img')?.getAttribute('src')).toBe('/galeri.webp')
+    expect(hakkimda!.querySelector('img')?.getAttribute('src')).toBe('/portre.webp')
+    expect(galeri!.querySelector('img')?.getAttribute('alt')).toBe('')
+    expect(hakkimda!.querySelector('img')?.getAttribute('alt')).toBe('')
+    for (const slot of slots()) expect(slot.getAttribute('aria-hidden')).toBe('true')
+    expect(links().map((link) => link.textContent)).toEqual([
+      ...menuLinks.map(({ label }) => label),
+      legalLink.label,
+    ])
+  })
+
+  it('show a Gallery loop in Galeri', async () => {
+    await render({
+      ...NO_MEDIA,
+      galeri: { kind: 'loop', id: 3, caption: null, year: null, video: loop('galeri') },
+    })
+    act(() => toggle().click())
+    expect(slots()[1]!.querySelector('[data-loop]')?.getAttribute('data-loop')).toBe('/galeri.mp4')
+    expect(slots()[0]!.childElementCount).toBe(0)
+  })
+})
+
 describe('open', () => {
   beforeEach(async () => {
     await render()
@@ -99,6 +216,12 @@ describe('open', () => {
     act(() => toggle().click())
     expect(document.documentElement.style.overflow).toBe('')
     expect(toggle().textContent).toBe('MENU')
+  })
+
+  it('hides the page box from focus and screen readers while open, and not once closed', () => {
+    expect(page.hasAttribute('inert')).toBe(true)
+    act(() => toggle().click())
+    expect(page.hasAttribute('inert')).toBe(false)
   })
 
   it('closes on Escape and returns focus to MENU', () => {
@@ -140,5 +263,249 @@ describe('open', () => {
     await render()
     expect(toggle().getAttribute('aria-expanded')).toBe('false')
     expect(links()[0]!.getAttribute('aria-current')).toBe('page')
+  })
+})
+
+describe('with motion', () => {
+  let frames: Map<number, FrameRequestCallback>
+  let nextFrame: number
+  let clock: number
+  /** Runs `ms` of 60 fps frames. */
+  const advance = (ms: number) =>
+    act(() => {
+      for (let t = 0; t < ms; t += 16) {
+        clock += 16
+        const due = [...frames.values()]
+        frames.clear()
+        for (const callback of due) callback(clock)
+      }
+    })
+  const sheets = () => [...container.querySelectorAll<HTMLElement>('.pb-s, .pb-sd')]
+  let reduced: boolean
+
+  beforeEach(async () => {
+    frames = new Map()
+    nextFrame = 1
+    clock = 1000
+    reduced = false
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      frames.set(nextFrame, callback)
+      return nextFrame++
+    })
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id))
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: reduced && query === REDUCED_MOTION,
+      addEventListener() {},
+      removeEventListener() {},
+    }))
+    vi.spyOn(performance, 'now').mockImplementation(() => clock)
+    await render()
+  })
+
+  it('closes aria-expanded and focuses MENU at once, and the <details> only after the close animation', () => {
+    act(() => toggle().click())
+    advance(1500)
+    expect(page.style.transform).not.toBe('')
+    press('Escape')
+    expect(toggle().getAttribute('aria-expanded')).toBe('false')
+    expect(toggle().textContent).toBe('MENU')
+    expect(document.activeElement).toBe(toggle())
+    expect(details().open).toBe(true)
+    advance(1500)
+    expect(details().open).toBe(false)
+  })
+
+  it('reopened during the close, stays open and ends open', () => {
+    act(() => toggle().click())
+    advance(1500)
+    press('Escape')
+    advance(300)
+    act(() => toggle().click())
+    expect(details().open).toBe(true)
+    advance(3000)
+    expect(details().open).toBe(true)
+    expect(toggle().getAttribute('aria-expanded')).toBe('true')
+    expect(page.style.transform).not.toBe('')
+    press('Escape')
+    advance(1500)
+    expect(document.documentElement.style.overflow).toBe('')
+  })
+
+  it('keeps the page from scrolling until the close has ended', () => {
+    act(() => toggle().click())
+    advance(1500)
+    press('Escape')
+    expect(document.documentElement.style.overflow).toBe('hidden')
+    advance(1500)
+    expect(details().open).toBe(false)
+    expect(document.documentElement.style.overflow).toBe('')
+  })
+
+  it('leaves no style on the page box or the sheets and no frame queued once closed', () => {
+    const atRest = sheets().map((sheet) => sheet.getAttribute('style'))
+    act(() => toggle().click())
+    advance(1500)
+    expect(sheets().some((sheet) => sheet.style.transform !== '')).toBe(true)
+    press('Escape')
+    advance(1500)
+    expect(page.getAttribute('style')).toBeNull()
+    expect(sheets().map((sheet) => sheet.getAttribute('style'))).toEqual(atRest)
+    expect(frames.size).toBe(0)
+  })
+
+  it('leaves no style on the page box and no frame queued after an unmount mid-open', () => {
+    act(() => toggle().click())
+    advance(500)
+    expect(page.style.transform).not.toBe('')
+    act(() => root.unmount())
+    root = createRoot(container)
+    expect(page.getAttribute('style')).toBeNull()
+    expect(frames.size).toBe(0)
+  })
+
+  describe('choosing a frame', () => {
+    const click = (link: HTMLElement, init: MouseEventInit = {}) => {
+      const event = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0, ...init })
+      act(() => {
+        link.dispatchEvent(event)
+      })
+      return event
+    }
+
+    beforeEach(() => {
+      act(() => toggle().click())
+      advance(1500)
+    })
+
+    it('a plain click prevents the default, closes aria-expanded at once and opens the page within 900 ms', async () => {
+      const event = click(links()[1]!)
+      expect(event.defaultPrevented).toBe(true)
+      expect(toggle().getAttribute('aria-expanded')).toBe('false')
+      expect(
+        container
+          .querySelector('#' + toggle().getAttribute('aria-controls'))!
+          .hasAttribute('inert'),
+      ).toBe(true)
+      expect(router.push).not.toHaveBeenCalled()
+      advance(900)
+      expect(router.push).toHaveBeenCalledExactlyOnceWith('/galeri')
+      // Until the route changes the flown print keeps covering the view.
+      advance(2000)
+      expect(details().open).toBe(true)
+      expect(container.querySelector<HTMLElement>('#' + MENU_PANEL_ID)!.style.opacity).toBe('1')
+      pathname = '/galeri'
+      await render()
+      advance(1500)
+      expect(details().open).toBe(false)
+      expect(page.getAttribute('style')).toBeNull()
+      expect(frames.size).toBe(0)
+    })
+
+    it('fades the board anyway when the route never changes', () => {
+      click(links()[1]!)
+      advance(900 + 4000 + 500)
+      expect(details().open).toBe(false)
+      expect(frames.size).toBe(0)
+    })
+
+    it('flies Gizlilik the same way', () => {
+      expect(click(links().at(-1)!).defaultPrevented).toBe(true)
+      advance(900)
+      expect(router.push).toHaveBeenCalledExactlyOnceWith('/gizlilik')
+    })
+
+    it.each([
+      { metaKey: true },
+      { ctrlKey: true },
+      { shiftKey: true },
+      { altKey: true },
+      { button: 1 },
+    ])('a modified click %j is left to the browser, with no flight', (init) => {
+      const event = click(links()[0]!, init)
+      expect(event.defaultPrevented).toBe(false)
+      advance(1500)
+      expect(router.push).not.toHaveBeenCalled()
+    })
+
+    it('a click on the current page flies and just closes, with no navigation', async () => {
+      pathname = '/isler'
+      await render() // the route change closes the menu: open it again
+      advance(1500)
+      act(() => toggle().click())
+      advance(1500)
+      expect(click(links()[0]!).defaultPrevented).toBe(true)
+      advance(1500)
+      expect(router.push).not.toHaveBeenCalled()
+      expect(details().open).toBe(false)
+    })
+
+    it('ignores MENU, Escape and a second click while it flies', () => {
+      click(links()[1]!)
+      advance(300)
+      act(() => toggle().click())
+      press('Escape')
+      expect(toggle().getAttribute('aria-expanded')).toBe('false')
+      expect(click(links()[2]!).defaultPrevented).toBe(true)
+      advance(1500)
+      expect(router.push).toHaveBeenCalledExactlyOnceWith('/galeri')
+    })
+
+    it('lifts a hovered frame above the rest, and a focused one the same', async () => {
+      const [first, second] = [...container.querySelectorAll<HTMLElement>('.pb-pr')]
+      const base = second!.style.zIndex
+      act(() => {
+        first!.dispatchEvent(new Event('pointerenter'))
+      })
+      advance(500)
+      expect(first!.style.zIndex).toBe('9')
+      act(() => {
+        first!.dispatchEvent(new Event('pointerleave'))
+      })
+      await act(() => new Promise((done) => setTimeout(done, 120))) // the 90 ms grace
+      advance(500)
+      expect(first!.style.zIndex).not.toBe('9')
+      vi.spyOn(links()[1]!, 'matches').mockReturnValue(true) // jsdom has no keyboard-focus heuristic
+      act(() => links()[1]!.focus())
+      advance(500)
+      expect(second!.style.zIndex).toBe('9')
+      expect(base).not.toBe('9')
+    })
+  })
+
+  it('leaves no listener behind once closed: a pointer move changes nothing', () => {
+    act(() => toggle().click())
+    advance(1500)
+    press('Escape')
+    advance(1500)
+    const atRest = sheets().map((sheet) => sheet.getAttribute('style'))
+    act(() => {
+      container.querySelector('.pb-pr')!.dispatchEvent(new Event('pointerenter'))
+    })
+    advance(500)
+    expect(sheets().map((sheet) => sheet.getAttribute('style'))).toEqual(atRest)
+    expect(frames.size).toBe(0)
+  })
+
+  it.each([
+    ['reduced motion', () => (reduced = true)],
+    ['a weak device', () => setDevice({ cores: 2 })],
+  ])('under %s writes nothing on the page box or the sheets, and closes at once', (_, set) => {
+    set()
+    const atRest = sheets().map((sheet) => sheet.getAttribute('style'))
+    act(() => toggle().click())
+    advance(1000)
+    expect(page.getAttribute('style')).toBeNull()
+    expect(sheets().map((sheet) => sheet.getAttribute('style'))).toEqual(atRest)
+    expect(frames.size).toBe(0)
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })
+    act(() => {
+      links()[1]!.dispatchEvent(event)
+    })
+    expect(event.defaultPrevented).toBe(false)
+    expect(toggle().getAttribute('aria-expanded')).toBe('false')
+    expect(router.push).not.toHaveBeenCalled()
+    act(() => toggle().click())
+    press('Escape')
+    expect(details().open).toBe(false)
   })
 })

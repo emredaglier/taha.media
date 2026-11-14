@@ -5,6 +5,7 @@ import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 
 import { Observability } from '../components/Observability'
+import { SiteCursor } from '../components/SiteCursor'
 import { SiteHeader } from '../components/SiteHeader'
 import {
   beaconAttributes,
@@ -14,6 +15,7 @@ import {
   sentryOptions,
 } from '../lib/observability'
 import { loaderScript } from '../lib/home-loader'
+import { PAGE_SHEET_ID } from '../lib/menu-a11y'
 import { isPreviewInstance } from '../lib/preview'
 import { SITE_NAME, SITE_ORIGIN } from '../lib/site'
 import './globals.css'
@@ -26,7 +28,7 @@ export const metadata: Metadata = {
 }
 
 /**
- * The shell every public route renders in: skip link and header. The `main` and the footer come
+ * The shell every public route renders in: skip link, header and the page sheet box around the route's content. The `main` and the footer come
  * from the route's own layout (`PageFrame`): Home has no footer (ADR-0103), so the footer can't
  * live here. A single root layout keeps navigation between Home and the other pages client-side.
  */
@@ -55,7 +57,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           İçeriğe geç
         </a>
         <SiteHeader />
-        {children}
+        {/* No inline style while the menu is closed; the Pinboard transforms it while open. */}
+        <div id={PAGE_SHEET_ID} className="flex flex-1 flex-col">
+          {children}
+        </div>
+        <SiteCursor />
         {sentry ? <Observability options={sentry} /> : null}
         {beacon ? <script defer {...beacon} /> : null}
         <div aria-hidden="true" className="crt" />

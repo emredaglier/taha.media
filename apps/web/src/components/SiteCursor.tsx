@@ -55,8 +55,8 @@ const real = (event: PointerEvent) => event.isTrusted && event.pointerType === '
  * picture or a loop in it, the label melts into the picture at the mouse. On any other link it
  * floods the link with a wobbling blot that inverts what is under it, with the label cut out of
  * it on big links. Decorative. Only for a mouse that hovers and with motion allowed.
- * shortcut: mounted from PageMain because the root layout has unmerged work, move to the root
- * layout once the owner's layout work is merged.
+ * Mounted from the root layout, outside the page sheet box: a transformed box would carry this
+ * fixed element with it.
  */
 export function SiteCursor() {
   const enabled = useSyncExternalStore(subscribeToPreferences, wanted, () => false)

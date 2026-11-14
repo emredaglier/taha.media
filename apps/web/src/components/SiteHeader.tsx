@@ -1,15 +1,17 @@
 import Link from 'next/link'
 
+import { getMenuMedia } from '../data/menu'
 import { copyrightNotice, OWNER_NAME, TAGLINE } from '../lib/site'
 import { SiteMenu } from './SiteMenu'
 
 /**
  * The name links Home; MENU opens the full-screen menu at every width. The © line goes to the
- * menu as a prop, so the year the server rendered is the one the client hydrates with. It stacks
+ * menu as a prop (with the pictures for its frames, `getMenuMedia`), so the year the server rendered is the one the client hydrates with. It stacks
  * above the Edit Room, which covers the whole screen on Home. On Home it sits over the full-bleed hero,
  * and while the Edit Room runs it stays on screen throughout.
  */
-export function SiteHeader() {
+export async function SiteHeader() {
+  const media = await getMenuMedia()
   return (
     // Difference blend inverts over light video; off while the menu is open, or its panel would blend too.
     <header className="relative z-10 flex items-baseline justify-between gap-4 px-8 py-7 text-text mix-blend-difference has-[details[open]]:mix-blend-normal over-hero:absolute over-hero:inset-x-0 over-hero:top-0 room:fixed room:inset-x-0 room:top-0">
@@ -18,7 +20,7 @@ export function SiteHeader() {
         <span className="font-serif text-xl">{TAGLINE}</span>
       </Link>
       <div className="flex items-baseline gap-6">
-        <SiteMenu copyright={copyrightNotice()} />
+        <SiteMenu copyright={copyrightNotice()} media={media} />
       </div>
     </header>
   )

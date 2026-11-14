@@ -35,12 +35,21 @@ describe.each(['/', '/yok-boyle-bir-sayfa'])('the shell around %s', (url) => {
     )
   })
 
+  it('holds the route in one page sheet box after the header', async () => {
+    const html = await htmlOf(url)
+    const box = html.indexOf('id="page-sheet"')
+    expect(box).toBeGreaterThan(html.indexOf('</header>'))
+    expect(html.indexOf('<main')).toBeGreaterThan(box)
+    expect(html.indexOf('href="#main"')).toBeLessThan(box)
+    expect(html).toMatch(/<div id="page-sheet" class="flex flex-1 flex-col">/)
+  })
+
   it('has the menu links in the server HTML, so they work without JavaScript', async () => {
     const html = await htmlOf(url)
     const details = /<details[\s\S]*<\/details>/.exec(html)?.[0] ?? ''
     expect(details).toMatch(/<summary[^>]*aria-controls="site-menu-panel"/)
     for (const { href, label } of menuLinks) {
-      expect(details).toMatch(new RegExp(`<a[^>]*href="${href}"[^>]*>${label}</a>`))
+      expect(details).toMatch(new RegExp(`<a[^>]*href="${href}"[^>]*>(?:<[^>]+>)*${label}</`))
     }
   })
 
