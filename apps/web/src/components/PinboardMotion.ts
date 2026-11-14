@@ -1,6 +1,7 @@
 'use client'
 
-import { type RefObject, useEffect, useRef } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
+import { type MouseEvent, type RefObject, useEffect, useRef } from 'react'
 
 import { REDUCED_MOTION, saveDataOn } from '../lib/loop-mode'
 import { MENU_PANEL_ID, PAGE_SHEET_ID } from '../lib/menu-a11y'
@@ -35,7 +36,8 @@ const motionAllowed = () =>
   !saveDataOn() &&
   !isWeakDevice(deviceReport())
 
-type Sheet = MomentSheet & HingeSheet & { el: HTMLElement; sd: HTMLElement; link: number }
+type Sheet = MomentSheet &
+  HingeSheet & { el: HTMLElement; sd: HTMLElement; link: number; z: string; zNow: string }
 
 /** What the loop writes on a sheet or its shadow; removed again at rest, so the static board shows. */
 const SHEET_STYLES = ['transform', 'opacity', 'will-change', 'height']
@@ -70,6 +72,8 @@ function createPinboardMotion(details: HTMLDetailsElement, onRest: () => void) {
     fl: 0,
     el: els[i]!,
     sd: shadows[i]!,
+    z: els[i]!.style.zIndex, // the server's stacking, back at rest
+    zNow: els[i]!.style.zIndex,
     link: 'link' in def ? def.link : -1,
   }))
   const pageSheet = sheets[0]!
@@ -84,9 +88,11 @@ function createPinboardMotion(details: HTMLDetailsElement, onRest: () => void) {
       rested = true
     },
   )
-  // shortcut: the pointer stays put, so no draught yet; the interactions ticket (#151) feeds it.
   const pointer = { x: 0, y: 0 }
   const draught = createDraught(pointer)
+  const listeners = new AbortController()
+  let pointerSeen = false
+  let hoverTimer: ReturnType<typeof setTimeout> | undefined
 
   let L: Layout = layoutBoard(1, 1, PINBOARD_LABELS)
   let vw = 1
@@ -150,15 +156,17 @@ function createPinboardMotion(details: HTMLDetailsElement, onRest: () => void) {
     s.sd.style.opacity = `${o * 0.8}`
   }
 
-  // shortcut: the board's fade after a leave (`board.fade`) and hover's stacking are left to #151.
   function render() {
     const wa = board.wall.a
+    panel.style.opacity = `${board.fade.o}` // the board fades out after a leave
     wallEl.style.opacity = `${wa}`
     spotEl.style.opacity = `${board.spot.a * wa}`
     spotEl.style.transform = `translate(${board.spot.x}px,${board.spot.y}px)`
     sheets.forEach((s, i) => {
       if (s === pageSheet) return
       const at = L.sheets[i]!
+      const z = board.leaving === s ? '20' : board.hovered === s ? '9' : s.z
+      if (z !== s.zNow) s.el.style.zIndex = s.zNow = z
       const e = s.en
       const fl = s.fl
       const fy = s.dir * (1 - e) * vh * 0.7
@@ -222,6 +230,8 @@ function createPinboardMotion(details: HTMLDetailsElement, onRest: () => void) {
     cancelAnimationFrame(raf)
     raf = 0
     removeEventListener('resize', layout)
+    listeners.abort()
+    clearTimeout(hoverTimer)
   }
 
   /** Back to the static board: every style the loop wrote, gone. */
@@ -230,7 +240,9 @@ function createPinboardMotion(details: HTMLDetailsElement, onRest: () => void) {
     pageOn = false
     for (const s of sheets) {
       for (const el of [s.el, s.sd]) for (const name of SHEET_STYLES) el.style.removeProperty(name)
+      s.el.style.zIndex = s.zNow = s.z
     }
+    panel.style.removeProperty('opacity')
     wallEl.style.removeProperty('opacity')
     spotEl.style.removeProperty('opacity')
     spotEl.style.removeProperty('transform')
@@ -246,7 +258,64 @@ function createPinboardMotion(details: HTMLDetailsElement, onRest: () => void) {
     }
   }
 
+  /** Hovers a sheet; its pool of light goes a tenth below its middle. */
+  const hover = (s: Sheet | null) => {
+    const at = L.sheets[sheets.indexOf(s!)]
+    moments.hover(s && at ? { sheet: s, x: at.cx, y: at.cy + at.h * 0.1 } : null)
+  }
+  const { signal } = listeners
+  panel.addEventListener(
+    'pointermove',
+    (event) => {
+      pointer.x = event.clientX
+      pointer.y = event.clientY
+      if (!pointerSeen) {
+        pointerSeen = true
+        draught.prevX = pointer.x // no wind from the jump out of the corner
+        draught.prevY = pointer.y
+      }
+    },
+    { signal, passive: true },
+  )
+  for (const s of sheets) {
+    if (s.kind !== 'print' && s.kind !== 'legal') continue
+    const on = (type: string, handler: (event: Event) => void) =>
+      s.el.addEventListener(type, handler, { signal })
+    on('pointerenter', () => {
+      clearTimeout(hoverTimer)
+      hover(s)
+    })
+    on('pointerleave', () => {
+      clearTimeout(hoverTimer)
+      hoverTimer = setTimeout(() => board.hovered === s && hover(null), 90)
+    })
+    // The touch version of hover.
+    on('pointerdown', () => {
+      if (!board.open || board.leaving) return
+      clearTimeout(hoverTimer)
+      hover(s)
+    })
+    on('focusin', (event) => {
+      let visible = true
+      try {
+        visible = (event.target as Element).matches(':focus-visible')
+      } catch {} // an old browser: take it as visible
+      if (visible) hover(s)
+    })
+    on('focusout', () => board.hovered === s && hover(null))
+  }
+
   return {
+    /** Takes a plain click on sheet `index`: flies it at the view, then `onArrive`. True once a leave owns the click (a second click included). */
+    leave(index: number, onArrive: () => void) {
+      if (board.leaving) return true
+      if (!board.open) return false
+      moments.leave(sheets[index]!, onArrive)
+      return true
+    },
+    get leaving() {
+      return board.leaving !== null
+    },
     /** Pins the page to the board; reverses a close from where it is. */
     open() {
       moments.open()
@@ -267,6 +336,7 @@ function createPinboardMotion(details: HTMLDetailsElement, onRest: () => void) {
     },
     /** Grows the page back while the board falls away; `onRest` runs once it has. */
     close() {
+      if (board.leaving) return // the leave closes the board itself
       moments.close()
       // Falling away, it is gone for focus, pointer and screen readers.
       panel.setAttribute('inert', '')
@@ -284,10 +354,9 @@ function createPinboardMotion(details: HTMLDetailsElement, onRest: () => void) {
  * then. Whether there is motion is checked at each open: without it the board stays the static
  * one and the `<details>` closes at once.
  */
-export function usePinboardMotion(
-  open: boolean,
-  detailsRef: RefObject<HTMLDetailsElement | null>,
-): void {
+export function usePinboardMotion(open: boolean, detailsRef: RefObject<HTMLDetailsElement | null>) {
+  const router = useRouter()
+  const pathname = usePathname()
   const motion = useRef<ReturnType<typeof createPinboardMotion> | null>(null)
 
   useEffect(() => {
@@ -312,4 +381,22 @@ export function usePinboardMotion(
     },
     [],
   )
+
+  return {
+    /**
+     * A click on sheet `index`'s link. With motion a plain one (main button, no modifier) is taken
+     * over: the sheet flies, then `href` opens (the page we are on just closes). Any other click is
+     * left to the browser. The caller closes the menu's state either way.
+     */
+    follow(event: MouseEvent, href: string, index: number) {
+      const plain =
+        event.button === 0 && !(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+      const go = () => {
+        if (pathname !== href) router.push(href)
+      }
+      if (plain && motion.current?.leave(index, go)) event.preventDefault()
+    },
+    /** A leave is flying: MENU does nothing meanwhile. */
+    leaving: () => motion.current?.leaving === true,
+  }
 }

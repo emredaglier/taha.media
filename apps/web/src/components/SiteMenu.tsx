@@ -102,7 +102,7 @@ export function SiteMenu({ copyright, media }: { copyright: string; media: MenuM
   const summaryRef = useRef<HTMLElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
-  usePinboardMotion(open, detailsRef) // before the effect below: it opens the <details> first
+  const { follow, leaving } = usePinboardMotion(open, detailsRef) // before the effect below: it opens the <details> first
 
   // A route change closes the menu (set state during render, not in an effect).
   const [seenPath, setSeenPath] = useState(pathname)
@@ -154,7 +154,7 @@ export function SiteMenu({ copyright, media }: { copyright: string; media: MenuM
         onClick={(event) => {
           // Pre-hydration this is the native toggle; after, state drives `details.open`.
           event.preventDefault()
-          setOpen((wasOpen) => !wasOpen)
+          if (!leaving()) setOpen((wasOpen) => !wasOpen)
         }}
       >
         {open ? 'KAPAT' : 'MENU'}
@@ -192,7 +192,10 @@ export function SiteMenu({ copyright, media }: { copyright: string; media: MenuM
                   className="pb-s pb-pr"
                   aria-current={pathname === href ? 'page' : undefined}
                   // A link to the current page changes no pathname, so it closes the menu itself.
-                  onClick={() => setOpen(false)}
+                  onClick={(event) => {
+                    follow(event, href, index)
+                    setOpen(false)
+                  }}
                   {...props}
                 >
                   <i className="pb-pin" />
@@ -219,7 +222,10 @@ export function SiteMenu({ copyright, media }: { copyright: string; media: MenuM
                   <Link
                     href={legalLink.href}
                     aria-current={pathname === legalLink.href ? 'page' : undefined}
-                    onClick={() => setOpen(false)}
+                    onClick={(event) => {
+                      follow(event, legalLink.href, index)
+                      setOpen(false)
+                    }}
                   >
                     {legalLink.label}
                   </Link>

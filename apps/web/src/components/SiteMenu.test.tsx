@@ -4,7 +4,8 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 let pathname = '/'
-vi.mock('next/navigation', () => ({ usePathname: () => pathname }))
+const router = { push: vi.fn() }
+vi.mock('next/navigation', () => ({ usePathname: () => pathname, useRouter: () => router }))
 // A real loop needs matchMedia and IntersectionObserver, which jsdom lacks: here it is a marker.
 vi.mock('./LoopVideo', async () => {
   const { createElement } = await import('react')
@@ -71,6 +72,7 @@ const press = (key: string, init: KeyboardEventInit = {}) => {
 
 beforeEach(() => {
   pathname = '/'
+  router.push.mockReset()
   page = document.createElement('div')
   page.id = PAGE_SHEET_ID
   container = document.createElement('div')
@@ -337,6 +339,111 @@ describe('with motion', () => {
     expect(frames.size).toBe(0)
   })
 
+  describe('choosing a frame', () => {
+    const click = (link: HTMLElement, init: MouseEventInit = {}) => {
+      const event = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0, ...init })
+      act(() => {
+        link.dispatchEvent(event)
+      })
+      return event
+    }
+
+    beforeEach(() => {
+      act(() => toggle().click())
+      advance(1500)
+    })
+
+    it('a plain click prevents the default, closes aria-expanded at once and opens the page within 900 ms', () => {
+      const event = click(links()[1]!)
+      expect(event.defaultPrevented).toBe(true)
+      expect(toggle().getAttribute('aria-expanded')).toBe('false')
+      expect(router.push).not.toHaveBeenCalled()
+      advance(900)
+      expect(router.push).toHaveBeenCalledExactlyOnceWith('/galeri')
+      advance(1500)
+      expect(details().open).toBe(false)
+      expect(page.getAttribute('style')).toBeNull()
+      expect(frames.size).toBe(0)
+    })
+
+    it('flies Gizlilik the same way', () => {
+      expect(click(links().at(-1)!).defaultPrevented).toBe(true)
+      advance(900)
+      expect(router.push).toHaveBeenCalledExactlyOnceWith('/gizlilik')
+    })
+
+    it.each([
+      { metaKey: true },
+      { ctrlKey: true },
+      { shiftKey: true },
+      { altKey: true },
+      { button: 1 },
+    ])('a modified click %j is left to the browser, with no flight', (init) => {
+      const event = click(links()[0]!, init)
+      expect(event.defaultPrevented).toBe(false)
+      advance(1500)
+      expect(router.push).not.toHaveBeenCalled()
+    })
+
+    it('a click on the current page flies and just closes, with no navigation', async () => {
+      pathname = '/isler'
+      await render() // the route change closes the menu: open it again
+      advance(1500)
+      act(() => toggle().click())
+      advance(1500)
+      expect(click(links()[0]!).defaultPrevented).toBe(true)
+      advance(1500)
+      expect(router.push).not.toHaveBeenCalled()
+      expect(details().open).toBe(false)
+    })
+
+    it('ignores MENU, Escape and a second click while it flies', () => {
+      click(links()[1]!)
+      advance(300)
+      act(() => toggle().click())
+      press('Escape')
+      expect(toggle().getAttribute('aria-expanded')).toBe('false')
+      expect(click(links()[2]!).defaultPrevented).toBe(true)
+      advance(1500)
+      expect(router.push).toHaveBeenCalledExactlyOnceWith('/galeri')
+    })
+
+    it('lifts a hovered frame above the rest, and a focused one the same', async () => {
+      const [first, second] = [...container.querySelectorAll<HTMLElement>('.pb-pr')]
+      const base = second!.style.zIndex
+      act(() => {
+        first!.dispatchEvent(new Event('pointerenter'))
+      })
+      advance(500)
+      expect(first!.style.zIndex).toBe('9')
+      act(() => {
+        first!.dispatchEvent(new Event('pointerleave'))
+      })
+      await act(() => new Promise((done) => setTimeout(done, 120))) // the 90 ms grace
+      advance(500)
+      expect(first!.style.zIndex).not.toBe('9')
+      vi.spyOn(links()[1]!, 'matches').mockReturnValue(true) // jsdom has no keyboard-focus heuristic
+      act(() => links()[1]!.focus())
+      advance(500)
+      expect(second!.style.zIndex).toBe('9')
+      expect(base).not.toBe('9')
+    })
+  })
+
+  it('leaves no listener behind once closed: a pointer move changes nothing', () => {
+    act(() => toggle().click())
+    advance(1500)
+    press('Escape')
+    advance(1500)
+    const atRest = sheets().map((sheet) => sheet.getAttribute('style'))
+    act(() => {
+      container.querySelector('.pb-pr')!.dispatchEvent(new Event('pointerenter'))
+    })
+    advance(500)
+    expect(sheets().map((sheet) => sheet.getAttribute('style'))).toEqual(atRest)
+    expect(frames.size).toBe(0)
+  })
+
   it.each([
     ['reduced motion', () => (reduced = true)],
     ['a weak device', () => setDevice({ cores: 2 })],
@@ -348,6 +455,14 @@ describe('with motion', () => {
     expect(page.getAttribute('style')).toBeNull()
     expect(sheets().map((sheet) => sheet.getAttribute('style'))).toEqual(atRest)
     expect(frames.size).toBe(0)
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })
+    act(() => {
+      links()[1]!.dispatchEvent(event)
+    })
+    expect(event.defaultPrevented).toBe(false)
+    expect(toggle().getAttribute('aria-expanded')).toBe('false')
+    expect(router.push).not.toHaveBeenCalled()
+    act(() => toggle().click())
     press('Escape')
     expect(details().open).toBe(false)
   })
