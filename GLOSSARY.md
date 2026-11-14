@@ -13,7 +13,7 @@ A craft a Work belongs to: Kurgu, Motion or Grafik. A Work has one or more.
 _Avoid_: Category, type, tag
 
 **Featured Work** (Öne çıkan iş):
-A Work the Editor has chosen, and put in order, to appear in the Helix on the home page. Only a Work with a 16:9 Preview loop can be featured. The Helix looks right with 6 to 12 of them; the Editor sees a warning outside that range, but saving is never blocked.
+A Work the Editor has chosen, and put in order, to appear on the home page. The first eight appear in the Edit Room. Only a Work with a 16:9 Preview loop can be featured. The Editor sees a warning when the count is not eight, but saving is never blocked.
 _Avoid_: Highlight, selected, pinned
 
 **Showreel**:
@@ -42,10 +42,6 @@ _Avoid_: Intro, tagline
 A short, silent clip of a Work that plays on its card while it is in view or hovered, and stands in for the cover image.
 _Avoid_: Teaser, hover video, thumbnail video
 
-**Helix** (Sarmal):
-The endless spiral of Featured Works that makes up the home page, each card playing its Preview loop. The Showreel zooms out into it.
-_Avoid_: Carousel, slider, spiral
-
-**Hand control** (El kontrolü):
-Browsing the site with a hand in front of the camera, on desktop, once the visitor turns it on.
-_Avoid_: Camera mode, gesture mode, hand tracking
+**Edit Room** (Kurgu odası):
+The home page: Taha's desk at night in 3D, with the first eight Featured Works playing their Preview loops on its screens (three monitors, a laptop, a tablet, a phone and two framed prints). The Showreel wakes the middle monitor, and a click on a screen opens that Work.
+_Avoid_: carousel, 3D scene, studio

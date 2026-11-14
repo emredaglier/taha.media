@@ -1,11 +1,10 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
 
-import { HELIX_TUNING } from '../lib/helix-tuning'
-import { deviceReport, isWeakDevice } from '../lib/home-mode'
+import { deviceReport, isWeakDevice, WEAK_DEVICE } from '../lib/weak-device'
 import { setDevice } from './device'
 
-const { minCores, minMemoryGb } = HELIX_TUNING.weakDevice
+const { minCores, minMemoryGb } = WEAK_DEVICE
 
 describe('the pinned device', () => {
   it('is capable in a test with no setup of its own, whatever the host reports', () => {

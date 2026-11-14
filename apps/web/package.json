@@ -10,7 +10,8 @@
     "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
-    "@mediapipe/tasks-vision": "1.2.2",
+    "@fontsource-variable/geist": "5.3.0",
+    "@fontsource/instrument-serif": "5.3.0",
     "@payloadcms/db-sqlite": "3.90.2",
     "@payloadcms/next": "3.90.2",
     "@sentry/browser": "11.9.0",
@@ -23,7 +24,8 @@
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "sharp": "0.35.5",
-    "tailwindcss": "4.3.3"
+    "tailwindcss": "4.3.3",
+    "three": "0.187.0"
   },
   "devDependencies": {
     "@libsql/client": "0.14.0",
@@ -31,6 +33,7 @@
     "@types/node": "24.19.1",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
+    "@types/three": "0.187.0",
     "typescript": "5.9.3"
   }
 }

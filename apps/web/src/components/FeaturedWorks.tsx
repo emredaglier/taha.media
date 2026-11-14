@@ -19,24 +19,26 @@ export const withPreviewLoop = (works: Work[]): FeaturedWork[] =>
 const disciplineLine = (work: Work) =>
   work.disciplines.map((discipline) => DISCIPLINE_LABELS[discipline]).join(' · ')
 
-/** What a Helix card and its overlay need of a Featured Work, and nothing more. */
-export type HelixWork = {
+/** What the Edit Room needs of a Featured Work for its screen, and nothing more. */
+export type RoomWork = {
   slug: string
   title: string
+  year: number
   /** The Disciplines as one line. */
   disciplines: string
   client: string | null
-  /** The Preview loop, which the card plays in the Helix's sharp middle band or while hovered. */
+  /** The Preview loop, which the room's screen plays. */
   previewLoop: { src: string; width: number; height: number }
-  /** The Preview loop's poster, the card's still frame. */
+  /** The Preview loop's poster, the screen's still frame. */
   poster: { src: string; width: number; height: number; focalPoint: { x: number; y: number } }
 }
 
-export const toHelixWork = (work: FeaturedWork): HelixWork => {
+export const toRoomWork = (work: FeaturedWork): RoomWork => {
   const { src, width, height, focalPoint } = work.previewLoop.poster
   return {
     slug: work.slug,
     title: work.title,
+    year: work.year,
     disciplines: disciplineLine(work),
     client: work.client,
     previewLoop: {
@@ -63,9 +65,7 @@ function FeaturedCard({ work }: { work: FeaturedWork }) {
         <div className="relative aspect-video overflow-hidden bg-placeholder">
           <LoopVideo video={work.previewLoop} sizes={SIZES} hoverToPlay fill />
         </div>
-        <h3 className="mt-3 font-serif text-xl group-hover:underline group-hand-hover:underline">
-          {work.title}
-        </h3>
+        <h3 className="mt-3 font-serif text-xl group-hover:underline">{work.title}</h3>
         <div className="mt-1 flex justify-between gap-4 text-sm">
           <p>{disciplineLine(work)}</p>
           {work.client ? <p className="text-text-muted">{work.client}</p> : null}
@@ -78,7 +78,7 @@ function FeaturedCard({ work }: { work: FeaturedWork }) {
 /**
  * The Featured Works as plain 16:9 cards, in the Editor's order, each linking to its Work. Nothing
  * at all when there are none. This is the static Home (ADR-0103): what every visitor's server HTML
- * has, and all that visitors without the Helix get.
+ * has, and all that visitors without the Edit Room get.
  */
 export function FeaturedWorks({ works }: { works: FeaturedWork[] }) {
   if (works.length === 0) return null

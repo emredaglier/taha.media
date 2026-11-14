@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { FEATURED_MAX, FEATURED_MIN } from '../featured'
+import { FEATURED_ROOM } from '../featured'
 import { toMainMedia } from '../main-media-read'
 import { createTestSite, type TestSite } from '../testing'
 import { seedLocal } from './local'
@@ -42,8 +42,8 @@ describe('prepareSmokeContent', () => {
       expect(docs.find((d) => d.slug === work.slug)?.title).toBe(work.title)
     }
     const featuredCount = manifest.works.filter((w) => w.featured).length
-    expect(featuredCount).toBeGreaterThanOrEqual(FEATURED_MIN)
-    expect(featuredCount).toBeLessThanOrEqual(FEATURED_MAX)
+    expect(featuredCount).toBeGreaterThan(0)
+    expect(featuredCount).toBeLessThanOrEqual(FEATURED_ROOM)
   })
 
   it('adds a Work that was never published: not served publicly, but there for the preview', async () => {

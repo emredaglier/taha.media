@@ -1,0 +1,491 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>taha.media iskelet</title>
+<!--
+  Grey-box skeleton of the whole app as built on main (7e9c555, 2026-11-12): structure only, no look.
+  Every page and Home state at 1440 and 390, Turkish UI labels from the code, English notes.
+  Import into Figma with an HTML-to-Figma plugin at a 3100 px wide viewport, or open it as a reference.
+  Fonts are stand-ins; the real type, colour and positions come from the owner's Figma design.
+-->
+<style>
+  :root {
+    --bg: #e6e6e6;
+    --paper: #ffffff;
+    --box: #d9d9d9;
+    --raised: #ededed;
+    --line: #bdbdbd;
+    --ink: #1a1a1a;
+    --muted: #6b6b6b;
+    --note: #ffe55c;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--ink); font: 14px/1.45 Inter, system-ui, -apple-system, sans-serif; width: 3100px; padding: 80px; }
+  ol, ul { list-style: none; }
+  a { color: inherit; text-decoration: none; }
+  .u { text-decoration: underline; }
+  .muted { color: var(--muted); }
+  .sm { font-size: 14px; }
+  .xs { font-size: 12px; }
+  .caps { text-transform: uppercase; letter-spacing: .02em; }
+
+  .intro { width: 1440px; margin-bottom: 120px; }
+  .intro h1 { font-size: 40px; font-weight: 600; margin-bottom: 12px; }
+  .intro p { font-size: 18px; color: #444; margin-bottom: 8px; max-width: 1100px; }
+  .legend { display: flex; gap: 32px; margin-top: 24px; align-items: center; }
+  .legend > div { display: flex; gap: 10px; align-items: center; font-size: 15px; }
+
+  .row { margin-bottom: 160px; }
+  .rowtitle { font-size: 32px; font-weight: 600; }
+  .rowsub { font-size: 16px; color: #555; margin: 4px 0 24px; max-width: 1400px; }
+  .cols { display: flex; gap: 80px; align-items: flex-start; }
+  .fw { display: flex; flex-direction: column; gap: 12px; }
+  .flabel { font-size: 16px; font-weight: 600; color: var(--muted); }
+  .frame { position: relative; background: var(--paper); overflow: hidden; display: flex; flex-direction: column; }
+  .w1440 { width: 1440px; }
+  .w390 { width: 390px; }
+  .h900 { height: 900px; }
+  .h844 { height: 844px; }
+
+  .media { position: relative; background: var(--box); overflow: hidden; }
+  .media svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .mlabel { position: absolute; top: 8px; left: 10px; font-size: 12px; font-weight: 600; letter-spacing: .04em; color: #555; text-transform: uppercase; }
+  .media.front { outline: 2px solid var(--ink); }
+  .hero > .media .mlabel, .hero-static > .media .mlabel { top: 64px; left: 24px; }
+
+  .badge { position: absolute; z-index: 90; width: 26px; height: 26px; border-radius: 13px; background: var(--note); color: var(--ink); font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 2px var(--paper); }
+  .badge.static { position: static; flex: none; box-shadow: none; }
+
+  .notes { width: 440px; display: flex; flex-direction: column; gap: 12px; }
+  .notes ol { background: #fff8c4; padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+  .notes li { display: flex; gap: 12px; font-size: 14px; }
+
+  .hdr { position: relative; z-index: 50; display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding: 16px 24px; }
+  .hdr.over { position: absolute; top: 0; left: 0; right: 0; }
+  .hdr .name { font-size: 20px; }
+  .hdr-r { display: flex; align-items: baseline; gap: 24px; }
+  .toggle.on { text-decoration: underline; font-weight: 600; }
+  .ftr { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; background: var(--raised); padding: 16px 24px; font-size: 14px; color: var(--muted); margin-top: auto; }
+  .main { padding: 0 24px; }
+
+  .bar { height: 10px; background: var(--raised); margin: 8px 0; }
+
+  .hero { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: flex-end; }
+  .hero-static { position: relative; display: flex; flex-direction: column; justify-content: flex-end; }
+  .hero-text { position: relative; background: rgba(255,255,255,.6); padding: 32px 24px; }
+  .hero-row { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; }
+  .hero-row.stack { flex-direction: column; align-items: flex-start; }
+  .h1 { font-size: 48px; line-height: 1.1; }
+  .statement { max-width: 576px; font-size: 18px; text-align: right; }
+  .stack .statement { text-align: left; }
+
+  .fade { position: absolute; left: 0; right: 0; height: 22%; z-index: 20; }
+  .fade.top { top: 0; background: linear-gradient(#ffffff, rgba(255,255,255,0)); }
+  .fade.bot { bottom: 0; background: linear-gradient(rgba(255,255,255,0), #ffffff); }
+  .band { position: absolute; left: 0; right: 0; border-top: 1px dashed #999; border-bottom: 1px dashed #999; z-index: 15; }
+  .band span { position: absolute; right: 12px; top: 4px; font-size: 11px; color: #777; }
+  .frontwork { position: absolute; left: 24px; right: 24px; bottom: 24px; display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; z-index: 30; }
+  .fw-title { font-size: 36px; line-height: 1.1; }
+  .ring-dash { position: absolute; border: 2px dashed #777; border-radius: 50%; }
+  .glyphs { position: absolute; font-size: 13px; letter-spacing: 6px; color: #888; white-space: nowrap; }
+
+  .panel { position: absolute; z-index: 60; background: var(--raised); border: 1px solid var(--muted); padding: 16px; font-size: 14px; }
+  .actions { display: flex; justify-content: flex-end; gap: 24px; margin-top: 16px; }
+  .ring { position: absolute; z-index: 70; width: 28px; height: 28px; border-radius: 14px; border: 2px solid var(--ink); }
+  .ring.filled { background: var(--ink); }
+  .ring.lost { opacity: .2; }
+  .ping { position: absolute; inset: -12px; border-radius: 26px; border: 2px solid var(--ink); opacity: .4; }
+
+  .grid { display: grid; gap: 40px 24px; }
+  .card-meta { display: flex; justify-content: space-between; gap: 16px; font-size: 14px; margin-top: 4px; }
+  .card-title { font-size: 20px; margin-top: 12px; }
+  .h1p { font-size: 36px; line-height: 1.15; margin-bottom: 24px; }
+  .h2p { font-size: 24px; margin-bottom: 12px; }
+  .filters { display: flex; gap: 24px; margin-bottom: 32px; flex-wrap: wrap; }
+  .facts { display: flex; gap: 32px; margin-top: 16px; flex-wrap: wrap; }
+  .facts dt { font-size: 14px; color: var(--muted); }
+  .next { border-top: 1px solid var(--line); padding-top: 24px; }
+  .play { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+  .play span { background: var(--paper); padding: 12px 24px; font-size: 20px; }
+  .lb-bar { display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; font-size: 14px; }
+  .client { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+const W1 = 1440, H1 = 900, W2 = 390, H2 = 844
+const X = '<svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><line x1="0" y1="0" x2="100" y2="100" stroke="#bdbdbd" stroke-width="1" vector-effect="non-scaling-stroke"/><line x1="100" y1="0" x2="0" y2="100" stroke="#bdbdbd" stroke-width="1" vector-effect="non-scaling-stroke"/></svg>'
+const media = (label, style = '', cls = '') => `<div class="media ${cls}" style="${style}">${X}<span class="mlabel">${label}</span></div>`
+const badge = (n, top, left) => `<span class="badge" style="top:${top}px;left:${left}px">${n}</span>`
+const bars = (widths) => widths.map((w) => `<div class="bar" style="width:${w}%"></div>`).join('')
+
+const hdr = ({ hand = false, menu = 'MENU', over = false, pressed = false, only = false } = {}) =>
+  only
+    ? `<header class="hdr ${over ? 'over' : ''}"><span></span><div class="hdr-r"><span class="sm caps">${menu}</span></div></header>`
+    : `<header class="hdr ${over ? 'over' : ''}"><a class="name">Taha Çiftçi</a><div class="hdr-r"><span class="muted sm">creative director</span>${hand ? `<span class="sm toggle ${pressed ? 'on' : ''}">Elinle gez</span>` : ''}<span class="sm caps">${menu}</span></div></header>`
+const ftr = () => '<footer class="ftr"><span>© Taha Çiftçi</span><a class="u">Gizlilik</a></footer>'
+
+const frame = (label, cls, inner, style = '') =>
+  `<div class="fw"><div class="flabel">${label}</div><div class="frame ${cls}" style="${style}">${inner}</div></div>`
+const notes = (items) =>
+  `<div class="notes"><div class="flabel">Notes</div><ol>${items.map((t, i) => `<li><span class="badge static">${i + 1}</span><p>${t}</p></li>`).join('')}</ol></div>`
+const row = (title, sub, cols) =>
+  `<section class="row"><h2 class="rowtitle">${title}</h2><p class="rowsub">${sub}</p><div class="cols">${cols.join('')}</div></section>`
+
+/* ---------- Home pieces ---------- */
+
+function heroText(phone, { faded = false, player = false } = {}) {
+  const style = faded ? 'opacity:.35;transform:translateY(8px)' : ''
+  return `<div class="hero-text" style="${style}">
+    ${player ? media('Showreel · Vimeo/YouTube oynatıcı (tıklayınca yüklenir)', `width:${phone ? 342 : 720}px;aspect-ratio:16/9;margin:0 auto 24px`) : ''}
+    <div class="hero-row ${phone ? 'stack' : ''}">
+      <div><h1 class="h1">Taha Çiftçi</h1><p class="sm" style="margin-top:8px">© Taha Çiftçi</p></div>
+      <p class="statement">Statement: tek cümle, CMS'ten. Boşsa hiç görünmez.</p>
+    </div>
+    ${player ? '' : '<p style="margin-top:16px"><a class="u">Sesli izle</a></p>'}
+  </div>`
+}
+
+function heroFull(phone, opts = {}, label = phone ? 'Showreel · telefon sürümü 9:16' : 'Showreel döngüsü 16:9 · tam ekran') {
+  return `<div class="hero">${media(label, 'position:absolute;inset:0')}${heroText(phone, opts)}</div>`
+}
+
+/* Card positions from the prototype's geometry (16:9 cards on a helix: twist 0.8 rad, rise 0.79,
+   radius 3.8, camera at 10, 48° field of view), flattened to 2D for a wireframe. */
+function helixCards(W, H, { dim = 1, skipFront = false, frontLabel = 'Ön kart · önizleme döngüsü oynar', frontHtml = '' } = {}) {
+  const F = 1 / Math.tan((24 * Math.PI) / 180), R = 3.8, CZ = 10, TW = 0.8, RISE = 0.79, CH = 1.6, CW = (CH * 16) / 9
+  const k = Math.min(1, (0.86 * W) / (CW * (F / (CZ - R)) * (H / 2)))
+  const cards = []
+  for (let i = -6; i <= 6; i++) {
+    const a = i * TW, c = Math.cos(a)
+    if (Math.abs(c) < 0.18) continue
+    const z = R * c, pps = (F / (CZ - z)) * (H / 2) * k
+    const w = CW * Math.abs(c) * pps, h = CH * pps
+    const cx = W / 2 + R * Math.sin(a) * pps, cy = H / 2 + i * RISE * pps
+    if (cy + h / 2 < 0 || cy - h / 2 > H) continue
+    cards.push({ i, z, w, h, cx, cy, back: c < 0 })
+  }
+  cards.sort((p, q) => p.z - q.z)
+  return cards
+    .map((cd) => {
+      const front = cd.i === 0
+      if (front && skipFront) return ''
+      const inBand = Math.abs(cd.cy - H / 2) < H * 0.125
+      const label = front ? frontLabel : cd.back ? 'arka yüz · düz çevrilir' : inBand ? 'döngü' : 'durgun kare'
+      const op = front ? 1 : (cd.back ? 0.3 : 0.55) * dim
+      const style = `position:absolute;left:${(cd.cx - cd.w / 2).toFixed(0)}px;top:${(cd.cy - cd.h / 2).toFixed(0)}px;width:${cd.w.toFixed(0)}px;height:${cd.h.toFixed(0)}px;opacity:${op}`
+      return front && frontHtml ? `<div style="${style};z-index:10">${frontHtml}</div>` : media(label, style, front ? 'front' : '')
+    })
+    .join('')
+}
+
+const frontCardSize = (W, H) => {
+  const F = 1 / Math.tan((24 * Math.PI) / 180), pps = (F / 6.2) * (H / 2)
+  const k = Math.min(1, (0.86 * W) / ((1.6 * 16) / 9 * pps))
+  return { w: ((1.6 * 16) / 9) * pps * k, h: 1.6 * pps * k }
+}
+
+const helixEdges = (H) =>
+  `<div class="fade top"></div><div class="fade bot"></div><div class="band" style="top:${H * 0.375}px;height:${H * 0.25}px"><span>keskin bant · döngüler burada oynar</span></div>`
+
+const frontWork = (phone) =>
+  `<div class="frontwork"><div><p class="fw-title" style="${phone ? 'font-size:28px' : ''}">İş başlığı</p><p class="sm muted" style="margin-top:8px">Kurgu · Motion — Müşteri</p></div><p class="sm muted">3 / 8</p></div>`
+
+function homeOpening(phone) {
+  const W = phone ? W2 : W1
+  return heroFull(phone, {}, phone ? 'Showreel 16:9 · dik ekrana kırpılı' : 'Showreel döngüsü 16:9 · tam ekran') + hdr({ over: true, hand: !phone }) +
+    badge(1, 64, 24) + badge(2, (phone ? H2 : H1) - (phone ? 300 : 170), W - 60) + badge(3, (phone ? H2 : H1) - 70, phone ? 130 : 140)
+}
+
+function homePlayer(phone) {
+  return heroFull(phone, { player: true }, phone ? 'Showreel 16:9 · dik ekrana kırpılı' : 'Showreel döngüsü 16:9 · tam ekran') + hdr({ over: true, hand: !phone }) + badge(1, (phone ? H2 : H1) - (phone ? 470 : 560), phone ? 12 : 330)
+}
+
+function homeZoom(phone) {
+  const W = phone ? W2 : W1, H = phone ? H2 : H1
+  const { w, h } = frontCardSize(W, H)
+  const sw = phone ? W * 0.95 : w * 1.9, sh = phone ? H * 0.62 : h * 1.9
+  return helixCards(W, H, { dim: 0.6, skipFront: true }) +
+    `<div style="position:absolute;left:${(W - sw) / 2}px;top:${(H - sh) / 2}px;width:${sw}px;height:${sh}px;z-index:12">${media(phone ? 'Showreel 16:9 · dik ekrana kırpılı, karta doğru açılır' : 'Showreel · ön karta doğru küçülür', 'width:100%;height:100%', 'front')}</div>` +
+    `<div style="position:absolute;left:0;right:0;bottom:0;z-index:25">${heroText(phone, { faded: true })}</div>` +
+    hdr({ over: true, hand: !phone }) + badge(1, (H - sh) / 2 + 12, (W + sw) / 2 - 40) + badge(2, H - (phone ? 250 : 150), 24) + badge(3, 70, W - 60)
+}
+
+function homeMelt(phone) {
+  const W = phone ? W2 : W1, H = phone ? H2 : H1
+  const { h } = frontCardSize(W, H)
+  const melt = media('Showreel · eriyor (1,3 sn)', 'width:100%;height:100%', 'front') +
+    `<div class="ring-dash" style="left:50%;top:50%;width:${h * 0.7}px;height:${h * 0.7}px;margin:${-h * 0.35}px 0 0 ${-h * 0.35}px"></div>` +
+    `<div class="glyphs" style="left:50%;top:50%;transform:translate(-50%,-50%)">. : - + T A H A</div>`
+  return helixCards(W, H, { frontHtml: melt }) + helixEdges(H) + hdr({ over: true, hand: !phone }) +
+    badge(1, H / 2 - h / 2 - 34, W / 2 - 13) + badge(2, 40, 24) + badge(3, H / 2 - 13, 8)
+}
+
+function homeHelix(phone) {
+  const W = phone ? W2 : W1, H = phone ? H2 : H1
+  const { w, h } = frontCardSize(W, H)
+  return helixCards(W, H) + helixEdges(H) + frontWork(phone) + hdr({ over: true, hand: !phone }) +
+    badge(1, H / 2 - h / 2 + 10, W / 2 + w / 2 - 40) + badge(2, H / 2 - h / 2 - 140, W / 2 + (phone ? 40 : 200)) +
+    badge(3, H - 120, 24) + badge(4, H - 64, W - 80) + badge(5, 14, W / 2)
+}
+
+function homeHand() {
+  const W = W1, H = H1
+  const { w, h } = frontCardSize(W, H)
+  return helixCards(W, H) + helixEdges(H) + frontWork(false) + hdr({ over: true, hand: true, pressed: true }) +
+    `<div class="panel" style="top:64px;left:24px;width:192px;padding:0">${media('Kamera · aynalı, el noktaları', 'height:144px')}
+      <span style="position:absolute;top:4px;right:36px;width:28px;height:28px;background:var(--raised);display:flex;align-items:center;justify-content:center">?</span>
+      <span style="position:absolute;top:4px;right:4px;width:28px;height:28px;background:var(--raised);display:flex;align-items:center;justify-content:center">×</span>
+      <p class="xs" style="padding:4px 8px">Biraz yaklaş</p></div>` +
+    `<div class="panel" style="top:64px;left:224px;width:288px"><p class="xs muted">1 / 3</p><p class="caps" style="margin-top:4px">Gez</p><p style="margin-top:4px">İşaret parmağın imleçtir. Elini gezdir, üstüne geldiğin şey canlanır.</p><div class="actions"><a class="u">Atla</a><a class="u">İleri</a></div></div>` +
+    `<div class="ring" style="left:${W / 2 + w / 2 + 120}px;top:${H / 2 - 160}px"></div>` +
+    badge(1, 8, 1210) + badge(2, 60, 8) + badge(3, 60, 520) + badge(4, H / 2 - 190, W / 2 + w / 2 + 150)
+}
+
+function featuredCard() {
+  return `<li>${media('Önizleme döngüsü 16:9 · üstüne gelince oynar', 'aspect-ratio:16/9')}<p class="card-title">İş başlığı</p><div class="card-meta"><span>Kurgu · Motion</span><span class="muted">Müşteri</span></div></li>`
+}
+
+function homeStatic(phone) {
+  const H = phone ? H2 : H1
+  return `<div class="hero-static" style="height:${H}px">${media(phone ? 'Showreel · telefon sürümü 9:16' : 'Showreel döngüsü 16:9 (azaltılmış hareket: poster)', 'position:absolute;inset:0')}${heroText(phone)}</div>` +
+    hdr({ over: true, hand: !phone }) +
+    `<section class="main" style="padding-top:48px;padding-bottom:48px"><ul class="grid" style="grid-template-columns:repeat(${phone ? 1 : 3},1fr)">${featuredCard().repeat(6)}</ul></section>` +
+    badge(1, 64, 24) + badge(2, H + 24, 8) + badge(3, H + (phone ? 1700 : 640), phone ? 340 : 1380)
+}
+
+function homeEmpty() {
+  return heroFull(true) + hdr({ over: true }) + badge(1, 300, 170)
+}
+
+/* ---------- Menu, Hand parts ---------- */
+
+function menuOpen(phone) {
+  return hdr({ menu: 'KAPAT', only: true, over: true }) +
+    `<nav style="position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;gap:24px;padding:0 24px">
+      <ul style="display:flex;flex-direction:column;gap:16px;font-size:48px;line-height:1.1"><li>İşler</li><li>Galeri</li><li>Hakkımda</li></ul>
+      <div class="sm muted" style="display:flex;gap:16px"><a class="u">Gizlilik</a><span>© Taha Çiftçi</span></div>
+    </nav>` + badge(1, 14, (phone ? W2 : W1) - 110) + badge(2, (phone ? H2 : H1) / 2 - 110, 8) + badge(3, (phone ? H2 : H1) / 2 + 100, 8)
+}
+
+function handParts() {
+  return `<div style="padding:24px;display:flex;flex-direction:column;gap:28px">
+    <div><p class="flabel" style="margin-bottom:8px">Onay notu (Elinle gez'in altında)</p>
+      <div class="panel" style="position:relative;width:288px">Kameran yalnızca elini görmek için açılır; görüntü cihazından çıkmaz<div class="actions"><a class="u">Vazgeç</a><a class="u">Aç</a></div></div></div>
+    <div><p class="flabel" style="margin-bottom:16px">Halka durumları</p>
+      <div style="display:flex;gap:44px;align-items:center;padding-left:14px">
+        <div style="position:relative;width:28px;height:28px"><div class="ring" style="left:0;top:0"></div></div>
+        <div style="position:relative;width:28px;height:28px"><div class="ring filled" style="left:0;top:0"></div></div>
+        <div style="position:relative;width:28px;height:28px"><div class="ring" style="left:0;top:0"><span class="ping"></span></div></div>
+        <div style="position:relative;width:28px;height:28px"><div class="ring lost" style="left:0;top:0"></div></div>
+      </div>
+      <div class="xs muted" style="display:flex;gap:12px;margin-top:10px"><span style="width:60px">gez</span><span style="width:60px">tut · kaydır</span><span style="width:60px">tıkla</span><span style="width:60px">el kayıp</span></div></div>
+    <div><p class="flabel" style="margin-bottom:8px">Dış oynatıcının üstünde</p>
+      <div style="position:relative;height:60px"><div class="ring" style="left:0;top:0"></div><span class="panel xs" style="left:40px;top:34px;padding:4px 8px;white-space:nowrap">Oynatıcının içinde fareyi kullan</span></div></div>
+    <div><p class="flabel" style="margin-bottom:8px">İpuçları (önizlemenin altında)</p><p class="xs">Biraz yaklaş</p><p class="xs">Daha çok ışık</p></div>
+    <div><p class="flabel" style="margin-bottom:8px">Kapanış durumları (kibar duyuru)</p><p class="xs">Elin görünmedi, elinle gezme kapandı</p><p class="xs">Bu cihazda akıcı çalışmıyor</p></div>
+    <div><p class="flabel" style="margin-bottom:8px">Rehber, 3 adım</p><p class="xs">1 Gez · 2 Kaydır · 3 Tıkla — Atla / İleri / Tamam</p></div>
+  </div>`
+}
+
+/* ---------- Inner pages ---------- */
+
+const page = (phone, body, extra = '') => hdr({ hand: !phone }) + `<main class="main" style="padding-top:32px;padding-bottom:48px">${body}</main>` + ftr() + extra
+
+function worksPage(phone, empty = false) {
+  const cards = ['16/9', '16/9', '4/5', '16/9']
+    .map((r, i) => `<li>${media(i === 2 ? 'Kapak görseli (döngü yok)' : 'Önizleme döngüsü · üstüne gelince oynar', `aspect-ratio:${r}`)}<div class="card-meta" style="margin-top:12px"><span style="font-size:20px">İş başlığı</span><span class="muted">2025</span></div><p class="sm muted">Kurgu · Grafik</p></li>`)
+    .join('')
+  const body = `<h1 class="h1p">İşler</h1><nav class="filters"><a class="u">Tümü</a><a class="muted">Kurgu</a><a class="muted">Motion</a><a class="muted">Grafik</a></nav>` +
+    (empty ? '<p class="muted">Bu disiplinde henüz iş yok.</p>' : `<ul class="grid" style="grid-template-columns:repeat(${phone ? 1 : 2},1fr);align-items:start">${cards}</ul>`)
+  return page(phone, body, empty ? '' : badge(1, 140, 8) + badge(2, 190, phone ? 340 : 700))
+}
+
+function workPage(phone, ratio, kind = 'video') {
+  const W = phone ? 342 : 1392
+  const mw = ratio === '16/9' ? Math.min(W, 720 * 16 / 9) : Math.min(W, 720 * 9 / 16)
+  const label = kind === 'external' ? 'Bizim posterimiz (Vimeo/YouTube henüz yüklenmedi)' : kind === 'image' ? 'Ana görsel · kendi oranında' : `Ana video ${ratio === '16/9' ? '16:9' : '9:16'} · sesli, kontrollü`
+  const main = `<div style="position:relative;width:${mw}px;margin:0 auto;aspect-ratio:${ratio}">${media(label, 'width:100%;height:100%')}${kind === 'external' ? '<div class="play"><span>▶ Oynat</span></div>' : ''}</div>`
+  const stills = `<ul class="grid" style="grid-template-columns:repeat(${phone ? 1 : 2},1fr);gap:24px;margin-bottom:48px">${media('Kare', 'aspect-ratio:16/9').repeat(phone ? 2 : 4)}</ul>`
+  const body = main +
+    `<header style="margin:32px 0"><h1 class="h1p" style="margin-bottom:8px">İş başlığı</h1><p class="muted">Kurgu · Motion</p>
+      <dl class="facts"><div><dt>Yıl</dt><dd>2025</dd></div><div><dt>Müşteri</dt><dd>Müşteri adı</dd></div><div><dt>Rol</dt><dd>Kurgu, renk</dd></div></dl></header>
+    <section style="margin-bottom:32px"><h2 class="h2p">Emeği geçenler</h2><p>Ad Soyad <span class="muted">· Yönetmen</span></p><p>Ad Soyad <span class="muted">· Görüntü yönetmeni</span></p></section>
+    <div style="max-width:672px;margin-bottom:32px">${bars([100, 96, 100, 70])}</div>` + stills +
+    `<nav class="next"><span class="sm muted" style="display:block">Sonraki iş</span><span class="u" style="font-size:24px">Sonraki işin başlığı →</span></nav>`
+  return page(phone, body, badge(1, 70, 8))
+}
+
+function galleryPage(phone) {
+  const items = [['3/2', 'Fotoğraf'], ['2/3', 'Fotoğraf'], ['1/1', 'Döngü · poster'], ['16/9', 'Fotoğraf'], ['4/5', 'Döngü · poster'], ['3/2', 'Fotoğraf']]
+    .map(([r, l], i) => `<li>${media(l, `aspect-ratio:${r}`)}${i % 3 === 1 ? '' : '<p class="sm muted" style="margin-top:8px">Altyazı · 2024</p>'}</li>`)
+    .join('')
+  const body = `<h1 class="h1p">Galeri</h1><ul class="grid" style="grid-template-columns:repeat(${phone ? 2 : 3},1fr);gap:16px;align-items:start">${items}</ul>`
+  return page(phone, body, badge(1, 140, phone ? 160 : 460))
+}
+
+function lightbox(phone) {
+  const H = phone ? H2 : H1, W = phone ? W2 : W1
+  const mh = H - 2 * 56 - 48, mw = Math.min(W - 48, (mh * 3) / 2)
+  return `<div class="lb-bar"><p>3 / 12 <span class="muted">· Altyazı · 2024</span></p><span class="caps">Kapat</span></div>
+    <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:0 24px">${media('Öğe · tam boy (görsel ya da döngü)', `width:${mw}px;aspect-ratio:3/2`)}</div>
+    <div class="lb-bar caps"><span>Önceki</span><span>Sonraki</span></div>` + badge(1, 14, W - 110) + badge(2, H / 2 - 13, 8) + badge(3, H - 46, W / 2 - 13)
+}
+
+function aboutPage(phone) {
+  const body = `<article style="max-width:672px"><h1 class="h1p">Hakkımda</h1>${media('Portre', 'width:100%;max-width:384px;aspect-ratio:4/5;margin-bottom:24px')}
+    ${bars([100, 98, 100, 92, 100, 60])}
+    <dl style="margin:32px 0;display:flex;flex-direction:column;gap:12px">
+      <div><dt style="font-size:18px">Kurgu</dt><dd class="muted">Disiplin satırı (CMS)</dd></div>
+      <div><dt style="font-size:18px">Motion</dt><dd class="muted">Disiplin satırı (CMS)</dd></div>
+      <div><dt style="font-size:18px">Grafik</dt><dd class="muted">Disiplin satırı (CMS)</dd></div></dl>
+    <section style="margin:32px 0"><h2 class="h2p">Müşteriler</h2>${['Müşteri A', 'Müşteri B', 'Müşteri C'].map((c) => `<div class="client">${media('Logo', 'width:48px;height:48px')}<span>${c}</span></div>`).join('')}</section>
+    <section style="margin:32px 0"><h2 class="h2p">İletişim</h2><p class="u" style="margin-bottom:12px">merhaba@taha.media</p><p class="u">Instagram</p><p class="u">Vimeo</p></section></article>`
+  return page(phone, body, badge(1, 640, phone ? 340 : 700))
+}
+
+function privacyPage(phone) {
+  const body = `<article style="max-width:672px"><h1 class="h1p">Gizlilik</h1>
+    <h2 class="h2p" style="font-size:18px">Ölçüm</h2>${bars([100, 94, 70])}
+    <h2 class="h2p" style="font-size:18px;margin-top:24px">Hata kaydı</h2>${bars([100, 88])}
+    <h2 class="h2p" style="font-size:18px;margin-top:24px">Elinle gez</h2>${bars([100, 97, 100, 52])}</article>`
+  return page(phone, body, badge(1, 470, phone ? 340 : 700))
+}
+
+function notFoundPage(phone) {
+  return page(phone, '<div style="padding:64px 0;display:flex;flex-direction:column;gap:16px;align-items:flex-start"><h1 class="h1p" style="margin:0">Sayfa bulunamadı</h1><a class="u">Ana sayfaya dön</a></div>')
+}
+
+/* ---------- Rows ---------- */
+
+const rows = [
+  row('Home 1 — Opening', 'The page opens on the Showreel. No timed intro. Scrolling down starts the zoom; scrolling up reverses it.', [
+    frame('Home · opening · 1440', 'w1440 h900', homeOpening(false)),
+    frame('Home · opening · 390', 'w390 h844', homeOpening(true)),
+    notes([
+      'Header stays on screen through the whole Home: name links Home (and brings the Showreel back), MENU opens the menu. “Elinle gez” shows only on desktop with a camera; its slot is reserved on desktop so nothing moves. “creative director” is a placeholder tagline.',
+      'Statement: one sentence from the CMS, bottom right (stacked under the name on phones). Left out when empty.',
+      'Name is the page’s only h1, © under it. “Sesli izle” shows only when the full-length Showreel link is set. The name, ©, Statement and Sesli izle leave with the zoom.',
+    ]),
+  ]),
+  row('Home 1b — “Sesli izle” open', 'A click loads the Vimeo/YouTube player in place (nothing third-party before that click). It closes by itself when the zoom takes the hero away.', [
+    frame('Home · player open · 1440', 'w1440 h900', homePlayer(false)),
+    frame('Home · player open · 390', 'w390 h844', homePlayer(true)),
+    notes(['Player is at most 45% of the screen height, above the name and Statement. Without JavaScript “Sesli izle” is a plain link to the video page.']),
+  ]),
+  row('Home 2 — Zoom (scroll-scrubbed)', 'The camera pulls back: the Showreel shrinks onto the front slot while the other cards appear around it. The Helix spins about 2.5 cards on the way. Zoom length is 140vh of scroll.', [
+    frame('Home · zoom · 1440', 'w1440 h900', homeZoom(false)),
+    frame('Home · zoom · 390', 'w390 h844', homeZoom(true)),
+    notes([
+      'The Showreel shrinks onto the front card (same picture, same place as the hero). On phones it starts as the 16:9 reel cropped to the tall screen and widens into the card.',
+      'The hero text fades and slides down 16 px as the zoom goes.',
+      'The other cards appear through the melt material as the camera pulls back.',
+    ]),
+  ]),
+  row('Home 3 — Melt (point of no return)', 'When the Showreel sits in the front slot it melts away by itself in about 1.3 s and shows the first Featured Work. From here the page never scrolls; input works from the first frame of the melt.', [
+    frame('Home · melt · 1440', 'w1440 h900', homeMelt(false)),
+    frame('Home · melt · 390', 'w390 h844', homeMelt(true)),
+    notes([
+      'Glyph mosaic: the picture turns into a grid of letters (. : - + T A H A) in Taha’s serif, coarse cells growing in a ring from the centre, then shrinking to nothing. Glyphs only where the picture melts; never past a card’s edge.',
+      'Top and bottom of the Helix dissolve in the same material (required, or cards visibly wrap).',
+      'Far cards are pushed back and cards not pointed at are dimmed through the same material. The cursor’s heat trail turns glyphs back to picture; turning slides the rows sideways.',
+    ]),
+  ]),
+  row('Home 4 — Helix at rest', 'Wheel, vertical drag or arrow keys turn the Helix, endlessly both ways; it glides into the next card when input stops (one wheel notch = one card).', [
+    frame('Home · Helix · 1440', 'w1440 h900', homeHelix(false)),
+    frame('Home · Helix · 390', 'w390 h844', homeHelix(true)),
+    notes([
+      'Front card: click (or Enter) opens its Work page. Every card is 16:9. On narrow screens the front card fits within ~86% of the width.',
+      'Any other card: click turns it to the front. Only cards in the sharp middle band play their Preview loop; the rest show a still. Cards past the side read the right way round.',
+      'Front Work overlay, bottom left: title, then Disciplines — client.',
+      'Counter, bottom right: counts real Works (3 / 8), even when the list repeats (fewer than 10 Featured Works repeat in order).',
+      'Coming back from a Work page restores this state with the same Work in front. The logo or a reload brings the Showreel back. No footer on Home.',
+    ]),
+  ]),
+  row('Home 5 — Hand control on (desktop only)', 'Optional extra after the Helix. Index fingertip is the cursor; pinch and move turns the Helix (elsewhere it scrolls); a quick pinch clicks.', [
+    frame('Home · Helix + Elinle gez · 1440', 'w1440 h900', homeHand()),
+    frame('Elinle gez · parts', 'w390', handParts()),
+    notes([
+      '“Elinle gez” is a toggle (pressed while on). The first click opens the consent note under it; only “Aç” asks the browser for the camera.',
+      'Camera preview: mirrored, with the hand’s dots; “?” replays the coach, “×” turns it off. It is also the camera-on indicator. Hints show under it.',
+      'Coach: three steps (Gez, Kaydır, Tıkla), shown once per browser, skippable, non-modal.',
+      'The ring: hollow while exploring, filled while pinched, pings on a click, fades when the hand is lost.',
+    ]),
+  ]),
+  row('Home 6 — Static Home (fallback, and the server HTML)', 'Reduced motion, Save-Data, a weak device, no WebGL2 or no JavaScript get this: the hero, then the Featured Works as plain 16:9 cards. No footer.', [
+    frame('Home · static · 1440', 'w1440', homeStatic(false)),
+    frame('Home · static · 390', 'w390', homeStatic(true)),
+    frame('Home · 0 Featured Works · 390', 'w390 h844', homeEmpty()),
+    notes([
+      'Hero: Showreel loop (poster under reduced motion or Save-Data; phone variant below 700 px; a plain block when there is neither).',
+      'Cards in Editor order: one column on phones, two from 700 px, three from 1100 px. Each: 16:9 Preview loop (plays on hover with a mouse), title, Disciplines left, client right.',
+      'No “all works” link and no footer: Gizlilik and © live in the menu.',
+      'With 0 Featured Works, Home is the hero alone, without scroll.',
+    ]),
+  ]),
+  row('Menu', 'Full-screen, the same at every width. Focus is trapped inside; Escape closes and returns focus to MENU; the page behind doesn’t scroll. Works without JavaScript.', [
+    frame('Menu open · 1440', 'w1440 h900', menuOpen(false)),
+    frame('Menu open · 390', 'w390 h844', menuOpen(true)),
+    notes([
+      'MENU becomes KAPAT while open. The panel covers the header’s name and toggle.',
+      'İşler, Galeri, Hakkımda: each a page. The current page is marked (aria-current).',
+      'Gizlilik and © after the pages, because Home has no footer.',
+    ]),
+  ]),
+  row('İşler', 'Every Work in Editor order. Filters are plain links (?disiplin=kurgu|motion|grafik), so each filter has its own URL and works without JavaScript.', [
+    frame('İşler · 1440', 'w1440', worksPage(false)),
+    frame('İşler · 390', 'w390', worksPage(true)),
+    frame('İşler · empty filter · 390', 'w390', worksPage(true, true)),
+    notes([
+      'Filter: Tümü · Kurgu · Motion · Grafik; the current one is marked. An unknown value gives the not-found page.',
+      'Card: Preview loop (plays on hover with a mouse) or the cover, title, year, Disciplines. Two columns from 768 px. Media keeps its own ratio. Empty: “Henüz iş yok.” or “Bu disiplinde henüz iş yok.”',
+    ]),
+  ]),
+  row('İş — 16:9 video', 'Main media first in its own ratio (at most 80% of the screen height), then title, Disciplines, facts, credits, description, stills, next Work. Only the title and main media are required; empty parts are left out.', [
+    frame('İş · 16:9 · 1440', 'w1440', workPage(false, '16/9')),
+    frame('İş · 16:9 · 390', 'w390', workPage(true, '16/9')),
+    notes(['Main media is one of: our MP4 with controls and sound (16:9, 9:16 or square), a Vimeo/YouTube click-to-load player, or an image.']),
+  ]),
+  row('İş — 9:16, external video, image', 'The same page with the other main media kinds.', [
+    frame('İş · 9:16 · 1440', 'w1440', workPage(false, '9/16')),
+    frame('İş · Vimeo/YouTube · 390', 'w390', workPage(true, '16/9', 'external')),
+    frame('İş · image · 390', 'w390', workPage(true, '4/5', 'image')),
+    notes(['External video: our own poster with “▶ Oynat”; the provider’s player loads only on that click (Vimeo dnt=1, youtube-nocookie).']),
+  ]),
+  row('Galeri', 'Photography and personal pieces (never Works), in Editor order, no filters. A click opens the lightbox; without JavaScript each item links to its full-size file.', [
+    frame('Galeri · 1440', 'w1440', galleryPage(false)),
+    frame('Galeri · 390', 'w390', galleryPage(true)),
+    notes(['Items keep their own ratio. Loops show their poster here and play in the lightbox. Caption line (caption · year) only when set. Three columns from 768 px, two below. Empty: “Galeri henüz boş.”']),
+  ]),
+  row('Galeri — lightbox', 'A dialog over the grid: focus stays inside, Escape or a click on the backdrop closes, focus returns to the item. Arrow keys and swipes step through.', [
+    frame('Lightbox · 1440', 'w1440 h900', lightbox(false)),
+    frame('Lightbox · 390', 'w390 h844', lightbox(true)),
+    notes(['Position and caption top left (3 / 12 · caption), KAPAT top right.', 'Item at full size in its own ratio (at most 80% of the screen height). Loops play here.', 'ÖNCEKİ and SONRAKİ only when there is more than one item. With Hand control, pinch and move sideways steps too.']),
+  ]),
+  row('Hakkımda', 'The full About and contact’s main home. Every part is left out when empty.', [
+    frame('Hakkımda · 1440', 'w1440', aboutPage(false)),
+    frame('Hakkımda · 390', 'w390', aboutPage(true)),
+    notes(['Portrait → bio → one line per Discipline → Müşteriler (names, logo optional) → İletişim: email as mailto, socials from the CMS list. No forms.']),
+  ]),
+  row('Gizlilik', 'Short notice: Cloudflare Web Analytics and Sentry, nothing personal collected. Body text comes from the CMS.', [
+    frame('Gizlilik · 1440', 'w1440', privacyPage(false)),
+    frame('Gizlilik · 390', 'w390', privacyPage(true)),
+    notes(['The Hand control paragraph (camera only on request, processed on the device, nothing recorded or sent) is still open as #51. Unpublished: “Gizlilik metni henüz yayınlanmadı.”']),
+  ]),
+  row('404', 'Server-rendered not-found page with the footer.', [
+    frame('404 · 1440', 'w1440', notFoundPage(false)),
+    frame('404 · 390', 'w390', notFoundPage(true)),
+  ]),
+]
+
+document.getElementById('root').innerHTML =
+  `<div class="intro"><h1>taha.media — app skeleton</h1>
+    <p>Every page and Home state as built on main (7e9c555, 2026-11-12), at 1440 and 390. Structure only: grey boxes, stand-in font, wireframe positions. The look, type, colour and exact positions are yours to design.</p>
+    <p>UI labels are the real Turkish strings from the code. Body copy is grey bars. The © line drops the year (owner decision on #92, ticket #103).</p>
+    <div class="legend"><div>${media('', 'width:60px;height:34px')} media (video, loop, image)</div><div><span class="badge static">1</span> behaviour note, listed beside each row</div><div><span style="display:inline-block;width:60px;height:12px;background:#ededed"></span> text placeholder</div></div></div>` +
+  rows.join('')
+</script>
+</body>
+</html>

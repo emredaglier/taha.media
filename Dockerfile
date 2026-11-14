@@ -24,9 +24,6 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/web/package.json apps/web/package.json
 COPY apps/cms/package.json apps/cms/package.json
 COPY packages/cms-config/package.json packages/cms-config/package.json
-# pnpm applies the patches (pnpm-workspace.yaml `patchedDependencies`) during install, so they
-# must be here first; MediaPipe's patch removes its usage logging to Google (#56).
-COPY patches patches
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile --store-dir /pnpm/store
 
@@ -57,15 +54,8 @@ RUN mkdir -p apps/web/public apps/cms/public
 RUN --mount=type=secret,id=sentry_auth_token \
     SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token 2>/dev/null || true)" \
     pnpm --filter @taha/web build
-# Hand control's MediaPipe files (its WASM and the hand model, about 22 MB) belong to the browser
-# build only: the server build skips `import('./tracker')` (next.config.ts, #69). Fail here if any
-# reach the server output, which the web image ships.
-RUN if find apps/web/.next/server \( -name '*.wasm' -o -name '*.task' \) | grep -q .; then \
-      echo "apps/web/.next/server holds .wasm or .task files: Hand control's MediaPipe files must stay out of the server build (next.config.ts, #69)" >&2; \
-      exit 1; \
-    fi
 # Everything the browser downloads may name only the hosts in infra/client-hosts-allowlist.ts (#80):
-# the built chunks, CSS and Hand control's WASM and model, `public/`, and the HTML Next prerenders
+# the built chunks, CSS, `public/`, and the HTML Next prerenders
 # (server folders also hold server code, so only .html, .rsc and .body, the prerendered route
 # handlers such as robots.txt and sitemap.xml, there; there may be none). A new library or version
 # that phones home fails here, not on a visitor's machine. Hosts written in our own Server

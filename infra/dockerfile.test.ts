@@ -39,22 +39,6 @@ describe('Dockerfile', () => {
     expect(runtime).not.toMatch(/npm install|corepack|pnpm/)
   })
 
-  it('copies every patched dependency before installing, so the image is built patched', () => {
-    const deps = stage('deps')
-    const patches = /^patchedDependencies:\n((?:  .+\n?)+)/m.exec(read('pnpm-workspace.yaml'))
-    expect(patches, 'pnpm-workspace.yaml lists patchedDependencies').not.toBeNull()
-    // Every patch lives in `patches/`, the folder the deps stage copies.
-    const files = [...patches![1]!.matchAll(/: (\S+)$/gm)].map((match) => match[1]!)
-    expect(files.length).toBeGreaterThan(0)
-    for (const file of files) {
-      expect(file).toMatch(/^patches\//)
-      expect(read(file).length, file).toBeGreaterThan(0)
-    }
-    const copy = deps.indexOf('COPY patches patches')
-    expect(copy).toBeGreaterThan(-1)
-    expect(copy).toBeLessThan(deps.indexOf('pnpm install'))
-  })
-
   it('takes the CDN prefix and deployment id as build arguments (ADR-0005)', () => {
     const build = stage('build')
     expect(build).toMatch(/^ARG ASSET_PREFIX=""$/m)
@@ -63,23 +47,11 @@ describe('Dockerfile', () => {
     expect(build).toMatch(/^ENV NEXT_STANDALONE=1$/m)
   })
 
-  it("fails the build if Hand control's MediaPipe files reach the web server output (#69)", () => {
-    const build = stage('build')
-    const check = build.indexOf('find apps/web/.next/server')
-    expect(check).toBeGreaterThan(build.indexOf('pnpm --filter @taha/web build'))
-    const step = build.slice(check, build.indexOf('fi\n', check))
-    expect(step).toContain("-name '*.wasm'")
-    expect(step).toContain("-name '*.task'")
-    expect(step).toMatch(/exit 1/)
-  })
-
   it('fails the build if the client output names a host outside the allowlist (#80)', () => {
     const build = stage('build')
     const web = build.indexOf('pnpm --filter @taha/web build')
-    const guard = build.indexOf('find apps/web/.next/server')
     const scan = build.indexOf('node infra/client-hosts.ts')
-    // After the web build and next to the MediaPipe server-output guard, before the cms build.
-    expect(scan).toBeGreaterThan(guard)
+    // After the web build, before the cms build.
     expect(scan).toBeGreaterThan(web)
     expect(scan).toBeLessThan(build.indexOf('@taha/cms exec next build'))
     const step = build.slice(

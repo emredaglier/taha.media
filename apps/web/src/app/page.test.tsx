@@ -104,14 +104,13 @@ describe('the hero', () => {
     expect(html).toContain(`src="${site.showreelPhone!.poster.src}"`)
   })
 
-  it('offers "watch with sound" as a link when the full-length Showreel is set, and loads nothing third-party', async () => {
+  it('offers no "watch with sound", even when the full-length Showreel link is set', async () => {
     await pages.publishGlobal('site', {
       showreelLink: { url: 'https://vimeo.com/123456789' },
     })
     const html = await home()
-    expect(html).toMatch(/<a[^>]*href="https:\/\/vimeo\.com\/123456789"[^>]*>Sesli izle<\/a>/)
-    expect(html).not.toContain('<iframe')
-    expect(html).not.toContain('player.vimeo.com')
+    expect(html).not.toContain('Sesli izle')
+    expect(html).not.toContain('vimeo')
   })
 
   it('shows only the poster picture, with no video, when there is a poster but no loop', async () => {
@@ -231,22 +230,19 @@ describe('the Featured Works', () => {
     await pages.publishGlobal('site', {
       showreel: reel.id,
       showreelPhone: phone.id,
-      showreelLink: { url: 'https://vimeo.com/123456789' },
     })
     const site = (await getSite())!
     const html = await home()
     expect(cardsIn(html)).toHaveLength(12)
-    expect(heroText(html)).toBe(
-      `${OWNER_NAME} ${copyrightNotice()} Kurgu, hareket ve grafik. Sesli izle`,
-    )
+    expect(heroText(html)).toBe(`${OWNER_NAME} ${copyrightNotice()} Kurgu, hareket ve grafik.`)
     expect(html).toContain(`src="${site.showreel!.poster.src}"`)
     expect(html).toContain(`src="${site.showreelPhone!.poster.src}"`)
   })
 
-  it('add no Helix to the server HTML: it mounts only in the browser, after the capability check', async () => {
+  it('add no Edit Room to the server HTML: it mounts only in the browser, after the capability check', async () => {
     const html = await home()
     expect(html).not.toContain('<canvas')
-    // The mark that hides the static Home is set by JavaScript alone, once the Helix runs.
+    // The mark that hides the static Home is set by JavaScript alone, once the Edit Room runs.
     expect(html).not.toMatch(/data-home=/)
   })
 })

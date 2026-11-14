@@ -3,7 +3,7 @@ export const MENU_PANEL_ID = 'site-menu-panel'
 
 /**
  * Whether the menu is open: its `<details>` is, natively before hydration and from SiteMenu's
- * state after. The Helix ignores input while it is.
+ * state after. The Edit Room ignores input while it is.
  */
 export const isMenuOpen = (document: Document): boolean =>
   document.getElementById(MENU_PANEL_ID)?.closest('details')?.open === true

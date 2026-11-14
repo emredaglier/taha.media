@@ -1,0 +1,20 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "geist",
+        "createdAt": "2026-11-12T22:09:14.701Z",
+        "reason": "Site font (layout.tsx); owner asked prototypes to use it"
+      },
+      {
+        "rule": "overused-font",
+        "value": "instrument serif",
+        "createdAt": "2026-11-12T22:09:14.726Z",
+        "reason": "Site font (layout.tsx); owner asked prototypes to use it"
+      }
+    ]
+  }
+}

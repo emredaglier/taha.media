@@ -13,7 +13,7 @@ Test behaviour where a user or caller meets it, and keep `pnpm test` near a minu
   matches a brute-force sample, clamps) plus a few worked examples. A restated constant fails on
   every deliberate retune.
 - **Device capabilities** are pinned in the shared setup (`apps/web/src/test/device-setup.ts`):
-  every jsdom test starts on a capable device (twice `HELIX_TUNING.weakDevice`), because jsdom
+  every jsdom test starts on a capable device (twice `WEAK_DEVICE`), because jsdom
   reports the host's real core count and CI runners have fewer. A test of a weak device calls
   `setDevice({ cores, memory })` from `apps/web/src/test/device.ts` (a key left out keeps the
   pinned value; `memory: undefined` means not reported) and never defines `navigator` properties
@@ -40,9 +40,9 @@ and on main. A change only under `docs/` or `.scratch/` starts no run (workflow 
 cannot waive a required check from code: when a docs-only PR must merge, the check is not marked
 required in the branch rules, or the owner merges it by hand.
 
-The `build` job also runs `pnpm check:shaders` (`scripts/check-shaders/`): the real Helix renderer
-in headless Chromium on SwiftShader. A shader that fails to compile only drops the Helix to the
-static Home, which no unit test or smoke spec notices. A change under
-`apps/web/src/components/helix` (a shader, the renderer or its frames) must pass it. A worker
+The `build` job also runs `pnpm check:shaders` (`scripts/check-shaders/`): the real Edit Room
+renderer in headless Chromium on SwiftShader. A shader that fails to compile only drops the room
+to the static Home, which no unit test or smoke spec notices. A change under
+`apps/web/src/components/room` (a shader, the renderer or its frames) must pass it. A worker
 without a browser cannot run it (CLAUDE.md, "Memory-heavy commands"), so the lead runs it once
 before merging. A new GLSL path that the check's frames don't reach gets a frame that does.

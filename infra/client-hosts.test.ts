@@ -38,15 +38,15 @@ const allow = (host: string, extra: Partial<AllowedHost> = {}): AllowedHost => (
 })
 
 describe('the command', () => {
-  it('fails on the unpatched MediaPipe logging string and names the host, the file and the code around it', () => {
+  it('fails on a logging URL in a chunk and names the host, the file and the code around it', () => {
     write(
-      'chunks/mediapipe.js',
+      'chunks/logger.js',
       'function f(){return fetch("https://odml.pa.googleapis.com/v1/log",{method:"POST"})}',
     )
     const run = cli(dir)
     expect(run.status).toBe(1)
     expect(run.out).toContain('odml.pa.googleapis.com')
-    expect(run.out).toContain(path.join(dir, 'chunks/mediapipe.js'))
+    expect(run.out).toContain(path.join(dir, 'chunks/logger.js'))
     expect(run.out).toContain('fetch("https://odml.pa.googleapis.com/v1/log"')
   })
 
@@ -338,15 +338,8 @@ describe('the allowlist', () => {
     // The Sentry ingest hosts of both regions (a DSN reads `https://<key>@o1.ingest.de.sentry.io/2`).
     expect(hosts.some((host) => host.endsWith('.ingest.sentry.io'))).toBe(true)
     expect(hosts.some((host) => host.endsWith('.ingest.de.sentry.io'))).toBe(true)
-    // And never the host MediaPipe logged to (#56). `storage.googleapis.com` is only a comment in
-    // tracker.ts, scoped to that file.
-    expect(hosts).not.toContain('odml.pa.googleapis.com')
-    expect(hosts.filter((host) => host.endsWith('googleapis.com'))).toEqual([
-      'storage.googleapis.com',
-    ])
-    expect(ALLOWLIST.find((entry) => entry.host === 'storage.googleapis.com')?.in).toBeInstanceOf(
-      RegExp,
-    )
+    // And never a Google host (MediaPipe logged to one, #56).
+    expect(hosts.filter((host) => host.endsWith('googleapis.com'))).toEqual([])
   })
 })
 

@@ -1,6 +1,6 @@
 # Home holds the screen: no page scroll after the Helix, no footer, a static fallback
 
-Status: accepted · 2026-11-08
+Status: accepted · 2026-11-08 · stays in force; ADR-0105: where it says "Helix", read "Edit Room"
 
 Home is the Showreel and the Helix, and nothing else. Scrolling drives only the zoom from the full-bleed Showreel out to the Helix. Once the Showreel has melted away (the point of no return), the page stops scrolling: the wheel, a drag and the arrow keys turn the Helix, endlessly in both directions. The logo or a reload brings the Showreel back. Nothing follows the Helix, so Home has no footer. Gizlilik and © are in the menu instead, and every other page keeps the footer.
 
