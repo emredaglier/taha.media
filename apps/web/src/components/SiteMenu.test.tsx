@@ -170,6 +170,10 @@ describe('the frame pictures', () => {
       hakkimda: picture('portre'),
     })
     const [isler, galeri, hakkimda] = slots()
+    // Closed, a loop is only its lazy poster; no video is mounted until the first open.
+    expect(isler!.querySelector('[data-loop]')).toBeNull()
+    expect(isler!.querySelector('img')?.getAttribute('src')).toBe('/isler-poster.webp')
+    act(() => toggle().click())
     expect(isler!.querySelector('[data-loop]')?.getAttribute('data-loop')).toBe('/isler.mp4')
     expect(isler!.querySelector('[data-loop]')?.getAttribute('data-fill')).toBe('true')
     expect(galeri!.querySelector('img')?.getAttribute('src')).toBe('/galeri.webp')
@@ -188,6 +192,7 @@ describe('the frame pictures', () => {
       ...NO_MEDIA,
       galeri: { kind: 'loop', id: 3, caption: null, year: null, video: loop('galeri') },
     })
+    act(() => toggle().click())
     expect(slots()[1]!.querySelector('[data-loop]')?.getAttribute('data-loop')).toBe('/galeri.mp4')
     expect(slots()[0]!.childElementCount).toBe(0)
   })

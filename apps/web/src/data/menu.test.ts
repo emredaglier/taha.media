@@ -1,9 +1,12 @@
+import { connection } from 'next/server'
 import { createTestSite, type TestSite } from '@taha/cms-config/testing'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { getGalleryItems } from './gallery'
 import { getMenuMedia } from './menu'
 
+// `connection()` only works inside a request; here it records that the render went dynamic.
+vi.mock('next/server', () => ({ connection: vi.fn(async () => {}) }))
 vi.mock('./gallery', async (importOriginal) => {
   const real = await importOriginal<typeof import('./gallery')>()
   return { ...real, getGalleryItems: vi.fn(real.getGalleryItems) }
@@ -85,6 +88,10 @@ describe('the menu media read', () => {
 
   it('is all nulls when a read throws', async () => {
     vi.mocked(getGalleryItems).mockRejectedValueOnce(new Error('no database'))
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
     expect(await getMenuMedia()).toEqual({ isler: null, galeri: null, hakkimda: null })
+    expect(log).toHaveBeenCalled() // logged, not silent
+    expect(connection).toHaveBeenCalled() // the render goes dynamic, so grey is not baked in
+    log.mockRestore()
   })
 })
